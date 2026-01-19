@@ -19,9 +19,8 @@ import { toast } from 'sonner';
 
 export default function Dashboard() {
   const { user } = useUser();
-  // Toast is now imported from @/lib/toast
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [allTasks, setAllTasks] = useState<Task[]>([]);  // Store all tasks for statistics
+  const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectProgress, setProjectProgress] = useState<Record<number, number>>({});
   

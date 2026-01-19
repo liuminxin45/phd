@@ -92,10 +92,6 @@ export function PeoplePicker({
       } catch (error) {
         if (error instanceof Error && error.name !== 'AbortError') {
           console.error('Failed to search users:', error);
-          console.error('Error details:', {
-            message: error.message,
-            stack: error.stack
-          });
         }
         setSearchResults([]);
       } finally {
@@ -178,7 +174,6 @@ export function PeoplePicker({
                       type="button"
                       key={person.id}
                       onClick={() => {
-                        console.log('Selected person:', person);
                         onAdd(person);
                         setSearchQuery('');
                         if (maxSelections === 1) {
@@ -256,7 +251,6 @@ export function PeoplePicker({
                     <button
                       key={person.id}
                       onClick={() => {
-                        console.log('Selected person:', person);
                         onAdd(person);
                         setSearchQuery('');
                         if (maxSelections === 1) {

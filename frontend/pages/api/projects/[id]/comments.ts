@@ -212,13 +212,11 @@ export default async function handler(
         }
 
         // 关键：用 schedule.edit 通过 Schedule 项目 ID 获取 Schedule PHID
-        // 
         // 重要发现：schedule.edit 的 objectIdentifier 参数接受的是纯数字 ID，而不是 monogram
         // 例如：
         //   - ✅ 正确：objectIdentifier: "8054" (从 SC8054 提取的数字部分)
         //   - ❌ 错误：objectIdentifier: "SC8054" (monogram 格式会报错)
         //   - ❌ 错误：objectIdentifier: "19701" (这是 Phabricator 项目 ID，不是 Schedule 项目 ID)
-        // 
         // 从 monogram 中提取数字 ID (SC8054 -> 8054)
         let scheduleProjectId = '';
         if (scheduleMonogram) {

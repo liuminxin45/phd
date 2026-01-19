@@ -191,25 +191,14 @@ export default async function handler(
       }
     }
 
-    // Debug: log params before calling schedule.pre.edit
-    console.log('[roles/edit] Calling schedule.pre.edit with params:', JSON.stringify(params, null, 2));
-    console.log('[roles/edit] Matched schedule record:', JSON.stringify(record, null, 2));
-
     try {
       await client.call<any>('schedule.pre.edit', params);
       return res.status(200).json({ success: true });
     } catch (conduitError: any) {
       console.error('[roles/edit] schedule.pre.edit failed:', conduitError.message);
-      console.error('[roles/edit] Failed params were:', JSON.stringify(params, null, 2));
-      // Return debug info in error for now
       return res.status(500).json({ 
         success: false, 
-        error: conduitError.message || 'Failed to call schedule.pre.edit',
-        debug: {
-          params,
-          recordKeys: Object.keys(record || {}),
-          projectId: parseInt(req.query.id as string, 10),
-        }
+        error: conduitError.message || 'Failed to call schedule.pre.edit'
       });
     }
   } catch (error: any) {
