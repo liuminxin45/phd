@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle, Clock, AlertCircle, Filter, X, ArrowUpDown, TrendingUp, FolderKanban, Bell } from 'lucide-react';
 import { AnimatedCounter } from '@/components/ui/AnimatedCounter';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
