@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start -p 9641",
     "lint": "next lint",
-    "refresh-session": "npx ts-node --esm scripts/refresh-session.ts"
+    "refresh-session": "npx ts-node --esm scripts/refresh-session.ts",
+    "verify-refactor": "node scripts/verify-refactor.js"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

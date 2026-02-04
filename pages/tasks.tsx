@@ -11,6 +11,7 @@ import { PeoplePicker } from '@/components/ui/people-picker';
 import { Dropdown } from '@/components/ui/dropdown';
 import { getCachedUsers, getCachedProjects } from '@/lib/conduitBatch';
 import { appStorage } from '@/lib/appStorage';
+import { ANIMATION_DURATION } from '@/lib/constants/animation';
 
 interface Person {
   id: string;
@@ -26,15 +27,14 @@ const LEGACY_ARCHIVED_TASKS_KEY = 'archivedTaskIds';
 const DEFAULT_STATUS_FILTER = TASK_STATUS.OPEN;
 const DEFAULT_DATE_FILTER = 'quarter';
 
-// Get priority color class based on priority value
 const getPriorityColor = (priority: number | undefined): string => {
   switch (priority) {
-    case 100: return 'bg-pink-500';      // Unbreak Now
-    case 90: return 'bg-red-500';        // Needs Triage
-    case 80: return 'bg-orange-500';     // High
-    case 50: return 'bg-yellow-400';     // Normal
-    case 25: return 'bg-sky-400';        // Low
-    case 0: return 'bg-neutral-300';     // Wishlist
+    case 100: return 'bg-pink-500';
+    case 90: return 'bg-red-500';
+    case 80: return 'bg-orange-500';
+    case 50: return 'bg-yellow-400';
+    case 25: return 'bg-sky-400';
+    case 0: return 'bg-neutral-300';
     default: return 'bg-neutral-200';
   }
 };
@@ -45,42 +45,32 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   
-  // Filter states - single person only
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>(DEFAULT_STATUS_FILTER);
   const [projectFilter, setProjectFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>(DEFAULT_DATE_FILTER);
   
-  // Projects for filter dropdown
   const [projects, setProjects] = useState<Project[]>([]);
   
-  // Pagination
   const [hasMore, setHasMore] = useState(false);
   const [afterCursor, setAfterCursor] = useState<string | null>(null);
   
-  // Task detail modal
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   
-  // Archive state
   const [archivedTaskIds, setArchivedTaskIds] = useState<Set<number>>(new Set());
   const [showArchived, setShowArchived] = useState(false);
   const [removingTaskIds, setRemovingTaskIds] = useState<Set<number>>(new Set());
 
-  // Batch selection
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
   
-  // User and project cache for task cards
   const [userCache, setUserCache] = useState<Record<string, { realName: string; userName: string }>>({});
   const [projectCache, setProjectCache] = useState<Record<string, { name: string; color: string }>>({});
   
-  // Track if initial user has been set
   const [initialUserSet, setInitialUserSet] = useState(false);
-  // Track if archive state has been loaded to prevent race condition
   const [archiveStateLoaded, setArchiveStateLoaded] = useState(false);
 
-  // Load archived task IDs from localStorage on mount
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -99,9 +89,7 @@ export default function TasksPage() {
           setArchivedTaskIds(new Set(legacy));
           await appStorage.set(STORAGE_KEY_TASK_ARCHIVE_IDS, legacy);
         }
-      } catch {
-        // ignore
-      }
+      } catch {}
       if (!cancelled) {
         setArchiveStateLoaded(true);
       }
@@ -112,15 +100,12 @@ export default function TasksPage() {
     };
   }, []);
 
-  // Persist archive state (keep state updater pure)
-  // Only save after initial load to prevent overwriting with empty state
   useEffect(() => {
     if (archiveStateLoaded) {
       void appStorage.set(STORAGE_KEY_TASK_ARCHIVE_IDS, [...archivedTaskIds]);
     }
   }, [archivedTaskIds, archiveStateLoaded]);
 
-  // Initialize selected person with current user
   useEffect(() => {
     if (user && !initialUserSet) {
       setSelectedPerson({
@@ -133,7 +118,6 @@ export default function TasksPage() {
     }
   }, [user, initialUserSet]);
 
-  // Fetch projects for selected person (not current user)
   useEffect(() => {
     if (!selectedPerson) {
       setProjects([]);
@@ -155,14 +139,11 @@ export default function TasksPage() {
     fetchProjects();
   }, [selectedPerson]);
 
-  // Load user and project metadata for task cards
   const loadTaskMetadata = async (taskList: Task[], skipArchived: boolean = false) => {
-    // Collect all user PHIDs (owners)
     const userPHIDs = new Set<string>();
     const projectPHIDs = new Set<string>();
     
     taskList.forEach(task => {
-      // Skip archived tasks if not in archived view
       if (skipArchived && archivedTaskIds.has(task.id)) {
         return;
       }
@@ -395,7 +376,7 @@ export default function TasksPage() {
         return next;
       });
       pendingArchiveOps.current.delete(taskId);
-    }, 180);
+    }, ANIMATION_DURATION.LIST_TRANSITION_MS);
   }, []);
 
   const archiveTask = useCallback((taskId: number) => {
@@ -474,7 +455,7 @@ export default function TasksPage() {
         return next;
       });
       ids.forEach(id => pendingArchiveOps.current.delete(id));
-    }, 180);
+    }, ANIMATION_DURATION.LIST_TRANSITION_MS);
 
     setArchivedTaskIds(prev => {
       const next = new Set(prev);
@@ -504,7 +485,7 @@ export default function TasksPage() {
         return next;
       });
       ids.forEach(id => pendingArchiveOps.current.delete(id));
-    }, 180);
+    }, ANIMATION_DURATION.LIST_TRANSITION_MS);
 
     setArchivedTaskIds(prev => {
       const next = new Set(prev);

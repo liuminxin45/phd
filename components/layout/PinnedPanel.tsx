@@ -95,13 +95,11 @@ export function PinnedPanel() {
         </button>
       )}
 
-      {/* Panel - always render content, just hide with width */}
       <aside
         className={`bg-neutral-100 border-l border-neutral-200 flex flex-col transition-all duration-300 ${
           isPanelExpanded ? 'w-80' : 'w-0 overflow-hidden'
         }`}
       >
-        {/* Header */}
         <div className="h-10 flex items-center justify-between px-3 border-b border-neutral-200 flex-shrink-0 bg-white">
           <div className="flex items-center gap-2">
             <Pin className="h-4 w-4 text-neutral-600" />
@@ -110,7 +108,6 @@ export function PinnedPanel() {
           </div>
         </div>
 
-        {/* Pinned Items List */}
         <div className="flex-1 overflow-y-auto p-2 space-y-2">
           {pinnedItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-neutral-400 p-4">
@@ -168,7 +165,6 @@ export function PinnedPanel() {
         </div>
       </aside>
 
-      {/* Task Detail Dialog */}
       {selectedItem && selectedItem.type === 'task' && taskData && (
         <TaskDetailDialog
           task={taskData}
@@ -187,7 +183,6 @@ export function PinnedPanel() {
         />
       )}
 
-      {/* Project Detail Dialog */}
       {selectedItem && selectedItem.type === 'project' && projectData && (
         <Dialog.Root
           open={true}

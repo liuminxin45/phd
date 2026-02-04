@@ -4,22 +4,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { httpClient } from '@/lib/httpClient';
 import { useUser } from '@/contexts/UserContext';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
-
-interface UnstandardItem {
-  type: 'task' | 'project' | 'milestone';
-  id: string;
-  name: string;
-  url: string;
-  reason?: string;
-  owner?: string;
-}
-
-interface UnstandardResponse {
-  tasks: UnstandardItem[];
-  projects: UnstandardItem[];
-  milestones: UnstandardItem[];
-  total: number;
-}
+import type { UnstandardItem, UnstandardResponse } from '@/pages/api/unstandard';
 
 interface UnstandardWidgetProps {
   teamId?: string;
@@ -45,23 +30,19 @@ export function UnstandardWidget({ teamId = '16', onTaskClick, onProjectClick }:
         params: { teamId },
       });
       
-      // Filter items to show only current user's items
       if (user?.realName) {
         const userName = user.realName;
         
-        // Filter projects
         const userProjects = result.projects.filter(project => 
           project.owner && project.owner.includes(userName)
         );
         setMyProjects(userProjects);
         
-        // Filter milestones
         const userMilestones = result.milestones.filter(milestone => 
           milestone.owner && milestone.owner.includes(userName)
         );
         setMyMilestones(userMilestones);
         
-        // Show alert for projects and milestones
         const alertItems = [...userProjects, ...userMilestones];
         if (alertItems.length > 0) {
           setAlertItems(alertItems);
@@ -101,7 +82,6 @@ export function UnstandardWidget({ teamId = '16', onTaskClick, onProjectClick }:
 
   return (
     <>
-      {/* Alert Dialog for User's Unstandard Items */}
       <AlertDialog.Root open={showAlert} onOpenChange={setShowAlert}>
         <AlertDialog.Portal>
           <AlertDialog.Overlay className="fixed inset-0 bg-black/50 z-[9999]" />
@@ -154,14 +134,12 @@ export function UnstandardWidget({ teamId = '16', onTaskClick, onProjectClick }:
       </AlertDialog.Root>
 
       <div className="bg-white border border-neutral-200 rounded-lg">
-        {/* Header */}
         <div className="p-4 border-b border-neutral-200">
           <div className="flex items-center gap-2 mb-3">
             <AlertCircle className="w-4 h-4 text-amber-500" />
             <h3 className="text-base font-semibold text-neutral-900">Unstandard</h3>
           </div>
           
-          {/* Tabs */}
           <div className="flex gap-1 bg-neutral-100 p-1 rounded-lg">
             <button
               onClick={() => setActiveTab('project')}
@@ -186,7 +164,6 @@ export function UnstandardWidget({ teamId = '16', onTaskClick, onProjectClick }:
           </div>
         </div>
 
-      {/* Content */}
       <div className="divide-y divide-neutral-200 max-h-[400px] overflow-y-auto">
         {loading ? (
           <>
