@@ -1,11 +1,11 @@
 type StoredValue = any;
 
 type StorageSetOptions = {
-  prefer?: 'idb' | 'localStorage';
+  prefer?: 'electron' | 'idb' | 'localStorage';
 };
 
 type StorageGetOptions = {
-  prefer?: 'idb' | 'localStorage';
+  prefer?: 'electron' | 'idb' | 'localStorage';
 };
 
 const DB_NAME = 'phabdash';
@@ -17,6 +17,39 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 
 function isBrowser() {
   return typeof window !== 'undefined';
+}
+
+function hasElectronStorage() {
+  return isBrowser() && !!window.phabdash?.storage;
+}
+
+async function electronGet<T>(key: string): Promise<T | undefined> {
+  if (!hasElectronStorage()) return undefined;
+  try {
+    return await window.phabdash!.storage!.get<T>(key);
+  } catch {
+    return undefined;
+  }
+}
+
+async function electronSet<T>(key: string, value: T): Promise<boolean> {
+  if (!hasElectronStorage()) return false;
+  try {
+    await window.phabdash!.storage!.set(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function electronDelete(key: string): Promise<boolean> {
+  if (!hasElectronStorage()) return false;
+  try {
+    await window.phabdash!.storage!.delete(key);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -130,6 +163,12 @@ export const appStorage = {
       return lsGet<T>(key);
     }
 
+    // Prefer Electron file storage when available (stores in user data directory)
+    if (hasElectronStorage() && prefer !== 'idb') {
+      const result = await electronGet<T>(key);
+      if (result !== undefined) return result;
+    }
+
     try {
       return await idbGet<T>(key);
     } catch {
@@ -147,6 +186,12 @@ export const appStorage = {
       return;
     }
 
+    // Prefer Electron file storage when available (stores in user data directory)
+    if (hasElectronStorage() && prefer !== 'idb') {
+      const success = await electronSet(key, value);
+      if (success) return;
+    }
+
     try {
       await idbSet(key, value);
     } catch {
@@ -156,6 +201,12 @@ export const appStorage = {
 
   async delete(key: string): Promise<void> {
     if (!isBrowser()) return;
+
+    // Try Electron storage first
+    if (hasElectronStorage()) {
+      const success = await electronDelete(key);
+      if (success) return;
+    }
 
     try {
       await idbDelete(key);

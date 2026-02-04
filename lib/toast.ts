@@ -68,6 +68,4 @@ export function toastWithUndo({
       }
     },
   });
-
-  void toastId;
 }

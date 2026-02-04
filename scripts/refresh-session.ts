@@ -13,40 +13,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
+import {
+  CookieJar,
+  parseCookies,
+  mergeCookies,
+  cookieString,
+  extractCsrfToken,
+} from '../lib/session/cookies';
 
-// Load existing env
 dotenv.config({ path: '.env.local' });
-
-interface CookieJar {
-  phusr?: string;
-  phsid?: string;
-  PHPSESSID?: string;
-  next_uri?: string;
-  phcid?: string;
-}
-
-function parseCookies(setCookieHeaders: string[]): CookieJar {
-  const cookies: CookieJar = {};
-  for (const header of setCookieHeaders) {
-    const match = header.match(/^([^=]+)=([^;]*)/);
-    if (match) {
-      const [, name, value] = match;
-      (cookies as any)[name] = value;
-    }
-  }
-  return cookies;
-}
-
-function mergeCookies(existing: CookieJar, newCookies: CookieJar): CookieJar {
-  return { ...existing, ...newCookies };
-}
-
-function cookieString(cookies: CookieJar): string {
-  return Object.entries(cookies)
-    .filter(([, v]) => v)
-    .map(([k, v]) => `${k}=${v}`)
-    .join('; ');
-}
 
 async function refreshSession() {
   const host = process.env.PHA_HOST;
@@ -93,21 +68,7 @@ async function refreshSession() {
     console.log('  LDAP form preview (first 1500 chars):');
     console.log(ldapFormHtml.substring(0, 1500));
     
-    // Extract CSRF token from LDAP form
-    let ldapCsrfMatch = ldapFormHtml.match(/name="__csrf__"\s+value="([^"]+)"/);
-    let ldapCsrfToken = ldapCsrfMatch ? ldapCsrfMatch[1] : '';
-    
-    // Try alternative patterns
-    if (!ldapCsrfToken) {
-      ldapCsrfMatch = ldapFormHtml.match(/value="([^"]+)"\s+name="__csrf__"/);
-      if (ldapCsrfMatch) ldapCsrfToken = ldapCsrfMatch[1];
-    }
-    
-    if (!ldapCsrfToken) {
-      ldapCsrfMatch = ldapFormHtml.match(/__csrf__['"]\s*:\s*['"]([^'"]+)['"]/);
-      if (ldapCsrfMatch) ldapCsrfToken = ldapCsrfMatch[1];
-    }
-    
+    const ldapCsrfToken = extractCsrfToken(ldapFormHtml);
     if (!ldapCsrfToken) {
       console.error('Could not find CSRF token on LDAP login form');
       process.exit(1);

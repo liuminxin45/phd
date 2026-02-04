@@ -77,6 +77,8 @@ export default function TasksPage() {
   
   // Track if initial user has been set
   const [initialUserSet, setInitialUserSet] = useState(false);
+  // Track if archive state has been loaded to prevent race condition
+  const [archiveStateLoaded, setArchiveStateLoaded] = useState(false);
 
   // Load archived task IDs from localStorage on mount
   useEffect(() => {
@@ -85,6 +87,7 @@ export default function TasksPage() {
       const stored = await appStorage.get<number[]>(STORAGE_KEY_TASK_ARCHIVE_IDS);
       if (!cancelled && Array.isArray(stored)) {
         setArchivedTaskIds(new Set(stored));
+        setArchiveStateLoaded(true);
         return;
       }
 
@@ -99,6 +102,9 @@ export default function TasksPage() {
       } catch {
         // ignore
       }
+      if (!cancelled) {
+        setArchiveStateLoaded(true);
+      }
     })();
 
     return () => {
@@ -107,9 +113,12 @@ export default function TasksPage() {
   }, []);
 
   // Persist archive state (keep state updater pure)
+  // Only save after initial load to prevent overwriting with empty state
   useEffect(() => {
-    void appStorage.set(STORAGE_KEY_TASK_ARCHIVE_IDS, [...archivedTaskIds]);
-  }, [archivedTaskIds]);
+    if (archiveStateLoaded) {
+      void appStorage.set(STORAGE_KEY_TASK_ARCHIVE_IDS, [...archivedTaskIds]);
+    }
+  }, [archivedTaskIds, archiveStateLoaded]);
 
   // Initialize selected person with current user
   useEffect(() => {
@@ -147,12 +156,17 @@ export default function TasksPage() {
   }, [selectedPerson]);
 
   // Load user and project metadata for task cards
-  const loadTaskMetadata = async (taskList: Task[]) => {
+  const loadTaskMetadata = async (taskList: Task[], skipArchived: boolean = false) => {
     // Collect all user PHIDs (owners)
     const userPHIDs = new Set<string>();
     const projectPHIDs = new Set<string>();
     
     taskList.forEach(task => {
+      // Skip archived tasks if not in archived view
+      if (skipArchived && archivedTaskIds.has(task.id)) {
+        return;
+      }
+      
       if (task.fields.ownerPHID) {
         userPHIDs.add(task.fields.ownerPHID);
       }
@@ -279,7 +293,8 @@ export default function TasksPage() {
       setHasMore(!!cursor);
       
       // Load user and project cache for task cards
-      await loadTaskMetadata(taskList);
+      // Skip metadata loading for archived tasks when not in archived view
+      await loadTaskMetadata(taskList, !showArchived);
     } catch (err) {
       // Handle error
     } finally {
@@ -294,7 +309,17 @@ export default function TasksPage() {
     
     setAfterCursor(null);
     fetchTasks(false);
-  }, [selectedPerson, statusFilter, projectFilter, dateFilter, initialUserSet]);
+  }, [selectedPerson, statusFilter, projectFilter, dateFilter, initialUserSet, showArchived]);
+  
+  // When switching to archived view, load metadata for archived tasks
+  useEffect(() => {
+    if (showArchived && tasks.length > 0) {
+      const archivedTasks = tasks.filter(task => archivedTaskIds.has(task.id));
+      if (archivedTasks.length > 0) {
+        loadTaskMetadata(archivedTasks, false);
+      }
+    }
+  }, [showArchived]);
 
   const handleTaskClick = async (task: Task) => {
     setSelectedTask(task);

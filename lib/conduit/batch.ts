@@ -1,4 +1,5 @@
 import { ConduitClient } from './client';
+import { chunkArray } from '../utils/array';
 
 export interface BatchRequest {
   id: string;
@@ -34,7 +35,7 @@ export class ConduitBatch {
     const results: BatchResult<T>[] = [];
     let completed = 0;
 
-    const chunks = this.chunkArray(requests, concurrency);
+    const chunks = chunkArray(requests, concurrency);
 
     for (const chunk of chunks) {
       const chunkResults = await Promise.all(
@@ -72,13 +73,6 @@ export class ConduitBatch {
     return map;
   }
 
-  private chunkArray<T>(array: T[], size: number): T[][] {
-    const chunks: T[][] = [];
-    for (let i = 0; i < array.length; i += size) {
-      chunks.push(array.slice(i, i + size));
-    }
-    return chunks;
-  }
 }
 
 let batchInstance: ConduitBatch | null = null;
@@ -182,10 +176,3 @@ export async function batchFetchTasks(
   return tasksMap;
 }
 
-function chunkArray<T>(array: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < array.length; i += size) {
-    chunks.push(array.slice(i, i + size));
-  }
-  return chunks;
-}

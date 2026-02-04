@@ -1,134 +1,66 @@
-import { useEffect, useRef, useState } from 'react';
-import { X, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Pin } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { X, ChevronRight, ChevronLeft, Pin, Loader2 } from 'lucide-react';
 import { usePinnedPanel, PinnedItem } from '@/contexts/PinnedPanelContext';
-
-const WEBVIEW_HEIGHT = 450;
-const MOBILE_USER_AGENT = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1';
+import { TaskDetailDialog } from '@/components/task/TaskDetailDialog';
+import { ProjectDetailPanel } from '@/components/project/ProjectDetailPanel';
+import { httpClient } from '@/lib/httpClient';
+import { Task, Project } from '@/lib/api';
+import * as Dialog from '@radix-ui/react-dialog';
 
 export function PinnedPanel() {
   const { pinnedItems, isPanelExpanded, togglePanel, removePinnedItem } = usePinnedPanel();
-  const webviewRefs = useRef<Map<string, HTMLElement>>(new Map());
-  const [isElectron, setIsElectron] = useState(false);
-  const [phabricatorUrl, setPhabricatorUrl] = useState('');
-  const [collapsedItems, setCollapsedItems] = useState<Set<string>>(new Set());
+  const [selectedItem, setSelectedItem] = useState<PinnedItem | null>(null);
+  const [taskData, setTaskData] = useState<Task | null>(null);
+  const [projectData, setProjectData] = useState<Project | null>(null);
+  const [loadingTaskId, setLoadingTaskId] = useState<number | null>(null);
+  const [loadingProjectId, setLoadingProjectId] = useState<number | null>(null);
 
-  const openExternal = (url: string) => {
-    try {
-      if (window.phabdash?.openExternal) {
-        void window.phabdash.openExternal(url);
-        return;
-      }
-      if ((window as any).require) {
-        const { shell } = (window as any).require('electron');
-        void shell.openExternal(url);
-        return;
-      }
-      window.open(url, '_blank');
-    } catch {
-      // ignore
-    }
-  };
-
-  useEffect(() => {
-    setIsElectron(typeof window !== 'undefined' && navigator.userAgent.includes('Electron'));
-  }, []);
-
-  // Fetch Phabricator URL from config API
-  useEffect(() => {
-    fetch('/api/config')
-      .then(res => res.json())
-      .then(data => {
-        if (data.phabricatorUrl) {
-          setPhabricatorUrl(data.phabricatorUrl);
-        }
-      })
-      .catch(() => {
-        // ignore
-      });
-  }, []);
-
-  // Setup webview event listeners
-  useEffect(() => {
-    if (!isElectron) return;
+  const loadTaskData = async (item: PinnedItem) => {
+    if (item.type !== 'task' || !item.taskId) return;
     
-    pinnedItems.forEach(item => {
-      const el = webviewRefs.current.get(item.id);
-      if (el) {
-        const webviewAny = el as any;
-        if (!webviewAny.__PINNED_WEBVIEW_SETUP__) {
-          webviewAny.__PINNED_WEBVIEW_SETUP__ = true;
-
-          const handleNewWindow = (event: any) => {
-            try {
-              const targetUrl = event?.url;
-              if (typeof targetUrl !== 'string' || !targetUrl.trim()) return;
-              
-              // Get current webview URL to check domain
-              const currentSrc = (webviewAny.getURL && typeof webviewAny.getURL === 'function') ? webviewAny.getURL() : webviewAny.src;
-              const currentUrl = new URL(currentSrc);
-              const newUrl = new URL(targetUrl);
-              
-              // Same domain - navigate within webview
-              if (currentUrl.hostname === newUrl.hostname) {
-                if (typeof event.preventDefault === 'function') {
-                  event.preventDefault();
-                }
-                webviewAny.loadURL(targetUrl);
-                return;
-              }
-              
-              // External domain - open in system browser
-              if (typeof event.preventDefault === 'function') {
-                event.preventDefault();
-              }
-              openExternal(targetUrl);
-            } catch {
-              // ignore parsing errors
-            }
-          };
-
-          const handleWillNavigate = (event: any) => {
-            // Allow natural navigation within webview - don't intercept
-            // Only the new-window event needs special handling
-          };
-
-          webviewAny.addEventListener?.('new-window', handleNewWindow);
-          webviewAny.addEventListener?.('will-navigate', handleWillNavigate);
-        }
-
-        const handleDomReady = () => {
-          try {
-            (el as any).setZoomFactor(0.7);
-          } catch {
-            // ignore
-          }
-        };
-        (el as any).addEventListener?.('dom-ready', handleDomReady);
-      }
-    });
-  }, [pinnedItems, isElectron]);
-
-  const getItemUrl = (item: PinnedItem): string => {
-    if (item.url) return item.url;
-    if (item.type === 'task' && item.taskId && phabricatorUrl) {
-      return `${phabricatorUrl}/T${item.taskId}`;
+    setLoadingTaskId(item.taskId);
+    try {
+      const data = await httpClient<{ task: Task }>(`/api/tasks/${item.taskId}`);
+      setTaskData(data.task);
+      setProjectData(null);
+      setSelectedItem(item);
+    } catch (error) {
+      console.error('Failed to load task:', error);
+    } finally {
+      setLoadingTaskId(null);
     }
-    if (item.type === 'project' && item.projectId && phabricatorUrl) {
-      return `${phabricatorUrl}/project/view/${item.projectId}/`;
-    }
-    return '';
   };
 
-  const toggleItemCollapse = (itemId: string) => {
-    setCollapsedItems(prev => {
-      const next = new Set(prev);
-      if (next.has(itemId)) {
-        next.delete(itemId);
-      } else {
-        next.add(itemId);
+  const loadProjectData = async (item: PinnedItem) => {
+    if (item.type !== 'project' || !item.projectId) return;
+    
+    setLoadingProjectId(item.projectId);
+    try {
+      const data = await httpClient<{ data: Project[] }>(`/api/projects/${item.projectId}`);
+      if (data.data && data.data.length > 0) {
+        setProjectData(data.data[0]);
+        setTaskData(null);
+        setSelectedItem(item);
       }
-      return next;
-    });
+    } catch (error) {
+      console.error('Failed to load project:', error);
+    } finally {
+      setLoadingProjectId(null);
+    }
+  };
+
+  const handleItemClick = (item: PinnedItem) => {
+    if (selectedItem?.id === item.id) {
+      setSelectedItem(null);
+      setTaskData(null);
+      setProjectData(null);
+    } else {
+      if (item.type === 'task') {
+        loadTaskData(item);
+      } else if (item.type === 'project') {
+        loadProjectData(item);
+      }
+    }
   };
 
   const getTypeColor = (type: string) => {
@@ -178,34 +110,34 @@ export function PinnedPanel() {
           </div>
         </div>
 
-        {/* Pinned Items - always render to prevent refresh */}
+        {/* Pinned Items List */}
         <div className="flex-1 overflow-y-auto p-2 space-y-2">
           {pinnedItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-neutral-400 p-4">
               <Pin className="h-8 w-8 mb-2" />
               <p className="text-sm text-center">No pinned items</p>
-              <p className="text-xs text-center mt-1">Pin tasks or projects to keep them here</p>
+              <p className="text-xs text-center mt-1">Pin tasks to keep them here</p>
             </div>
           ) : (
             pinnedItems.map((item) => {
-              const url = getItemUrl(item);
-              const isCollapsed = collapsedItems.has(item.id);
+              const isSelected = selectedItem?.id === item.id;
+              const isLoading = (item.type === 'task' && loadingTaskId === item.taskId) || 
+                                (item.type === 'project' && loadingProjectId === item.projectId);
               return (
                 <div 
                   key={item.id} 
-                  className="rounded-lg overflow-hidden border-2 border-neutral-300 shadow-sm bg-white"
+                  className={`rounded-lg overflow-hidden border-2 shadow-sm bg-white cursor-pointer transition-all ${
+                    isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-neutral-300 hover:border-blue-300'
+                  }`}
+                  onClick={() => handleItemClick(item)}
                 >
-                  {/* Item Header - clickable to collapse/expand */}
                   <div 
-                    className={`flex items-center justify-between px-3 py-2 cursor-pointer select-none transition-colors ${getTypeColor(item.type)} hover:opacity-90`}
-                    onClick={() => toggleItemCollapse(item.id)}
+                    className={`flex items-center justify-between px-3 py-2 select-none transition-colors ${getTypeColor(item.type)} hover:opacity-90`}
                   >
                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                      {isCollapsed ? (
-                        <ChevronRight className="h-3.5 w-3.5 text-white flex-shrink-0" />
-                      ) : (
-                        <ChevronDown className="h-3.5 w-3.5 text-white flex-shrink-0" />
-                      )}
+                      {isLoading ? (
+                        <Loader2 className="h-3.5 w-3.5 text-white flex-shrink-0 animate-spin" />
+                      ) : null}
                       <span className="text-xs font-semibold text-white uppercase">
                         {item.type}
                       </span>
@@ -217,6 +149,11 @@ export function PinnedPanel() {
                       onClick={(e) => {
                         e.stopPropagation();
                         removePinnedItem(item.id);
+                        if (selectedItem?.id === item.id) {
+                          setSelectedItem(null);
+                          setTaskData(null);
+                          setProjectData(null);
+                        }
                       }}
                       className="p-1 hover:bg-white/20 rounded transition-colors flex-shrink-0"
                       title="Unpin"
@@ -224,42 +161,58 @@ export function PinnedPanel() {
                       <X className="h-3 w-3 text-white" />
                     </button>
                   </div>
-
-                  {/* Webview/Iframe - always render, hide with CSS */}
-                  {url && (
-                    <div 
-                      style={{ height: isCollapsed ? 0 : WEBVIEW_HEIGHT }} 
-                      className="bg-white overflow-hidden transition-all duration-200"
-                    >
-                      <div className="w-full h-full overflow-x-auto overflow-y-hidden">
-                        {isElectron ? (
-                          <webview
-                            ref={(el) => {
-                              if (el) webviewRefs.current.set(item.id, el);
-                            }}
-                            src={url}
-                            useragent={MOBILE_USER_AGENT}
-                            partition="persist:pinned"
-                            className="border-0"
-                            style={{ width: '100%', height: WEBVIEW_HEIGHT, minWidth: '100%' }}
-                          />
-                        ) : (
-                          <iframe
-                            src={url}
-                            title={item.title}
-                            className="border-0"
-                            style={{ width: '100%', height: WEBVIEW_HEIGHT, minWidth: '100%' }}
-                          />
-                        )}
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })
           )}
         </div>
       </aside>
+
+      {/* Task Detail Dialog */}
+      {selectedItem && selectedItem.type === 'task' && taskData && (
+        <TaskDetailDialog
+          task={taskData}
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedItem(null);
+              setTaskData(null);
+            }
+          }}
+          onTaskUpdate={(updatedTask) => {
+            setTaskData(updatedTask);
+          }}
+          overlayZIndex="z-[9000]"
+          contentZIndex="z-[9000]"
+        />
+      )}
+
+      {/* Project Detail Dialog */}
+      {selectedItem && selectedItem.type === 'project' && projectData && (
+        <Dialog.Root
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedItem(null);
+              setProjectData(null);
+            }
+          }}
+        >
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 bg-black/50 z-[9000]" />
+            <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[9001]">
+              <ProjectDetailPanel
+                project={projectData}
+                isModal={true}
+                onClose={() => {
+                  setSelectedItem(null);
+                  setProjectData(null);
+                }}
+              />
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { X, Info, BarChart, Kanban, FileText, Users, User, TrendingUp, MessageSquare, Send, Plus, Settings, Trash2, Search, Filter, ChevronRight, GripVertical, Upload, ExternalLink, Edit2, Check, Loader2, Maximize2, Minimize2 } from 'lucide-react';
+import { X, Info, BarChart, Kanban, FileText, Users, User, TrendingUp, MessageSquare, Send, Plus, Settings, Trash2, Search, Filter, ChevronRight, GripVertical, Upload, ExternalLink, Edit2, Check, Loader2, Maximize2, Minimize2, Pin } from 'lucide-react';
 import { Project } from '@/lib/api';
 import { httpClient } from '@/lib/httpClient';
 import { toast, toastWithUndo } from '@/lib/toast';
@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { NodePoolPicker } from '@/components/ui/node-pool-picker';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
+import { usePinnedPanel } from '@/contexts/PinnedPanelContext';
 import { RichContentRenderer } from '@/components/ui/rich-content-renderer';
 import { TaskDetailDialog } from '@/components/task/TaskDetailDialog';
 import { Timeline, TimelineItem } from '@/components/ui/Timeline';
@@ -299,6 +300,7 @@ const getDelayReasonOptions = (team: string): { value: string; label: string }[]
 };
 
 export function ProjectDetailPanel({ project, isModal = false, onClose, defaultFullscreen = false }: ProjectDetailPanelProps) {
+  const { addPinnedItem, removePinnedItem, isPinned } = usePinnedPanel();
   const [tabs, setTabs] = useState<Tab[]>([
     { id: 'info', label: '项目信息', icon: Info, active: true },
     { id: 'dashboard', label: 'Dashboard', icon: BarChart, active: false },
@@ -313,7 +315,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose, defaultF
   const [productManager, setProductManager] = useState<ProjectPerson[]>([]);
   const [projectAssistant, setProjectAssistant] = useState<ProjectPerson[]>([]);
   const [projectProgress, setProjectProgress] = useState(0);
-  const [isFullscreen, setIsFullscreen] = useState(defaultFullscreen);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Dashboard tab state
   const [milestones, setMilestones] = useState<Milestone[]>([]);
@@ -718,6 +720,30 @@ export function ProjectDetailPanel({ project, isModal = false, onClose, defaultF
       <div className="flex-shrink-0 border-b border-neutral-200 px-6 py-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-neutral-900">{project.fields.name}</h2>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const pinId = `project-${project.id}`;
+              if (isPinned(pinId)) {
+                removePinnedItem(pinId);
+              } else {
+                addPinnedItem({
+                  id: pinId,
+                  type: 'project',
+                  title: project.fields.name,
+                  projectId: project.id,
+                });
+              }
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded transition-colors ${
+              isPinned(`project-${project.id}`)
+                ? 'text-blue-700 bg-blue-100 hover:bg-blue-200'
+                : 'text-neutral-700 bg-neutral-100 hover:bg-neutral-200'
+            }`}
+            title={isPinned(`project-${project.id}`) ? 'Unpin from panel' : 'Pin to panel'}
+          >
+            <Pin className="h-3.5 w-3.5" />
+            <span>{isPinned(`project-${project.id}`) ? 'Pinned' : 'Pin'}</span>
+          </button>
           <button 
             onClick={() => setIsFullscreen(!isFullscreen)} 
             className="text-neutral-400 hover:text-neutral-600 transition-colors"

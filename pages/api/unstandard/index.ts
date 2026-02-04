@@ -7,6 +7,7 @@ export interface UnstandardItem {
   name: string;
   url: string;
   reason?: string;
+  owner?: string; // 项目负责人（中文名称）
 }
 
 export interface UnstandardResponse {
@@ -121,60 +122,155 @@ function parseUnstandardHtml(html: string, host: string): UnstandardResponse {
   const projects: UnstandardItem[] = [];
   const milestones: UnstandardItem[] = [];
 
-  // Parse task links: /T\d+/
-  const taskRegex = /<a[^>]*href="([^"]*\/T(\d+)[^"]*)"[^>]*>([^<]*)<\/a>/gi;
-  let match;
-  while ((match = taskRegex.exec(html)) !== null) {
-    const url = match[1].startsWith('http') ? match[1] : `${host}${match[1]}`;
-    const id = match[2];
-    const name = match[3].trim() || `T${id}`;
+  // Split HTML into sections by table headers
+  const taskSection = html.match(/<span class="phui-header-header">任务不规范<\/span>[\s\S]*?(?=<span class="phui-header-header">项目不规范<\/span>|$)/i);
+  const projectSection = html.match(/<span class="phui-header-header">项目不规范<\/span>[\s\S]*?(?=<span class="phui-header-header">节点不规范<\/span>|$)/i);
+  const milestoneSection = html.match(/<span class="phui-header-header">节点不规范<\/span>[\s\S]*?(?=<div class="phabricator-standard-page-footer|$)/i);
+
+  // Parse tasks from task section
+  if (taskSection) {
+    // Parse table rows in task section
+    const tableRowRegex = /<tr(?![^>]*class="[^"]*aphront-table-view-fixed-head[^"]*")[^>]*>([\s\S]*?)<\/tr>/gi;
+    let rowMatch;
     
-    // Avoid duplicates
-    if (!tasks.find(t => t.id === id)) {
-      tasks.push({
-        type: 'task',
-        id,
-        name,
-        url,
-      });
+    while ((rowMatch = tableRowRegex.exec(taskSection[0])) !== null) {
+      const rowHtml = rowMatch[1];
+      
+      // Skip header rows and "no data" rows
+      if (rowHtml.includes('no-data') || rowHtml.includes('<th')) {
+        continue;
+      }
+      
+      // Extract cells from row
+      const cells: string[] = [];
+      const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+      let cellMatch;
+      while ((cellMatch = cellRegex.exec(rowHtml)) !== null) {
+        cells.push(cellMatch[1]);
+      }
+      
+      if (cells.length >= 5) {
+        // Extract owner from cell 1 (任务负责人)
+        const owner = cells[1].replace(/<[^>]*>/g, '').trim();
+        
+        // Extract task link from cell 3 (任务名称)
+        const taskMatch = cells[3].match(/<a[^>]*href="([^"]*\/T(\d+)[^"]*)"[^>]*>([^<]*)<\/a>/i);
+        
+        if (taskMatch && owner) {
+          const url = taskMatch[1].startsWith('http') ? taskMatch[1] : `${host}${taskMatch[1]}`;
+          const id = taskMatch[2];
+          const name = taskMatch[3].trim() || `T${id}`;
+          
+          if (!tasks.find(t => t.id === id)) {
+            tasks.push({
+              type: 'task',
+              id,
+              name,
+              url,
+              owner,
+            });
+          }
+        }
+      }
     }
   }
 
-  // Parse project links: /project/view/\d+/ or /tag/xxx/
-  const projectRegex = /<a[^>]*href="([^"]*\/(?:project\/view\/(\d+)|tag\/([^\/]+))\/[^"]*)"[^>]*>([^<]*)<\/a>/gi;
-  while ((match = projectRegex.exec(html)) !== null) {
-    const url = match[1].startsWith('http') ? match[1] : `${host}${match[1]}`;
-    const id = match[2] || match[3];
-    const name = match[4].trim();
+  // Parse projects from project section
+  if (projectSection) {
+    // Parse table rows in project section
+    const tableRowRegex = /<tr(?![^>]*class="[^"]*aphront-table-view-fixed-head[^"]*")[^>]*>([\s\S]*?)<\/tr>/gi;
+    let rowMatch;
     
-    if (id && name && !projects.find(p => p.id === id)) {
-      projects.push({
-        type: 'project',
-        id,
-        name,
-        url,
-      });
+    while ((rowMatch = tableRowRegex.exec(projectSection[0])) !== null) {
+      const rowHtml = rowMatch[1];
+      
+      // Skip header rows and "no data" rows
+      if (rowHtml.includes('no-data') || rowHtml.includes('<th')) {
+        continue;
+      }
+      
+      // Extract cells from row
+      const cells: string[] = [];
+      const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+      let cellMatch;
+      while ((cellMatch = cellRegex.exec(rowHtml)) !== null) {
+        cells.push(cellMatch[1]);
+      }
+      
+      if (cells.length >= 5) {
+        // Extract owner from cell 2 (项目负责人)
+        const owner = cells[2].replace(/<[^>]*>/g, '').trim();
+        
+        // Extract schedule link and project name from cell 4 (项目名称)
+        const scheduleMatch = cells[4].match(/<a[^>]*href="([^"]*\/project\/schedule\/(\d+)\/[^"]*)"[^>]*>([^<]*)<\/a>/i);
+        
+        if (scheduleMatch && owner) {
+          const url = scheduleMatch[1].startsWith('http') ? scheduleMatch[1] : `${host}${scheduleMatch[1]}`;
+          const id = scheduleMatch[2];
+          const name = scheduleMatch[3].trim();
+          
+          if (id && name && !projects.find(p => p.id === id)) {
+            projects.push({
+              type: 'project',
+              id,
+              name,
+              url,
+              owner,
+            });
+          }
+        }
+      }
     }
   }
 
-  // Try to parse table rows for more structured data
-  // Look for table with unstandard items
-  const tableRowRegex = /<tr[^>]*>[\s\S]*?<\/tr>/gi;
-  const rows = html.match(tableRowRegex) || [];
-  
-  for (const row of rows) {
-    // Extract task from row
-    const taskMatch = row.match(/href="[^"]*\/T(\d+)[^"]*"[^>]*>([^<]*)</i);
-    if (taskMatch) {
-      const id = taskMatch[1];
-      const name = taskMatch[2].trim() || `T${id}`;
-      if (!tasks.find(t => t.id === id)) {
-        tasks.push({
-          type: 'task',
-          id,
-          name,
-          url: `${host}/T${id}`,
-        });
+  // Parse milestones from milestone section
+  if (milestoneSection) {
+    // Parse table rows in milestone section
+    const tableRowRegex = /<tr(?![^>]*class="[^"]*aphront-table-view-fixed-head[^"]*")[^>]*>([\s\S]*?)<\/tr>/gi;
+    let rowMatch;
+    
+    while ((rowMatch = tableRowRegex.exec(milestoneSection[0])) !== null) {
+      const rowHtml = rowMatch[1];
+      
+      // Skip header rows and "no data" rows
+      if (rowHtml.includes('no-data') || rowHtml.includes('<th')) {
+        continue;
+      }
+      
+      // Extract cells from row
+      const cells: string[] = [];
+      const cellRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+      let cellMatch;
+      while ((cellMatch = cellRegex.exec(rowHtml)) !== null) {
+        cells.push(cellMatch[1]);
+      }
+      
+      if (cells.length >= 8) {
+        // Extract owner from cell 2 (项目负责人)
+        const owner = cells[2].replace(/<[^>]*>/g, '').trim();
+        
+        // Extract schedule link and project name from cell 4 (项目名称)
+        const scheduleMatch = cells[4].match(/<a[^>]*href="([^"]*\/project\/schedule\/(\d+)\/[^"]*)"[^>]*>([^<]*)<\/a>/i);
+        const milestoneName = cells[7].replace(/<[^>]*>/g, '').trim();
+        
+        if (scheduleMatch && milestoneName && owner) {
+          const scheduleId = scheduleMatch[2];
+          const projectName = scheduleMatch[3].trim();
+          const url = scheduleMatch[1].startsWith('http') ? scheduleMatch[1] : `${host}${scheduleMatch[1]}`;
+          
+          // Use schedule ID + milestone name as unique ID
+          const milestoneId = `${scheduleId}-${milestoneName}`;
+          
+          if (!milestones.find(m => m.id === milestoneId)) {
+            milestones.push({
+              type: 'milestone',
+              id: milestoneId,
+              name: `${projectName} - ${milestoneName}`,
+              url,
+              owner,
+            });
+          }
+        }
       }
     }
   }

@@ -5,37 +5,13 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-
-interface CookieJar {
-  phusr?: string;
-  phsid?: string;
-  PHPSESSID?: string;
-  next_uri?: string;
-  phcid?: string;
-}
-
-function parseCookies(setCookieHeaders: string[]): CookieJar {
-  const cookies: CookieJar = {};
-  for (const header of setCookieHeaders) {
-    const match = header.match(/^([^=]+)=([^;]*)/);
-    if (match) {
-      const [, name, value] = match;
-      (cookies as any)[name] = value;
-    }
-  }
-  return cookies;
-}
-
-function mergeCookies(existing: CookieJar, newCookies: CookieJar): CookieJar {
-  return { ...existing, ...newCookies };
-}
-
-function cookieString(cookies: CookieJar): string {
-  return Object.entries(cookies)
-    .filter(([, v]) => v)
-    .map(([k, v]) => `${k}=${v}`)
-    .join('; ');
-}
+import {
+  CookieJar,
+  parseCookies,
+  mergeCookies,
+  cookieString,
+  extractCsrfToken,
+} from './session/cookies';
 
 let isRefreshing = false;
 let refreshPromise: Promise<{ phusr: string; phsid: string }> | null = null;
@@ -82,20 +58,7 @@ export async function refreshPhabricatorSession(): Promise<{ phusr: string; phsi
       
       const ldapFormHtml = await ldapFormRes.text();
       
-      // Extract CSRF token
-      let ldapCsrfMatch = ldapFormHtml.match(/name="__csrf__"\s+value="([^"]+)"/);
-      let ldapCsrfToken = ldapCsrfMatch ? ldapCsrfMatch[1] : '';
-      
-      if (!ldapCsrfToken) {
-        ldapCsrfMatch = ldapFormHtml.match(/value="([^"]+)"\s+name="__csrf__"/);
-        if (ldapCsrfMatch) ldapCsrfToken = ldapCsrfMatch[1];
-      }
-      
-      if (!ldapCsrfToken) {
-        ldapCsrfMatch = ldapFormHtml.match(/__csrf__['"]\s*:\s*['"]([^'"]+)['"]/);
-        if (ldapCsrfMatch) ldapCsrfToken = ldapCsrfMatch[1];
-      }
-      
+      const ldapCsrfToken = extractCsrfToken(ldapFormHtml);
       if (!ldapCsrfToken) {
         throw new Error('Could not find CSRF token on LDAP login form');
       }

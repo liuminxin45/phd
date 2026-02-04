@@ -48,6 +48,7 @@ export default function ProjectsPage() {
 
   const [archivedProjectIds, setArchivedProjectIds] = useState<Set<number>>(new Set());
   const [showArchived, setShowArchived] = useState(false);
+  const [archiveStateLoaded, setArchiveStateLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,6 +56,9 @@ export default function ProjectsPage() {
       const stored = await appStorage.get<number[]>(STORAGE_KEY_PROJECT_ARCHIVE_IDS);
       if (!cancelled && Array.isArray(stored)) {
         setArchivedProjectIds(new Set(stored));
+      }
+      if (!cancelled) {
+        setArchiveStateLoaded(true);
       }
     })();
 
@@ -64,8 +68,10 @@ export default function ProjectsPage() {
   }, []);
 
   useEffect(() => {
-    void appStorage.set(STORAGE_KEY_PROJECT_ARCHIVE_IDS, [...archivedProjectIds]);
-  }, [archivedProjectIds]);
+    if (archiveStateLoaded) {
+      void appStorage.set(STORAGE_KEY_PROJECT_ARCHIVE_IDS, [...archivedProjectIds]);
+    }
+  }, [archivedProjectIds, archiveStateLoaded]);
 
   const displayedProjects = useMemo(() => {
     return showArchived

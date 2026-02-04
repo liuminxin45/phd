@@ -1,4 +1,5 @@
 import { httpPost } from './httpClient';
+import { chunkArray } from './utils/array';
 
 interface BatchRequestItem {
   id: string;
@@ -28,13 +29,6 @@ async function executeBatch<T = any>(
   return httpPost<BatchResultItem<T>[]>('/api/conduit/batch', { requests });
 }
 
-function chunkArray<T>(array: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < array.length; i += size) {
-    chunks.push(array.slice(i, i + size));
-  }
-  return chunks;
-}
 
 export async function batchConduitCall<T = any>(
   requests: BatchRequestItem[],

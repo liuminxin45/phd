@@ -1027,7 +1027,7 @@ export function TaskDetailDialog({
                       addPinnedItem({
                         id: pinId,
                         type: 'task',
-                        title: `T${task.id}: ${taskTitle}`,
+                        title: taskTitle,
                         taskId: task.id,
                       });
                     }
