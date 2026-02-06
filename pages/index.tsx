@@ -3,6 +3,7 @@ import { Project, Task } from '@/lib/api';
 import { TaskDetailDialog } from '@/components/task/TaskDetailDialog';
 import { ProjectDetailPanel } from '@/components/project/ProjectDetailPanel';
 import { UnstandardWidget } from '@/components/dashboard/UnstandardWidget';
+import { DinnerWidget } from '@/components/dashboard/DinnerWidget';
 import { httpClient } from '@/lib/httpClient';
 import { toast } from 'sonner';
 
@@ -67,6 +68,9 @@ export default function Dashboard() {
         onTaskClick={handleUnstandardTaskClick}
         onProjectClick={handleUnstandardProjectClick}
       />
+
+      {/* Dinner Subsidy */}
+      <DinnerWidget />
 
       {/* Task Detail Modal */}
       <TaskDetailDialog
