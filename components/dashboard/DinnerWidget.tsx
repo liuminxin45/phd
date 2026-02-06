@@ -14,11 +14,19 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import type { ParsedDinnerData, DinnerUserData } from '@/lib/parsers/dinner-html';
+import type { ParsedDinnerData, DinnerUserData } from '@/lib/dinner/types';
 
 interface DinnerWidgetProps {
   className?: string;
 }
+
+const APPLY_OPTIONS = [
+  { label: '今天1次', date: 0, times: 1 },
+  { label: '今天2次', date: 0, times: 2 },
+  { label: '昨天1次', date: -1, times: 1 },
+  { label: '昨天2次', date: -1, times: 2 },
+  { label: '取消今天', date: 0, times: 0 },
+] as const;
 
 // Merge multi-month data: sum monthTotal per user across months
 function mergeMonthsData(months: ParsedDinnerData[], currentUserName?: string): ParsedDinnerData | null {
@@ -176,8 +184,7 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
 
   const data = getDisplayData();
 
-  // Apply dinner
-  const handleApply = async (date: number, times: number) => {
+  const handleApply = useCallback(async (date: number, times: number) => {
     setApplying(true);
     try {
       await httpClient<any>('/api/dinner/apply', {
@@ -185,14 +192,14 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
         body: { date, times },
       });
       toast.success(`申报成功: ${date === 0 ? '今天' : '昨天'} ${times}次`);
-      // Refresh current month
-      fetchMonth(now.getFullYear(), now.getMonth() + 1);
+      const n = new Date();
+      fetchMonth(n.getFullYear(), n.getMonth() + 1);
     } catch (err: any) {
       toast.error(`申报失败: ${err.message}`);
     } finally {
       setApplying(false);
     }
-  };
+  }, [fetchMonth]);
 
   // Secret code listener: AAABBB
   useEffect(() => {
@@ -224,7 +231,7 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
     }, 60 * 1000);
 
     return () => { if (autoApplyTimer.current) clearInterval(autoApplyTimer.current); };
-  }, [autoApplyEnabled, autoApplyTime, autoApplyDate, autoApplyTimes, showSecret]);
+  }, [autoApplyEnabled, autoApplyTime, autoApplyDate, autoApplyTimes, showSecret, handleApply]);
 
   // Bar chart data
   const barChartData = data && data.allUsers.length > 0
@@ -314,13 +321,7 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
             {isCurrentMonth && canApplyNow && (
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs text-neutral-500">申报:</span>
-                {[
-                  { label: '今天1次', date: 0, times: 1 },
-                  { label: '今天2次', date: 0, times: 2 },
-                  { label: '昨天1次', date: -1, times: 1 },
-                  { label: '昨天2次', date: -1, times: 2 },
-                  { label: '取消今天', date: 0, times: 0 },
-                ].map(({ label, date, times }) => (
+                {APPLY_OPTIONS.map(({ label, date, times }) => (
                   <button
                     key={label}
                     onClick={() => handleApply(date, times)}
@@ -478,13 +479,7 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
                 {/* Manual apply buttons - always available here */}
                 <div className="flex items-center gap-2 mt-2 pt-2 border-t border-red-200">
                   <span className="text-xs text-red-500">Manual:</span>
-                  {[
-                    { label: '今天1次', date: 0, times: 1 },
-                    { label: '今天2次', date: 0, times: 2 },
-                    { label: '昨天1次', date: -1, times: 1 },
-                    { label: '昨天2次', date: -1, times: 2 },
-                    { label: '取消今天', date: 0, times: 0 },
-                  ].map(({ label, date, times }) => (
+                  {APPLY_OPTIONS.map(({ label, date, times }) => (
                     <button
                       key={`secret-${label}`}
                       onClick={() => handleApply(date, times)}

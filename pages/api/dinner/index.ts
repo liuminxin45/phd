@@ -1,55 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import * as fs from 'fs';
 import * as path from 'path';
-import { refreshDinnerSession } from '@/lib/dinner-session';
-import type { ParsedDinnerData, DinnerUserData } from '@/lib/parsers/dinner-html';
+import {
+  DINNER_BASE_URL,
+  makeHeaders,
+  getActiveSession,
+  refreshAndEstablish,
+  fetchJson,
+} from '@/lib/dinner/client';
+import type { ParsedDinnerData, DinnerUserData } from '@/lib/dinner/types';
 
-const BASE_URL = 'http://selfservice.tp-link.com.cn:8081/dinner/default';
 const CACHE_DIR = path.join(process.cwd(), 'data', 'dinner-cache');
-
-// --- Helpers ---
-
-function makeHeaders(session: string) {
-  return {
-    'Accept': 'application/json, text/javascript, */*; q=0.01',
-    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-    'Cookie': `session_id_dinner="${session}"`,
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
-    'X-Requested-With': 'XMLHttpRequest',
-  };
-}
-
-async function ensureSession(): Promise<string> {
-  let session = process.env.DINNER_SESSION;
-  if (!session) {
-    const cookies = await refreshDinnerSession();
-    session = cookies.session_id_dinner;
-  }
-  if (!session) throw new Error('No dinner session available');
-  return session;
-}
-
-async function establishSession(session: string): Promise<string> {
-  const resp = await fetch(`${BASE_URL}/index`, {
-    method: 'GET',
-    headers: { 'Accept': 'text/html', 'Cookie': `session_id_dinner="${session}"`, 'User-Agent': 'Mozilla/5.0' },
-  });
-  const setCookie = resp.headers.getSetCookie?.() || [];
-  for (const h of setCookie) {
-    const m = h.match(/session_id_dinner="?([^";]+)"?/);
-    if (m) session = m[1];
-  }
-  return session;
-}
-
-async function fetchJson<T>(url: string, options: RequestInit): Promise<T> {
-  const resp = await fetch(url, options);
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => '');
-    throw new Error(`${resp.status} ${resp.statusText}: ${text.substring(0, 200)}`);
-  }
-  return await resp.json() as T;
-}
 
 // --- Cache ---
 
@@ -153,6 +114,24 @@ function processRecordsData(
   };
 }
 
+// --- Helpers ---
+
+/** Re-resolve currentUser + rank for a given user name against cached/fetched data (mutates). */
+function resolveCurrentUser(data: ParsedDinnerData, userName?: string): void {
+  if (!userName) return;
+  data.currentUser = data.allUsers.find(u => u.name === userName) || null;
+  if (data.currentUser) {
+    const sorted = [...data.allUsers].sort((a, b) => b.monthTotal - a.monthTotal);
+    data.currentUserRank = sorted.findIndex(u => u.employeeNo === data.currentUser!.employeeNo) + 1;
+  }
+}
+
+const EMPTY_RESPONSE = (year: number, month: number): ParsedDinnerData => ({
+  currentUser: null, allUsers: [], totalUsers: 0, currentUserRank: null,
+  daysInMonth: 0, year: String(year), month: String(month),
+  statistics: { maxTotal: 0, minTotal: 0, avgTotal: 0, medianTotal: 0, grandTotal: 0 },
+});
+
 // --- Handler ---
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -160,28 +139,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  try {
-    const currentUserName = req.query.userName as string | undefined;
-    const now = new Date();
-    const qYear = req.query.year ? parseInt(req.query.year as string) : now.getFullYear();
-    const qMonth = req.query.month ? parseInt(req.query.month as string) : now.getMonth() + 1;
-    const cacheOnly = req.query.cacheOnly === 'true';
+  const now = new Date();
+  const currentUserName = req.query.userName as string | undefined;
+  const qYear = req.query.year ? parseInt(req.query.year as string) : now.getFullYear();
+  const qMonth = req.query.month ? parseInt(req.query.month as string) : now.getMonth() + 1;
+  const cacheOnly = req.query.cacheOnly === 'true';
 
+  try {
     // If cacheOnly, just return cached data (for month switching)
     if (cacheOnly) {
       const cached = readCache(qYear, qMonth);
       if (cached) {
-        // Re-resolve currentUser for the requesting user
-        if (currentUserName) {
-          cached.currentUser = cached.allUsers.find(u => u.name === currentUserName) || null;
-          if (cached.currentUser) {
-            const sorted = [...cached.allUsers].sort((a, b) => b.monthTotal - a.monthTotal);
-            cached.currentUserRank = sorted.findIndex(u => u.employeeNo === cached.currentUser!.employeeNo) + 1;
-          }
-        }
+        resolveCurrentUser(cached, currentUserName);
         return res.status(200).json(cached);
       }
-      // No cache, fall through to fetch
     }
 
     // Determine if this month is accessible remotely (current month or last month)
@@ -195,37 +166,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!isRemoteAccessible) {
       const cached = readCache(qYear, qMonth);
       if (cached) {
-        if (currentUserName) {
-          cached.currentUser = cached.allUsers.find(u => u.name === currentUserName) || null;
-          if (cached.currentUser) {
-            const sorted = [...cached.allUsers].sort((a, b) => b.monthTotal - a.monthTotal);
-            cached.currentUserRank = sorted.findIndex(u => u.employeeNo === cached.currentUser!.employeeNo) + 1;
-          }
-        }
+        resolveCurrentUser(cached, currentUserName);
         return res.status(200).json(cached);
       }
-      // No cache and no remote access
-      return res.status(200).json({
-        currentUser: null, allUsers: [], totalUsers: 0, currentUserRank: null,
-        daysInMonth: 0, year: String(qYear), month: String(qMonth),
-        statistics: { maxTotal: 0, minTotal: 0, avgTotal: 0, medianTotal: 0, grandTotal: 0 },
-      });
+      return res.status(200).json(EMPTY_RESPONSE(qYear, qMonth));
     }
 
-    // Fetch from remote
-    let session = await ensureSession();
-    session = await establishSession(session);
+    // Fetch from remote with automatic session retry
+    let session = await getActiveSession();
 
     let userData: any;
     try {
-      userData = await fetchJson<any>(`${BASE_URL}/get_user_data`, {
+      userData = await fetchJson<any>(`${DINNER_BASE_URL}/get_user_data`, {
         method: 'GET', headers: makeHeaders(session),
       });
     } catch {
-      const cookies = await refreshDinnerSession();
-      session = cookies.session_id_dinner || session;
-      session = await establishSession(session);
-      userData = await fetchJson<any>(`${BASE_URL}/get_user_data`, {
+      session = await refreshAndEstablish(session);
+      userData = await fetchJson<any>(`${DINNER_BASE_URL}/get_user_data`, {
         method: 'GET', headers: makeHeaders(session),
       });
     }
@@ -245,7 +202,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const formData = new URLSearchParams();
     formData.append('filter', JSON.stringify(queryData));
 
-    const recordsData = await fetchJson<any>(`${BASE_URL}/find_by_page`, {
+    const recordsData = await fetchJson<any>(`${DINNER_BASE_URL}/find_by_page`, {
       method: 'POST',
       headers: { ...makeHeaders(session), 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
       body: formData.toString(),
@@ -253,17 +210,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const result = processRecordsData(recordsData, qYear, qMonth, matchName);
 
-    // Only cache valid data
     if (isValidData(result)) {
       writeCache(qYear, qMonth, result);
     }
 
     res.status(200).json(result);
   } catch (error: any) {
-    // On error, try returning cached data
-    const now = new Date();
-    const qYear = req.query.year ? parseInt(req.query.year as string) : now.getFullYear();
-    const qMonth = req.query.month ? parseInt(req.query.month as string) : now.getMonth() + 1;
     const cached = readCache(qYear, qMonth);
     if (cached) {
       console.log('[Dinner] Fetch failed, returning cache:', error.message);
