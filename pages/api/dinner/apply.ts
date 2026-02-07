@@ -2,9 +2,19 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import {
   DINNER_BASE_URL,
   makeHeaders,
+  fetchJson,
   getActiveSession,
   refreshAndEstablish,
 } from '@/lib/dinner/client';
+
+function formatDate(offset: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -24,9 +34,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     let session = await getActiveSession();
 
+    // Get current user data to obtain userId
+    const userData = await fetchJson<any>(`${DINNER_BASE_URL}/get_user_data`, {
+      method: 'GET',
+      headers: makeHeaders(session),
+    });
+    const loginUser = userData?.result || {};
+    const userId = loginUser.userId;
+    if (!userId) {
+      throw new Error('Could not obtain userId from get_user_data');
+    }
+
+    const recordDate = formatDate(date);
+
+    // Build form data matching the original JS applyData structure
     const formData = new URLSearchParams();
-    formData.append('date', String(date));
+    formData.append('userId', String(userId));
+    formData.append('recordDate', recordDate);
     formData.append('times', String(times));
+    formData.append('reason', '');
+    formData.append('type', '');
+    formData.append('year', '');
+    formData.append('month', '');
+    formData.append('day', '');
 
     const doApply = async (s: string) => {
       const resp = await fetch(`${DINNER_BASE_URL}/create`, {

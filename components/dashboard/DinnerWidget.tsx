@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { UtensilsCrossed, TrendingUp, Users, Award, ChevronLeft, ChevronRight, RefreshCw, Send, Clock } from 'lucide-react';
+import { UtensilsCrossed, TrendingUp, Users, Award, ChevronLeft, ChevronRight, RefreshCw, Clock, CalendarDays } from 'lucide-react';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { httpClient } from '@/lib/httpClient';
 import { useUser } from '@/contexts/UserContext';
@@ -15,20 +15,15 @@ import {
   Cell,
 } from 'recharts';
 import type { ParsedDinnerData, DinnerUserData } from '@/lib/dinner/types';
+import { isNonWorkingDay } from '@/lib/chinese-holidays';
+import { useLocalStorageState } from '@/hooks/useLocalStorageState';
+import { ApplyButtons } from './dinner/ApplyButtons';
+import { DailyDetailModal } from './dinner/DailyDetailModal';
 
 interface DinnerWidgetProps {
   className?: string;
 }
 
-const APPLY_OPTIONS = [
-  { label: '今天1次', date: 0, times: 1 },
-  { label: '今天2次', date: 0, times: 2 },
-  { label: '昨天1次', date: -1, times: 1 },
-  { label: '昨天2次', date: -1, times: 2 },
-  { label: '取消今天', date: 0, times: 0 },
-] as const;
-
-// Merge multi-month data: sum monthTotal per user across months
 function mergeMonthsData(months: ParsedDinnerData[], currentUserName?: string): ParsedDinnerData | null {
   if (months.length === 0) return null;
   if (months.length === 1) return months[0];
@@ -90,21 +85,22 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
-  const [autoApplyEnabled, setAutoApplyEnabled] = useState(false);
-  const [autoApplyTime, setAutoApplyTime] = useState('20:00');
-  const [autoApplyDate, setAutoApplyDate] = useState(0);
-  const [autoApplyTimes, setAutoApplyTimes] = useState(1);
+  const [autoApplyEnabled, setAutoApplyEnabled] = useLocalStorageState('dinner_autoApplyEnabled', false);
+  const [autoApplyTime, setAutoApplyTime] = useLocalStorageState('dinner_autoApplyTime', '20:00');
+  const [autoApplyDate, setAutoApplyDate] = useLocalStorageState('dinner_autoApplyDate', 0);
+  const [autoApplyTimes, setAutoApplyTimes] = useLocalStorageState('dinner_autoApplyTimes', 1);
+  const [showDailyDetail, setShowDailyDetail] = useState(false);
   const keyBuffer = useRef('');
   const autoApplyTimer = useRef<NodeJS.Timeout | null>(null);
+  const lastAutoApplyMinute = useRef('');
 
   const currentKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
   const isCurrentMonth = selectedYear === now.getFullYear() && selectedMonth === now.getMonth() + 1;
 
-  // Check if apply is allowed: weekday after 19:00, weekend all day
+  // Apply allowed: non-working day (holiday/weekend) all day, working day after 19:00
   const canApplyNow = (() => {
-    const day = now.getDay(); // 0=Sun, 6=Sat
-    const isWeekend = day === 0 || day === 6;
-    if (isWeekend) return true;
+    const todayIsOff = isNonWorkingDay(now.getFullYear(), now.getMonth() + 1, now.getDate());
+    if (todayIsOff) return true;
     return now.getHours() >= 19;
   })();
 
@@ -217,21 +213,36 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  // Auto-apply scheduler
+  // Auto-apply scheduler: use refs to avoid dependency churn
+  const handleApplyRef = useRef(handleApply);
+  handleApplyRef.current = handleApply;
+  const autoApplyDateRef = useRef(autoApplyDate);
+  autoApplyDateRef.current = autoApplyDate;
+  const autoApplyTimesRef = useRef(autoApplyTimes);
+  autoApplyTimesRef.current = autoApplyTimes;
+  const autoApplyTimeRef = useRef(autoApplyTime);
+  autoApplyTimeRef.current = autoApplyTime;
+
   useEffect(() => {
     if (autoApplyTimer.current) clearInterval(autoApplyTimer.current);
-    if (!autoApplyEnabled || !showSecret) return;
+    if (!autoApplyEnabled) return;
 
-    autoApplyTimer.current = setInterval(() => {
+    const check = () => {
       const n = new Date();
       const timeStr = `${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}`;
-      if (timeStr === autoApplyTime) {
-        handleApply(autoApplyDate, autoApplyTimes);
+      if (timeStr === autoApplyTimeRef.current && lastAutoApplyMinute.current !== timeStr) {
+        lastAutoApplyMinute.current = timeStr;
+        handleApplyRef.current(autoApplyDateRef.current, autoApplyTimesRef.current);
+        setAutoApplyEnabled(false);
       }
-    }, 60 * 1000);
+    };
+
+    // Check immediately, then every 15 seconds to not miss the minute window
+    check();
+    autoApplyTimer.current = setInterval(check, 15 * 1000);
 
     return () => { if (autoApplyTimer.current) clearInterval(autoApplyTimer.current); };
-  }, [autoApplyEnabled, autoApplyTime, autoApplyDate, autoApplyTimes, showSecret, handleApply]);
+  }, [autoApplyEnabled]);
 
   // Bar chart data
   const barChartData = data && data.allUsers.length > 0
@@ -273,6 +284,13 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
               className={`ml-2 px-2 py-1 text-xs rounded ${multiMode ? 'bg-orange-100 text-orange-700' : 'bg-neutral-100 text-neutral-600'}`}
             >
               Multi
+            </button>
+            <button
+              onClick={() => setShowDailyDetail(true)}
+              className="p-1 hover:bg-neutral-100 rounded ml-1"
+              title="Daily Detail"
+            >
+              <CalendarDays className="w-3.5 h-3.5 text-orange-500" />
             </button>
             <button onClick={() => fetchMonth(selectedYear, selectedMonth)} className="p-1 hover:bg-neutral-100 rounded ml-1">
               <RefreshCw className="w-3.5 h-3.5 text-neutral-500" />
@@ -321,16 +339,7 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
             {isCurrentMonth && canApplyNow && (
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs text-neutral-500">申报:</span>
-                {APPLY_OPTIONS.map(({ label, date, times }) => (
-                  <button
-                    key={label}
-                    onClick={() => handleApply(date, times)}
-                    disabled={applying}
-                    className="px-2 py-1 text-xs bg-orange-50 text-orange-700 rounded border border-orange-200 hover:bg-orange-100 disabled:opacity-50"
-                  >
-                    <Send className="w-3 h-3 inline mr-1" />{label}
-                  </button>
-                ))}
+                <ApplyButtons onApply={handleApply} disabled={applying} />
               </div>
             )}
 
@@ -476,19 +485,9 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
                   </label>
                   {autoApplyEnabled && <span className="text-xs text-green-600">Active - {autoApplyDate === 0 ? 'today' : 'yesterday'} {autoApplyTimes}x at {autoApplyTime}</span>}
                 </div>
-                {/* Manual apply buttons - always available here */}
                 <div className="flex items-center gap-2 mt-2 pt-2 border-t border-red-200">
                   <span className="text-xs text-red-500">Manual:</span>
-                  {APPLY_OPTIONS.map(({ label, date, times }) => (
-                    <button
-                      key={`secret-${label}`}
-                      onClick={() => handleApply(date, times)}
-                      disabled={applying}
-                      className="px-2 py-1 text-xs bg-red-50 text-red-700 rounded border border-red-200 hover:bg-red-100 disabled:opacity-50"
-                    >
-                      {label}
-                    </button>
-                  ))}
+                  <ApplyButtons onApply={handleApply} disabled={applying} showIcon={false} variant="danger" />
                 </div>
               </div>
             )}
@@ -499,6 +498,14 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
           </div>
         )}
       </div>
+      {showDailyDetail && data && data.daysInMonth > 0 && !multiMode && (
+        <DailyDetailModal
+          data={data}
+          year={selectedYear}
+          month={selectedMonth}
+          onClose={() => setShowDailyDetail(false)}
+        />
+      )}
     </div>
   );
 }
