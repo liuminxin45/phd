@@ -1,6 +1,6 @@
 import { useRouter } from 'next/router';
 import { ReactNode, useMemo, useState, useEffect, useRef } from 'react';
-import { Home, CheckSquare, Folder, BookOpen, Search, X, Minus, Square } from 'lucide-react';
+import { Home, CheckSquare, Folder, BookOpen, Search, X, Minus, Square, Settings } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -21,6 +21,7 @@ const DashboardPage = dynamic(() => import('@/pages/index'), { ssr: false, loadi
 const TasksPage = dynamic(() => import('@/pages/tasks'), { ssr: false, loading: PageLoader });
 const ProjectsPage = dynamic(() => import('@/pages/projects'), { ssr: false, loading: PageLoader });
 const BlogsPage = dynamic(() => import('@/pages/blogs'), { ssr: false, loading: PageLoader });
+const SettingsPage = dynamic(() => import('@/pages/settings'), { ssr: false, loading: PageLoader });
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -165,6 +166,21 @@ export default function AppLayout({ children }: AppLayoutProps) {
           </ul>
         </nav>
 
+        {/* Settings Button - Bottom */}
+        <div className="p-4 border-t border-neutral-200">
+          <a
+            href="/settings"
+            onClick={(e) => handleNavigation('/settings', e)}
+            className={`flex items-center rounded-lg transition-colors cursor-pointer justify-center p-3 ${
+              currentPath === '/settings'
+                ? 'bg-neutral-900 text-white'
+                : 'text-neutral-700 hover:bg-neutral-100'
+            }`}
+            title="Settings"
+          >
+            <Settings className="h-5 w-5 flex-shrink-0" />
+          </a>
+        </div>
       </aside>
 
       {/* Main Content */}
@@ -228,6 +244,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
             {mountedPages.has('/blogs') && (
               <div data-blog-scroll style={{ display: currentPath === '/blogs' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
                 <BlogsPage key={pageReloadKeys['/blogs'] || 0} />
+              </div>
+            )}
+            {mountedPages.has('/settings') && (
+              <div style={{ display: currentPath === '/settings' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+                <SettingsPage key={pageReloadKeys['/settings'] || 0} />
               </div>
             )}
           </main>
