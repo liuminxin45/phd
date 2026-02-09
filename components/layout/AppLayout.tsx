@@ -1,6 +1,6 @@
 import { useRouter } from 'next/router';
 import { ReactNode, useMemo, useState, useEffect, useRef } from 'react';
-import { Home, CheckSquare, Folder, Search, X, Minus, Square } from 'lucide-react';
+import { Home, CheckSquare, Folder, BookOpen, Search, X, Minus, Square } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -20,6 +20,7 @@ const PageLoader = () => (
 const DashboardPage = dynamic(() => import('@/pages/index'), { ssr: false, loading: PageLoader });
 const TasksPage = dynamic(() => import('@/pages/tasks'), { ssr: false, loading: PageLoader });
 const ProjectsPage = dynamic(() => import('@/pages/projects'), { ssr: false, loading: PageLoader });
+const BlogsPage = dynamic(() => import('@/pages/blogs'), { ssr: false, loading: PageLoader });
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -29,6 +30,7 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Tasks', href: '/tasks', icon: CheckSquare },
   { name: 'Projects', href: '/projects', icon: Folder },
+  { name: 'Blogs', href: '/blogs', icon: BookOpen },
 ];
 
 export default function AppLayout({ children }: AppLayoutProps) {
@@ -221,6 +223,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
             {mountedPages.has('/projects') && (
               <div style={{ display: currentPath === '/projects' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
                 <ProjectsPage key={pageReloadKeys['/projects'] || 0} />
+              </div>
+            )}
+            {mountedPages.has('/blogs') && (
+              <div data-blog-scroll style={{ display: currentPath === '/blogs' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+                <BlogsPage key={pageReloadKeys['/blogs'] || 0} />
               </div>
             )}
           </main>

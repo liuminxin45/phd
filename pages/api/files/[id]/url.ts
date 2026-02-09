@@ -39,17 +39,34 @@ export default async function handler(
 
     const rawUrl = `/api/files/${fileData.id}/raw`;
 
+    // Resolve MIME type — Phabricator often stores images as application/octet-stream
+    let mimeType: string = fileData.fields.mimeType || 'application/octet-stream';
+    if (mimeType === 'application/octet-stream') {
+      const fileName = fileData.fields.name || '';
+      const ext = fileName.toLowerCase().split('.').pop() || '';
+      const mimeMap: Record<string, string> = {
+        png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+        gif: 'image/gif', bmp: 'image/bmp', webp: 'image/webp',
+        svg: 'image/svg+xml', ico: 'image/x-icon',
+        tiff: 'image/tiff', tif: 'image/tiff',
+        pdf: 'application/pdf', txt: 'text/plain',
+        md: 'text/markdown', json: 'application/json',
+      };
+      if (mimeMap[ext]) mimeType = mimeMap[ext];
+    }
+
+    const isImage = mimeType.startsWith('image/');
+
     // Return file metadata with direct URL (no base64)
     res.status(200).json({
       id: fileData.id,
       phid: fileData.phid,
       name: fileData.fields.name,
-      mimeType: fileData.fields.mimeType,
+      mimeType,
       size: fileData.fields.size,
       // Same-origin proxied URL (does not rely on Phabricator cookies)
       url: rawUrl,
-      // Thumbnail URL (can be optimized later); for now reuse raw
-      thumbnailUrl: fileData.fields.mimeType?.startsWith('image/') ? rawUrl : null,
+      isImage,
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to fetch file info' });
