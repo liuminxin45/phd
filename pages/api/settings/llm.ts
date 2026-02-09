@@ -1,44 +1,19 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import fs from 'fs';
 import path from 'path';
+import { type LlmConfig, DEFAULT_LLM_CONFIG } from '@/lib/settings/types';
 
 const CONFIG_PATH = path.join(process.cwd(), 'llm-config.json');
 
-export interface LlmConfig {
-  baseUrl: string;
-  apiKey: string;
-  model: string;
-  temperature: number;
-  maxTokens: number;
-  topP: number;
-  frequencyPenalty: number;
-  presencePenalty: number;
-  stream: boolean;
-  systemPrompt: string;
-}
-
-const DEFAULT_CONFIG: LlmConfig = {
-  baseUrl: '',
-  apiKey: '',
-  model: '',
-  temperature: 0.7,
-  maxTokens: 4096,
-  topP: 1,
-  frequencyPenalty: 0,
-  presencePenalty: 0,
-  stream: true,
-  systemPrompt: '',
-};
-
 function readConfig(): LlmConfig {
   if (!fs.existsSync(CONFIG_PATH)) {
-    return { ...DEFAULT_CONFIG };
+    return { ...DEFAULT_LLM_CONFIG };
   }
   try {
     const raw = fs.readFileSync(CONFIG_PATH, 'utf-8');
-    return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+    return { ...DEFAULT_LLM_CONFIG, ...JSON.parse(raw) };
   } catch {
-    return { ...DEFAULT_CONFIG };
+    return { ...DEFAULT_LLM_CONFIG };
   }
 }
 

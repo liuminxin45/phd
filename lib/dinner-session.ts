@@ -53,11 +53,11 @@ export async function refreshDinnerSession(): Promise<DinnerCookieJar> {
 
   isRefreshing = true;
   refreshPromise = (async () => {
-    const username = process.env.DINNER_LOGIN_USER || process.env.PHA_LOGIN_USER;
-    const password = process.env.DINNER_LOGIN_PASS || process.env.PHA_LOGIN_PASS;
+    const username = process.env.LOGIN_USER;
+    const password = process.env.LOGIN_PASS;
 
     if (!username || !password) {
-      throw new Error('Missing DINNER_LOGIN_USER/DINNER_LOGIN_PASS or PHA_LOGIN_USER/PHA_LOGIN_PASS');
+      throw new Error('Missing LOGIN_USER or LOGIN_PASS environment variables');
     }
 
     let cookies: DinnerCookieJar = {};

@@ -25,8 +25,8 @@ dotenv.config({ path: '.env.local' });
 
 async function refreshSession() {
   const host = process.env.PHA_HOST;
-  const username = process.env.PHA_LOGIN_USER;
-  const password = process.env.PHA_LOGIN_PASS;
+  const username = process.env.LOGIN_USER;
+  const password = process.env.LOGIN_PASS;
 
   if (!host) {
     console.error('Error: PHA_HOST not set in .env.local');
@@ -34,10 +34,10 @@ async function refreshSession() {
   }
 
   if (!username || !password) {
-    console.error('Error: PHA_LOGIN_USER or PHA_LOGIN_PASS not set in .env.local');
+    console.error('Error: LOGIN_USER or LOGIN_PASS not set in .env.local');
     console.error('Please add:');
-    console.error('  PHA_LOGIN_USER=your_email@tp-link.com.cn');
-    console.error('  PHA_LOGIN_PASS=your_password');
+    console.error('  LOGIN_USER=your_email@tp-link.com.cn');
+    console.error('  LOGIN_PASS=your_password');
     process.exit(1);
   }
 

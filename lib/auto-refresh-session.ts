@@ -30,11 +30,11 @@ export async function refreshPhabricatorSession(): Promise<{ phusr: string; phsi
   isRefreshing = true;
   refreshPromise = (async () => {
     const host = process.env.PHA_HOST;
-    const username = process.env.PHA_LOGIN_USER;
-    const password = process.env.PHA_LOGIN_PASS;
+    const username = process.env.LOGIN_USER;
+    const password = process.env.LOGIN_PASS;
 
     if (!host || !username || !password) {
-      throw new Error('Missing PHA_HOST, PHA_LOGIN_USER, or PHA_LOGIN_PASS environment variables');
+      throw new Error('Missing PHA_HOST, LOGIN_USER, or LOGIN_PASS environment variables');
     }
 
     console.log(`[Session Refresh] Logging in to ${host} as ${username}...`);
