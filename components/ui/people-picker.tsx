@@ -1,8 +1,17 @@
 import * as React from 'react';
-import * as Popover from '@radix-ui/react-popover';
-import { Search, X, Check, Plus, Loader2 } from 'lucide-react';
+import { Search, X, Plus, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { httpClient } from '@/lib/httpClient';
+import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 
 interface Person {
   id: string;
@@ -26,6 +35,7 @@ interface UserSearchResult {
   fields: {
     username: string;
     realName: string;
+    image?: string;
   };
 }
 
@@ -39,8 +49,7 @@ export function PeoplePicker({
   popoverZIndex = 10200,
 }: PeoplePickerProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedPersonPopoverOpen, setSelectedPersonPopoverOpen] = useState(false);
-  const [addButtonPopoverOpen, setAddButtonPopoverOpen] = useState(false);
+  const [open, setOpen] = useState(false);
   const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
@@ -111,174 +120,113 @@ export function PeoplePicker({
     .map((user) => ({
       id: user.phid,
       name: user.fields.realName || user.fields.username,
-      username: user.fields.username, // 保存username用于显示
-      avatar: user.fields.realName?.charAt(0) || user.fields.username?.charAt(0)
+      username: user.fields.username,
+      avatar: user.fields.image
     }));
 
   const canAddMore = !maxSelections || selected.length < maxSelections;
 
   return (
-    <div className={`flex flex-wrap items-center gap-2 ${className}`}>
+    <div className={cn("flex flex-wrap items-center gap-2", className)}>
       {/* Selected People */}
       {selected.map((person) => (
-        <Popover.Root key={person.id} open={selectedPersonPopoverOpen} onOpenChange={setSelectedPersonPopoverOpen}>
-          <Popover.Trigger asChild>
-            <div
-              className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs group cursor-pointer hover:bg-blue-200 transition-colors"
-            >
-              <span>{person.name}</span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemove(person.id);
-                }}
-                className="hover:bg-blue-300 rounded p-0.5 transition-colors"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          </Popover.Trigger>
-          <Popover.Portal>
-            <Popover.Content
-              className="bg-white rounded-lg border border-neutral-200 shadow-lg p-2 w-64"
-              style={{ zIndex: popoverZIndex }}
-              sideOffset={5}
-            >
-              {/* Search Input */}
-              <div className="relative mb-2">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={placeholder}
-                  className="w-full pl-8 pr-3 py-1.5 text-sm border border-neutral-300 rounded focus:outline-none focus:border-blue-600"
-                  autoFocus
-                />
-              </div>
-
-              {/* People List */}
-              <div className="max-h-48 overflow-y-auto">
-                {isSearching ? (
-                  <div className="px-2 py-3 text-sm text-neutral-500 text-center flex items-center justify-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    搜索中...
-                  </div>
-                ) : searchQuery.trim() === '' ? (
-                  <div className="px-2 py-3 text-sm text-neutral-500 text-center">
-                    请输入搜索关键词
-                  </div>
-                ) : filteredPeople.length > 0 ? (
-                  filteredPeople.map((person) => (
-                    <button
-                      type="button"
-                      key={person.id}
-                      onClick={() => {
-                        onAdd(person);
-                        setSearchQuery('');
-                        if (maxSelections === 1) {
-                          setSelectedPersonPopoverOpen(false);
-                        }
-                      }}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100 rounded cursor-pointer transition-colors"
-                    >
-                      <div className="h-6 w-6 rounded-full bg-neutral-900 text-white flex items-center justify-center text-xs flex-shrink-0">
-                        {person.avatar}
-                      </div>
-                      <div className="flex-1 text-left">
-                        <span className="text-neutral-900">{person.name}</span>
-                        {person.username && (
-                          <span className="ml-1.5 text-xs text-neutral-400">@{person.username}</span>
-                        )}
-                      </div>
-                    </button>
-                  ))
-                ) : (
-                  <div className="px-2 py-3 text-sm text-neutral-500 text-center">
-                    未找到匹配的人员（共搜索 {searchResults.length} 个结果）
-                  </div>
-                )}
-              </div>
-            </Popover.Content>
-          </Popover.Portal>
-        </Popover.Root>
+        <Badge
+          key={person.id}
+          variant="secondary"
+          className="gap-1 pr-1 pl-1 py-0.5 hover:bg-secondary/80 flex items-center"
+        >
+          <Avatar className="h-4 w-4">
+            <AvatarImage src={person.avatar} alt={person.name} />
+            <AvatarFallback className="text-[9px]">{person.name.charAt(0)}</AvatarFallback>
+          </Avatar>
+          <span className="ml-1">{person.name}</span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(person.id);
+            }}
+            className="ml-1 rounded-full p-0.5 hover:bg-muted-foreground/20 transition-colors focus:outline-none"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </Badge>
       ))}
 
       {/* Add Button with Popover */}
       {canAddMore && (
-        <Popover.Root open={addButtonPopoverOpen} onOpenChange={setAddButtonPopoverOpen}>
-          <Popover.Trigger asChild>
-            <button 
-              type="button"
-              className="inline-flex items-center gap-1 px-2 py-0.5 border border-dashed border-neutral-300 text-neutral-600 hover:border-neutral-400 hover:text-neutral-900 rounded text-xs transition-colors"
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 border-dashed gap-1 text-muted-foreground hover:text-foreground px-2"
             >
-              <Plus className="h-3 w-3" />
+              <Plus className="h-3.5 w-3.5" />
               添加
-            </button>
-          </Popover.Trigger>
-          <Popover.Portal>
-            <Popover.Content
-              className="bg-white rounded-lg border border-neutral-200 shadow-lg p-2 w-64"
-              style={{ zIndex: popoverZIndex }}
-              sideOffset={5}
-            >
-              {/* Search Input */}
-              <div className="relative mb-2">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={placeholder}
-                  className="w-full pl-8 pr-3 py-1.5 text-sm border border-neutral-300 rounded focus:outline-none focus:border-blue-600"
-                  autoFocus
-                />
-              </div>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent 
+            className="w-64 p-2" 
+            align="start" 
+            style={{ zIndex: popoverZIndex }}
+          >
+            {/* Search Input */}
+            <div className="relative mb-2">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={placeholder}
+                className="pl-8 h-8 text-sm"
+                autoFocus
+              />
+            </div>
 
-              {/* People List */}
-              <div className="max-h-48 overflow-y-auto">
-                {isSearching ? (
-                  <div className="px-2 py-3 text-sm text-neutral-500 text-center flex items-center justify-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    搜索中...
-                  </div>
-                ) : searchQuery.trim() === '' ? (
-                  <div className="px-2 py-3 text-sm text-neutral-500 text-center">
-                    请输入搜索关键词
-                  </div>
-                ) : filteredPeople.length > 0 ? (
-                  filteredPeople.map((person) => (
-                    <button
-                      key={person.id}
-                      onClick={() => {
-                        onAdd(person);
-                        setSearchQuery('');
-                        if (maxSelections === 1) {
-                          setAddButtonPopoverOpen(false);
-                        }
-                      }}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100 rounded cursor-pointer transition-colors"
-                    >
-                      <div className="h-6 w-6 rounded-full bg-neutral-900 text-white flex items-center justify-center text-xs flex-shrink-0">
-                        {person.avatar}
-                      </div>
-                      <div className="flex-1 text-left">
-                        <span className="text-neutral-900">{person.name}</span>
-                        {person.username && (
-                          <span className="ml-1.5 text-xs text-neutral-400">@{person.username}</span>
-                        )}
-                      </div>
-                    </button>
-                  ))
-                ) : (
-                  <div className="px-2 py-3 text-sm text-neutral-500 text-center">
-                    未找到匹配的人员（共搜索 {searchResults.length} 个结果）
-                  </div>
-                )}
-              </div>
-            </Popover.Content>
-          </Popover.Portal>
-        </Popover.Root>
+            {/* People List */}
+            <div className="max-h-48 overflow-y-auto space-y-1">
+              {isSearching ? (
+                <div className="py-4 text-center flex items-center justify-center gap-2 text-muted-foreground text-sm">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  搜索中...
+                </div>
+              ) : searchQuery.trim() === '' ? (
+                <div className="py-4 text-center text-muted-foreground text-xs">
+                  请输入搜索关键词
+                </div>
+              ) : filteredPeople.length > 0 ? (
+                filteredPeople.map((person) => (
+                  <button
+                    key={person.id}
+                    onClick={() => {
+                      onAdd(person);
+                      setSearchQuery('');
+                      if (maxSelections === 1) {
+                        setOpen(false);
+                      }
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors text-left"
+                  >
+                    <Avatar className="h-6 w-6">
+                      <AvatarImage src={person.avatar} alt={person.name} />
+                      <AvatarFallback className="text-[10px]">{person.name.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="truncate font-medium text-xs">{person.name}</div>
+                      {person.username && (
+                        <div className="truncate text-[10px] text-muted-foreground">@{person.username}</div>
+                      )}
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="py-4 text-center text-muted-foreground text-xs">
+                  未找到匹配的人员
+                </div>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
       )}
     </div>
   );

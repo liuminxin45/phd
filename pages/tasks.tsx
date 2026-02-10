@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { Loader2, X, Archive, ArchiveRestore, User, Calendar, Flag, Briefcase, CheckSquare, Square } from 'lucide-react';
+import { Loader2, Archive, ArchiveRestore, User, Calendar, Flag, Briefcase, CheckSquare, Square, Filter, X } from 'lucide-react';
 import { Task, Project } from '@/lib/api';
 import { getTaskStatusName, TASK_STATUS } from '@/lib/constants/taskStatus';
 import { TaskStatusBadge } from '@/components/ui/TaskStatusBadge';
@@ -8,10 +8,20 @@ import { httpClient } from '@/lib/httpClient';
 import { toast } from '@/lib/toast';
 import { useUser } from '@/contexts/UserContext';
 import { PeoplePicker } from '@/components/ui/people-picker';
-import { Dropdown } from '@/components/ui/dropdown';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { getCachedUsers, getCachedProjects } from '@/lib/conduitBatch';
 import { appStorage } from '@/lib/appStorage';
 import { ANIMATION_DURATION } from '@/lib/constants/animation';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 interface Person {
   id: string;
@@ -34,8 +44,8 @@ const getPriorityColor = (priority: number | undefined): string => {
     case 80: return 'bg-orange-500';
     case 50: return 'bg-yellow-400';
     case 25: return 'bg-sky-400';
-    case 0: return 'bg-neutral-300';
-    default: return 'bg-neutral-200';
+    case 0: return 'bg-slate-300';
+    default: return 'bg-slate-200';
   }
 };
 
@@ -508,7 +518,7 @@ export default function TasksPage() {
     return count;
   }, [tasks, archivedTaskIds, showArchived, removingTaskIds]);
 
-  // Status options for dropdown
+  // Status options for select
   const statusOptions = [
     { value: 'all', label: '全部状态' },
     { value: TASK_STATUS.NOT_BEGIN, label: getTaskStatusName(TASK_STATUS.NOT_BEGIN) },
@@ -520,7 +530,7 @@ export default function TasksPage() {
     { value: TASK_STATUS.EXCLUDED, label: getTaskStatusName(TASK_STATUS.EXCLUDED) },
   ];
 
-  // Date options for dropdown
+  // Date options for select
   const dateOptions = [
     { value: 'all', label: '全部时间' },
     { value: 'today', label: '今天' },
@@ -529,7 +539,7 @@ export default function TasksPage() {
     { value: 'quarter', label: '最近三个月' },
   ];
 
-  // Project options for dropdown
+  // Project options for select
   const projectOptions = [
     { value: 'all', label: '全部项目' },
     ...projects.map(p => ({ value: p.phid, label: p.fields.name }))
@@ -545,153 +555,182 @@ export default function TasksPage() {
   };
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-6 space-y-6 h-full flex flex-col overflow-hidden">
       {/* Filter Toolbar */}
-      <div className="bg-white border border-neutral-200 rounded-lg p-4">
-        <div className="flex flex-wrap items-center gap-4">
-          {/* Person Filter - Single Selection */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-neutral-600">负责人:</span>
-            <PeoplePicker
-              selected={selectedPerson ? [selectedPerson] : []}
-              onAdd={(person) => setSelectedPerson(person)}
-              onRemove={() => setSelectedPerson(null)}
-              placeholder="选择人员..."
-              className="min-w-[200px]"
-              maxSelections={1}
-            />
-          </div>
+      <Card className="shrink-0 rounded-lg shadow-sm">
+        <div className="p-4 flex flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                <User className="h-3.5 w-3.5" />
+                负责人
+              </span>
+              <PeoplePicker
+                selected={selectedPerson ? [selectedPerson] : []}
+                onAdd={(person) => setSelectedPerson(person)}
+                onRemove={() => setSelectedPerson(null)}
+                placeholder="选择人员..."
+                className="w-[200px]"
+                maxSelections={1}
+              />
+            </div>
 
-          {/* Status Filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-neutral-600">状态:</span>
-            <Dropdown
-              options={statusOptions}
-              value={statusFilter}
-              onValueChange={setStatusFilter}
-              className="min-w-[120px]"
-            />
-          </div>
+            <div className="h-6 w-px bg-border hidden sm:block" />
 
-          {/* Date Filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-neutral-600">时间:</span>
-            <Dropdown
-              options={dateOptions}
-              value={dateFilter}
-              onValueChange={setDateFilter}
-              className="min-w-[120px]"
-            />
-          </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                <Filter className="h-3.5 w-3.5" />
+                状态
+              </span>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[140px] h-8 text-xs">
+                  <SelectValue placeholder="选择状态" />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value} className="text-xs">
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          {/* Project Filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-neutral-600">项目:</span>
-            <Dropdown
-              options={projectOptions}
-              value={projectFilter}
-              onValueChange={setProjectFilter}
-              className="min-w-[150px]"
-            />
-          </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                <Calendar className="h-3.5 w-3.5" />
+                时间
+              </span>
+              <Select value={dateFilter} onValueChange={setDateFilter}>
+                <SelectTrigger className="w-[140px] h-8 text-xs">
+                  <SelectValue placeholder="选择时间" />
+                </SelectTrigger>
+                <SelectContent>
+                  {dateOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value} className="text-xs">
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          {/* Clear Filters */}
-          {hasActiveFilters && (
-            <button
-              onClick={clearAllFilters}
-              className="flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
-            >
-              <X className="h-4 w-4" />
-              清除筛选
-            </button>
-          )}
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                <Briefcase className="h-3.5 w-3.5" />
+                项目
+              </span>
+              <Select value={projectFilter} onValueChange={setProjectFilter}>
+                <SelectTrigger className="w-[180px] h-8 text-xs">
+                  <SelectValue placeholder="选择项目" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projectOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value} className="text-xs">
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          {/* Archive Toggle */}
-          <button
-            onClick={() => setShowArchived(!showArchived)}
-            className={`flex items-center gap-1 text-sm ml-auto ${
-              showArchived ? 'text-amber-600' : 'text-neutral-500 hover:text-neutral-700'
-            }`}
-          >
-            <Archive className="h-4 w-4" />
-            {showArchived ? '显示活跃任务' : `已归档 (${archivedTaskIds.size})`}
-          </button>
-
-          {/* Batch Mode Toggle */}
-          <button
-            onClick={() => {
-              setIsBatchMode(v => {
-                const next = !v;
-                if (!next) {
-                  setSelectedTaskIds(new Set());
-                }
-                return next;
-              });
-            }}
-            className={`flex items-center gap-1 text-sm ${
-              isBatchMode ? 'text-blue-600' : 'text-neutral-500 hover:text-neutral-700'
-            }`}
-            title={isBatchMode ? '退出批量模式' : '批量操作'}
-          >
-            {isBatchMode ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-            批量
-          </button>
-        </div>
-
-        {isBatchMode && (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-sm text-neutral-600">已选择 {selectedTaskIds.size} 项</span>
-            <button
-              onClick={selectAllVisible}
-              className="px-3 py-1.5 text-sm bg-white border border-neutral-300 rounded hover:bg-neutral-50"
-            >
-              全选当前
-            </button>
-            <button
-              onClick={clearSelection}
-              className="px-3 py-1.5 text-sm bg-white border border-neutral-300 rounded hover:bg-neutral-50"
-            >
-              清空
-            </button>
-            {showArchived ? (
-              <button
-                onClick={bulkUnarchiveSelected}
-                disabled={selectedTaskIds.size === 0}
-                className="px-3 py-1.5 text-sm bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            {hasActiveFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearAllFilters}
+                className="ml-auto text-muted-foreground hover:text-foreground h-8"
               >
-                批量取消归档
-              </button>
-            ) : (
-              <button
-                onClick={bulkArchiveSelected}
-                disabled={selectedTaskIds.size === 0}
-                className="px-3 py-1.5 text-sm bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                批量归档
-              </button>
+                <X className="h-3.5 w-3.5 mr-1.5" />
+                清除
+              </Button>
             )}
           </div>
-        )}
-      </div>
+
+          <div className="flex items-center justify-between pt-2 border-t">
+            <div className="flex items-center gap-2">
+              <Button
+                variant={isBatchMode ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => {
+                  setIsBatchMode(v => {
+                    const next = !v;
+                    if (!next) {
+                      setSelectedTaskIds(new Set());
+                    }
+                    return next;
+                  });
+                }}
+                className={cn("h-8 text-xs gap-1.5", isBatchMode && "text-primary")}
+              >
+                {isBatchMode ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                批量操作
+              </Button>
+
+              {isBatchMode && (
+                <>
+                  <span className="text-xs text-muted-foreground ml-2">已选 {selectedTaskIds.size} 项</span>
+                  <Button variant="outline" size="sm" onClick={selectAllVisible} className="h-7 text-xs">全选</Button>
+                  <Button variant="ghost" size="sm" onClick={clearSelection} className="h-7 text-xs">清空</Button>
+                  {showArchived ? (
+                    <Button 
+                      size="sm" 
+                      onClick={bulkUnarchiveSelected} 
+                      disabled={selectedTaskIds.size === 0} 
+                      className="h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white"
+                    >
+                      取消归档
+                    </Button>
+                  ) : (
+                    <Button 
+                      size="sm" 
+                      onClick={bulkArchiveSelected} 
+                      disabled={selectedTaskIds.size === 0} 
+                      className="h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white"
+                    >
+                      归档
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowArchived(!showArchived)}
+              className={cn(
+                "h-8 text-xs gap-1.5",
+                showArchived ? "text-amber-600 hover:text-amber-700 hover:bg-amber-50" : "text-muted-foreground"
+              )}
+            >
+              <Archive className="h-3.5 w-3.5" />
+              {showArchived ? '返回活跃任务' : `已归档 (${archivedTaskIds.size})`}
+            </Button>
+          </div>
+        </div>
+      </Card>
 
       {/* Loading Spinner */}
       {loading && (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-neutral-400" />
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/50" />
         </div>
       )}
 
       {/* Tasks Grid */}
       {!loading && (
-        <>
+        <div className="flex-1 overflow-y-auto min-h-0 pr-2">
           {visibleTaskCount === 0 ? (
-            <div className="bg-white border border-neutral-200 rounded-lg p-8 text-center">
-              <p className="text-sm text-neutral-500">
+            <div className="h-full flex flex-col items-center justify-center text-muted-foreground/50">
+              <CheckSquare className="h-16 w-16 mb-4 opacity-20" />
+              <p className="text-lg font-medium">
                 {showArchived ? '没有已归档的任务' : '没有找到任务'}
               </p>
+              <p className="text-sm mt-1">尝试调整筛选条件或添加新任务</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 pb-4">
               {tasks.map((task) => {
                 const ownerName = task.fields.ownerPHID ? 
                   (userCache[task.fields.ownerPHID]?.realName || userCache[task.fields.ownerPHID]?.userName || '') : '';
@@ -704,165 +743,169 @@ export default function TasksPage() {
                 const isVisible = showArchived ? (isArchived || isRemoving) : (!isArchived || isRemoving);
                 const isSelected = selectedTaskIds.has(task.id);
                 
+                if (!isVisible && !isRemoving) return null;
+
                 return (
-                <div 
-                  key={task.phid || task.id}
-                  className={`group bg-white border border-neutral-200 rounded-lg p-4 hover:shadow-lg hover:border-neutral-300 transition-all duration-150 relative ${
-                    !isVisible && !isRemoving ? 'hidden' : ''
-                  } ${
-                    isRemoving ? 'opacity-40 scale-[0.98]' : ''
-                  }`}
-                >
-                  {isBatchMode && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleTaskSelected(task.id);
-                      }}
-                      className={`absolute top-2 left-2 h-5 w-5 rounded border flex items-center justify-center bg-white ${
-                        isSelected ? 'border-blue-600 text-blue-600' : 'border-neutral-300 text-neutral-300'
-                      }`}
-                      title={isSelected ? '取消选择' : '选择'}
-                    >
-                      {isSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-                    </button>
-                  )}
-                  {/* Priority indicator bar */}
-                  {task.fields.priority?.value !== undefined && (
-                    <div 
-                      className={`absolute top-0 left-0 right-0 h-1 rounded-t-lg ${priorityColor}`}
-                    />
-                  )}
-                  
-                  {/* Task Header */}
-                  <div className="flex items-center justify-between mb-2 mt-1">
-                    <span className="text-xs font-mono text-neutral-400">T{task.id}</span>
-                    <TaskStatusBadge
-                      taskId={task.id}
-                      currentStatus={task.fields.status.value}
-                      onStatusChange={(newStatus) => {
-                        setTasks((prevTasks) =>
-                          prevTasks.map((t) =>
-                            t.id === task.id
-                              ? { ...t, fields: { ...t.fields, status: { ...t.fields.status, value: newStatus } } }
-                              : t
-                          )
-                        );
-                      }}
-                    />
-                  </div>
-
-                  {/* Task Title */}
-                  <button
+                  <Card 
+                    key={task.phid || task.id}
+                    className={cn(
+                      "group relative overflow-hidden transition-all duration-200 hover:shadow-md cursor-pointer border-l-4",
+                      isRemoving && "opacity-40 scale-[0.98] pointer-events-none",
+                      priorityColor.replace('bg-', 'border-l-') // Use colored left border for priority
+                    )}
                     onClick={() => handleTaskClick(task)}
-                    className="text-sm font-medium text-neutral-900 text-left hover:text-blue-600 transition-colors block w-full line-clamp-2 mb-3 min-h-[40px]"
                   >
-                    {task.fields.name}
-                  </button>
-
-                  {/* Task Details - Always visible */}
-                  <div className="space-y-2 text-xs">
-                    {/* Owner */}
-                    {ownerName && (
-                      <div className="flex items-center gap-1.5 text-neutral-600">
-                        <User className="h-3.5 w-3.5 text-neutral-400" />
-                        <span className="truncate">{ownerName}</span>
+                    {isBatchMode && (
+                      <div 
+                        className="absolute top-2 left-2 z-10" 
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          onClick={() => toggleTaskSelected(task.id)}
+                          className={cn(
+                            "h-5 w-5 rounded border bg-background flex items-center justify-center transition-colors",
+                            isSelected 
+                              ? "border-primary bg-primary text-primary-foreground" 
+                              : "border-muted-foreground/30 hover:border-primary/50"
+                          )}
+                        >
+                          {isSelected && <CheckSquare className="h-3.5 w-3.5" />}
+                        </button>
                       </div>
                     )}
-                    
-                    {/* Projects - show first one */}
-                    {taskProjects.length > 0 && projectCache[taskProjects[0]] && (
-                      <div className="flex items-center gap-1.5 text-neutral-600">
-                        <Briefcase className="h-3.5 w-3.5 text-neutral-400" />
-                        <span className="truncate">{projectCache[taskProjects[0]]?.name}</span>
-                        {taskProjects.length > 1 && (
-                          <span className="text-neutral-400">+{taskProjects.length - 1}</span>
+
+                    <CardContent className="p-3 pl-4">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <span className="text-[10px] font-mono text-muted-foreground/70">T{task.id}</span>
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <TaskStatusBadge
+                            taskId={task.id}
+                            currentStatus={task.fields.status.value}
+                            onStatusChange={(newStatus) => {
+                              setTasks((prevTasks) =>
+                                prevTasks.map((t) =>
+                                  t.id === task.id
+                                    ? { ...t, fields: { ...t.fields, status: { ...t.fields.status, value: newStatus } } }
+                                    : t
+                                )
+                              );
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <h3 className="text-sm font-medium leading-snug mb-3 line-clamp-2 min-h-[2.5em] group-hover:text-primary transition-colors">
+                        {task.fields.name}
+                      </h3>
+
+                      <div className="space-y-1.5">
+                        {ownerName && (
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <User className="h-3 w-3" />
+                            <span className="truncate max-w-[120px]">{ownerName}</span>
+                          </div>
+                        )}
+                        
+                        {taskProjects.length > 0 && projectCache[taskProjects[0]] && (
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Briefcase className="h-3 w-3" />
+                            <span className="truncate max-w-[100px]">{projectCache[taskProjects[0]]?.name}</span>
+                            {taskProjects.length > 1 && (
+                              <Badge variant="secondary" className="px-1 py-0 h-4 text-[9px] font-normal">
+                                +{taskProjects.length - 1}
+                              </Badge>
+                            )}
+                          </div>
                         )}
                       </div>
-                    )}
-                  </div>
 
-                  {/* Task Meta - Show on hover */}
-                  <div className="mt-3 pt-3 border-t border-neutral-100 flex items-center justify-between">
-                    <div className="flex items-center gap-3 text-xs text-neutral-500">
-                      {/* Points */}
-                      {task.fields.points !== null && task.fields.points > 0 && (
-                        <span className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-medium">
-                          {task.fields.points} pts
-                        </span>
-                      )}
-                      
-                      {/* Estimated days */}
-                      {estimatedDays && (
-                        <span className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Calendar className="h-3 w-3" />
-                          {estimatedDays}
-                        </span>
-                      )}
-                      
-                      {/* Due date */}
-                      {estimatedDate && (
-                        <span className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Flag className="h-3 w-3" />
-                          {new Date(estimatedDate * 1000).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
-                        </span>
-                      )}
-                    </div>
-                    
-                    {/* Archive/Unarchive Button - Show on hover */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (showArchived) {
-                          unarchiveTask(task.id);
-                        } else {
-                          archiveTask(task.id);
-                        }
-                      }}
-                      className={`p-1 rounded hover:bg-neutral-100 transition-colors ${
-                        showArchived ? 'text-amber-600' : 'text-neutral-400 hover:text-neutral-600'
-                      }`}
-                      disabled={isRemoving}
-                      title={showArchived ? '取消归档' : '归档'}
-                    >
-                      {showArchived ? (
-                        <ArchiveRestore className="h-4 w-4" />
-                      ) : (
-                        <Archive className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
+                      <div className="mt-3 pt-3 border-t flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          {task.fields.points !== null && task.fields.points > 0 && (
+                            <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-medium border-blue-200 text-blue-700 bg-blue-50">
+                              {task.fields.points} pts
+                            </Badge>
+                          )}
+                          
+                          {(estimatedDays || estimatedDate) && (
+                            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                              {estimatedDays && (
+                                <span className="flex items-center gap-0.5" title="Estimated Days">
+                                  <Calendar className="h-3 w-3" />
+                                  {estimatedDays}d
+                                </span>
+                              )}
+                              {estimatedDate && (
+                                <span className="flex items-center gap-0.5" title="Due Date">
+                                  <Flag className="h-3 w-3" />
+                                  {new Date(estimatedDate * 1000).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (showArchived) {
+                              unarchiveTask(task.id);
+                            } else {
+                              archiveTask(task.id);
+                            }
+                          }}
+                          className={cn(
+                            "opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-muted",
+                            showArchived ? "text-amber-600" : "text-muted-foreground hover:text-foreground"
+                          )}
+                          title={showArchived ? '取消归档' : '归档'}
+                        >
+                          {showArchived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
+                    </CardContent>
+                  </Card>
                 );
               })}
             </div>
           )}
 
-          {/* Load More */}
           {hasMore && !showArchived && (
-            <div className="flex justify-center mt-4">
-              <button
+            <div className="flex justify-center py-4">
+              <Button
+                variant="outline"
                 onClick={handleLoadMore}
                 disabled={loadingMore}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-neutral-700 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full max-w-xs"
               >
                 {loadingMore ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : null}
-                加载更多
-              </button>
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    加载中...
+                  </>
+                ) : (
+                  '加载更多'
+                )}
+              </Button>
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* Task Detail Modal */}
-      <TaskDetailDialog
-        task={selectedTask}
-        open={isTaskModalOpen}
-        onOpenChange={setIsTaskModalOpen}
-        onTaskUpdate={handleTaskUpdate}
-      />
+      {selectedTask && (
+        <TaskDetailDialog
+          task={selectedTask}
+          open={isTaskModalOpen}
+          onOpenChange={(open) => {
+            setIsTaskModalOpen(open);
+            if (!open) {
+              handleCloseTaskModal();
+            }
+          }}
+          onTaskUpdate={handleTaskUpdate}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,12 @@
 import { CalendarDays, X } from 'lucide-react';
 import { getMonthNonWorkingDays, getMonthWeekends } from '@/lib/chinese-holidays';
 import type { ParsedDinnerData } from '@/lib/dinner/types';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface DailyDetailModalProps {
   data: ParsedDinnerData;
@@ -27,71 +33,65 @@ export function DailyDetailModal({ data, year, month, onClose }: DailyDetailModa
   const sortedUsers = [...data.allUsers].sort((a, b) => b.monthTotal - a.monthTotal);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div
-        className="bg-white rounded-xl shadow-2xl max-w-[95vw] max-h-[85vh] flex flex-col"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 py-3 border-b border-neutral-200">
-          <div className="flex items-center gap-2">
-            <CalendarDays className="w-4 h-4 text-orange-500" />
-            <h3 className="text-sm font-semibold text-neutral-900">
-              {year}-{String(month).padStart(2, '0')} Daily Detail
-            </h3>
-            <span className="text-xs text-neutral-400">{data.totalUsers} people × {data.daysInMonth} days</span>
-          </div>
-          <button onClick={onClose} className="p-1 hover:bg-neutral-100 rounded">
-            <X className="w-4 h-4 text-neutral-500" />
-          </button>
-        </div>
+    <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-[95vw] max-h-[85vh] flex flex-col p-0 overflow-hidden">
+        <DialogHeader className="px-5 py-3 border-b border-border flex-shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <CalendarDays className="w-5 h-5 text-orange-500" />
+            <span>{year}-{String(month).padStart(2, '0')} Daily Detail</span>
+            <span className="text-xs font-normal text-muted-foreground ml-2">
+              {data.totalUsers} people × {data.daysInMonth} days
+            </span>
+          </DialogTitle>
+        </DialogHeader>
 
-        <div className="overflow-auto p-1">
-          <table className="text-xs border-collapse min-w-max">
+        <div className="flex-1 overflow-auto p-1">
+          <table className="text-xs border-collapse min-w-max w-full">
             <thead className="sticky top-0 z-10">
               <tr>
-                <th className="px-2 py-1.5 text-left font-semibold text-neutral-600 border border-neutral-200 sticky left-0 bg-neutral-50 z-20">#</th>
-                <th className="px-2 py-1.5 text-left font-semibold text-neutral-600 border border-neutral-200 sticky left-8 bg-neutral-50 z-20 min-w-[60px]">Name</th>
+                <th className="px-2 py-1.5 text-left font-semibold text-muted-foreground border border-border sticky left-0 bg-muted/80 z-20">#</th>
+                <th className="px-2 py-1.5 text-left font-semibold text-muted-foreground border border-border sticky left-8 bg-muted/80 z-20 min-w-[60px]">Name</th>
                 {Array.from({ length: data.daysInMonth }, (_, i) => (
-                  <th key={i} className={`px-1.5 py-1.5 text-center font-medium border border-neutral-200 min-w-[28px] ${
-                    nonWorkDays[i] ? 'bg-blue-100 text-blue-700' : 'bg-neutral-50 text-neutral-500'
+                  <th key={i} className={`px-1.5 py-1.5 text-center font-medium border border-border min-w-[28px] ${
+                    nonWorkDays[i] ? 'bg-blue-100/50 text-blue-700' : 'bg-muted/80 text-muted-foreground'
                   }`}>{i + 1}</th>
                 ))}
-                <th className="px-2 py-1.5 text-center font-semibold text-neutral-600 border border-neutral-200 bg-neutral-50 sticky right-[52px] z-20">Sum</th>
-                <th className="px-2 py-1.5 text-center font-semibold text-neutral-600 border border-neutral-200 bg-neutral-50 sticky right-0 z-20 min-w-[52px]">WE%</th>
+                <th className="px-2 py-1.5 text-center font-semibold text-muted-foreground border border-border bg-muted/80 sticky right-[52px] z-20">Sum</th>
+                <th className="px-2 py-1.5 text-center font-semibold text-muted-foreground border border-border bg-muted/80 sticky right-0 z-20 min-w-[52px]">WE%</th>
               </tr>
             </thead>
             <tbody>
               {sortedUsers.map((u, idx) => {
                 const isMe = data.currentUser?.employeeNo === u.employeeNo;
-                const rowBg = isMe ? 'bg-orange-50' : idx % 2 === 0 ? 'bg-white' : 'bg-neutral-50/50';
+                const rowBg = isMe ? 'bg-orange-50/50' : idx % 2 === 0 ? 'bg-background' : 'bg-muted/20';
                 const weekendTotal = u.dailyRecords.reduce<number>((sum, v, i) => sum + (weekendDays[i] && v ? v : 0), 0);
                 const wePct = u.monthTotal > 0 ? Math.round((weekendTotal / u.monthTotal) * 100) : 0;
                 const wePctCls = getWeekendPctClass(wePct);
                 return (
                   <tr key={u.employeeNo || u.name}>
-                    <td className={`px-2 py-1 border border-neutral-200 text-neutral-400 sticky left-0 z-10 ${rowBg}`}>{idx + 1}</td>
-                    <td className={`px-2 py-1 border border-neutral-200 font-medium sticky left-8 z-10 ${rowBg} ${isMe ? 'text-orange-700' : 'text-neutral-800'}`}>
+                    <td className={`px-2 py-1 border border-border text-muted-foreground sticky left-0 z-10 ${rowBg}`}>{idx + 1}</td>
+                    <td className={`px-2 py-1 border border-border font-medium sticky left-8 z-10 ${rowBg} ${isMe ? 'text-orange-600 font-bold' : 'text-foreground'}`}>
                       {u.name}{isMe ? ' \u2605' : ''}
                     </td>
                     {Array.from({ length: data.daysInMonth }, (_, i) => {
                       const v = u.dailyRecords[i];
                       const isOff = nonWorkDays[i];
                       const cellBg = isOff
-                        ? (isMe ? 'bg-blue-100/60' : idx % 2 === 0 ? 'bg-blue-50' : 'bg-blue-100/40')
+                        ? (isMe ? 'bg-blue-100/60' : idx % 2 === 0 ? 'bg-blue-50/50' : 'bg-blue-100/30')
                         : rowBg;
                       const cellColor = v === null || v === 0
-                        ? 'text-neutral-300'
+                        ? 'text-muted-foreground/30'
                         : v === 1 ? 'text-green-600 font-semibold' : 'text-orange-600 font-bold';
                       return (
-                        <td key={i} className={`px-1.5 py-1 border border-neutral-200 text-center ${cellBg} ${cellColor}`}>
+                        <td key={i} className={`px-1.5 py-1 border border-border text-center ${cellBg} ${cellColor}`}>
                           {v === null ? '\u00b7' : v === 0 ? '0' : v}
                         </td>
                       );
                     })}
-                    <td className={`px-2 py-1 border border-neutral-200 text-center font-bold sticky right-[52px] z-10 ${rowBg} ${isMe ? 'text-orange-700' : 'text-neutral-800'}`}>
+                    <td className={`px-2 py-1 border border-border text-center font-bold sticky right-[52px] z-10 ${rowBg} ${isMe ? 'text-orange-600' : 'text-foreground'}`}>
                       {u.monthTotal}
                     </td>
-                    <td className={`px-2 py-1 border border-neutral-200 text-center font-bold sticky right-0 z-10 ${wePctCls || rowBg}`}>
+                    <td className={`px-2 py-1 border border-border text-center font-bold sticky right-0 z-10 ${wePctCls || rowBg}`}>
                       {u.monthTotal > 0 ? `${wePct}%` : '-'}
                     </td>
                   </tr>
@@ -100,7 +100,7 @@ export function DailyDetailModal({ data, year, month, onClose }: DailyDetailModa
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,6 +1,16 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { toast } from '@/lib/toast';
 import { httpClient } from '@/lib/httpClient';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
+import { Check } from 'lucide-react';
 
 interface PriorityBadgeProps {
   taskId: number;
@@ -19,45 +29,40 @@ interface PriorityOption {
 }
 
 const PRIORITY_OPTIONS: Record<string, PriorityOption> = {
-  '100': { key: '100', name: 'P1', color: 'pink' },
-  '90': { key: '90', name: 'P2', color: 'violet' },
-  '80': { key: '80', name: 'P3', color: 'red' },
-  '25': { key: '25', name: 'P5', color: 'yellow' },
-  '0': { key: '0', name: 'P6', color: 'sky' },
+  '100': { key: '100', name: 'P1 紧急', color: 'pink' },
+  '90': { key: '90', name: 'P2 高', color: 'violet' },
+  '80': { key: '80', name: 'P3 中', color: 'red' },
+  '50': { key: '50', name: 'P4 普通', color: 'yellow' },
+  '25': { key: '25', name: 'P5 低', color: 'sky' },
+  '0': { key: '0', name: 'P6 微不足道', color: 'slate' },
+};
+
+// Updated names to match general usage if needed, or keep short names
+const PRIORITY_LABELS: Record<string, string> = {
+  '100': 'P1',
+  '90': 'P2',
+  '80': 'P3',
+  '50': 'P4',
+  '25': 'P5',
+  '0': 'P6',
 };
 
 function getPriorityColor(value: number): string {
-  if (value >= 100) return 'bg-pink-100 text-pink-700';
-  if (value >= 90) return 'bg-violet-100 text-violet-700';
-  if (value >= 80) return 'bg-red-100 text-red-700';
-  if (value >= 25) return 'bg-yellow-100 text-yellow-700';
-  return 'bg-sky-100 text-sky-700';
+  if (value >= 100) return 'bg-pink-100 text-pink-700 hover:bg-pink-200';
+  if (value >= 90) return 'bg-violet-100 text-violet-700 hover:bg-violet-200';
+  if (value >= 80) return 'bg-red-100 text-red-700 hover:bg-red-200';
+  if (value >= 50) return 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200';
+  if (value >= 25) return 'bg-sky-100 text-sky-700 hover:bg-sky-200';
+  return 'bg-slate-100 text-slate-700 hover:bg-slate-200';
 }
 
 export function PriorityBadge({ taskId, currentPriority, onPriorityChange }: PriorityBadgeProps) {
-  const [isOpen, setIsOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  // Toast is now imported from @/lib/toast
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [isOpen]);
 
   const handlePriorityClick = async (newPriorityValue: string) => {
     if (newPriorityValue === currentPriority.value.toString() || isUpdating) return;
 
     setIsUpdating(true);
-    setIsOpen(false);
 
     try {
       await httpClient('/api/tasks/update', {
@@ -68,7 +73,7 @@ export function PriorityBadge({ taskId, currentPriority, onPriorityChange }: Pri
         },
       });
 
-      const priorityOption = PRIORITY_OPTIONS[newPriorityValue];
+      const priorityOption = PRIORITY_OPTIONS[newPriorityValue] || { name: 'Unknown', color: 'grey' };
       toast.success(`优先级已更新为：${priorityOption.name}`);
       
       if (onPriorityChange) {
@@ -85,41 +90,42 @@ export function PriorityBadge({ taskId, currentPriority, onPriorityChange }: Pri
     }
   };
 
-  return (
-    <div className="relative" ref={dropdownRef}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        disabled={isUpdating}
-        className={`text-xs px-2 py-0.5 rounded whitespace-nowrap transition-all ${getPriorityColor(currentPriority.value)} ${
-          isUpdating ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80 cursor-pointer'
-        }`}
-      >
-        {isUpdating ? '更新中...' : currentPriority.name}
-      </button>
+  const displayName = PRIORITY_LABELS[currentPriority.value.toString()] || currentPriority.name;
 
-      {isOpen && (
-        <div className="absolute left-0 top-full mt-1 w-48 bg-white border border-neutral-200 rounded-lg shadow-lg z-50 py-1">
-          <div className="px-3 py-2 border-b border-neutral-200">
-            <p className="text-xs font-medium text-neutral-700">切换任务优先级</p>
-          </div>
-          <div className="max-h-64 overflow-y-auto">
-            {Object.entries(PRIORITY_OPTIONS).map(([value, option]) => (
-              <button
-                key={value}
-                onClick={() => handlePriorityClick(value)}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 transition-colors flex items-center justify-between ${
-                  value === currentPriority.value.toString() ? 'bg-neutral-100' : ''
-                }`}
-              >
-                <span className="text-neutral-900">{option.name}</span>
-                {value === currentPriority.value.toString() && (
-                  <span className="text-xs text-neutral-500">当前</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          disabled={isUpdating}
+          className={cn(
+            "text-xs px-2 py-0.5 rounded whitespace-nowrap transition-all focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+            getPriorityColor(currentPriority.value),
+            isUpdating && "opacity-50 cursor-not-allowed"
+          )}
+        >
+          {isUpdating ? '...' : displayName}
+        </button>
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent align="start">
+        <DropdownMenuLabel className="text-xs">切换任务优先级</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {Object.entries(PRIORITY_OPTIONS).map(([value, option]) => (
+          <DropdownMenuItem
+            key={value}
+            onClick={() => handlePriorityClick(value)}
+            className={cn(
+              "text-xs",
+              value === currentPriority.value.toString() && "bg-accent/50"
+            )}
+          >
+            <span className="flex-1">{option.name}</span>
+            {value === currentPriority.value.toString() && (
+              <Check className="ml-2 h-3 w-3" />
+            )}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

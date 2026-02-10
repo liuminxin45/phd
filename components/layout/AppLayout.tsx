@@ -1,6 +1,7 @@
 import { useRouter } from 'next/router';
 import { ReactNode, useMemo, useState, useEffect, useRef } from 'react';
 import { Home, CheckSquare, Folder, BookOpen, Search, X, Minus, Square, Settings } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useUser } from '@/contexts/UserContext';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -8,6 +9,7 @@ import { PinnedPanel } from './PinnedPanel';
 import { usePinnedPanel } from '@/contexts/PinnedPanelContext';
 import { NotificationPanel } from '@/components/NotificationPanel';
 import dynamic from 'next/dynamic';
+import { Button } from '@/components/ui/button';
 
 // Loading component for dynamic imports
 const PageLoader = () => (
@@ -127,22 +129,29 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const currentPage = navigation.find((item) => item.href === router.pathname)?.name || 'Dashboard';
 
   return (
-    <div className="flex h-screen bg-neutral-50">
-      {/* Fixed Sidebar - Always Collapsed */}
-      <aside className="bg-white border-r border-neutral-200 flex flex-col w-16">
-        {/* Search Icon */}
-        <div className="p-4 border-b border-neutral-200 flex justify-center">
-          <button
-            className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
+    <div className="flex h-screen bg-background text-foreground overflow-hidden">
+      {/* Fixed Sidebar */}
+      <aside className="group flex w-16 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-300 data-[collapsed=false]:w-64">
+        {/* Sidebar Header / Search */}
+        <div className="flex h-14 items-center justify-center border-b border-sidebar-border px-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
             title="Search"
+            onClick={() => {
+              // TODO: Implement global search focus or expansion
+              const searchInput = document.querySelector('[data-global-search]') as HTMLInputElement;
+              if (searchInput) searchInput.focus();
+            }}
           >
-            <Search className="h-5 w-5 text-neutral-600" />
-          </button>
+            <Search className="h-5 w-5" />
+          </Button>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4">
-          <ul className="space-y-1">
+        <nav className="flex-1 overflow-y-auto px-3 py-4">
+          <ul className="flex flex-col gap-2">
             {navigation.filter((item: any) => !item.hidden).map((item) => {
               const isActive = router.pathname === item.href;
               const Icon = item.icon;
@@ -151,14 +160,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   <a
                     href={item.href}
                     onClick={(e) => handleNavigation(item.href, e)}
-                    className={`flex items-center rounded-lg transition-colors cursor-pointer justify-center p-3 ${
+                    className={cn(
+                      "flex items-center justify-center rounded-md p-2.5 transition-all duration-200 outline-none ring-sidebar-ring focus-visible:ring-2",
                       isActive
-                        ? 'bg-neutral-900 text-white'
-                        : 'text-neutral-700 hover:bg-neutral-100'
-                    }`}
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                        : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                    )}
                     title={item.name}
                   >
-                    <Icon className="h-5 w-5 flex-shrink-0" />
+                    <Icon className={cn("h-5 w-5 shrink-0", isActive && "text-primary")} />
                   </a>
                 </li>
               );
@@ -166,97 +176,102 @@ export default function AppLayout({ children }: AppLayoutProps) {
           </ul>
         </nav>
 
-        {/* Settings Button - Bottom */}
-        <div className="p-4 border-t border-neutral-200">
+        {/* Footer / Settings */}
+        <div className="mt-auto border-t border-sidebar-border p-3">
           <a
             href="/settings"
             onClick={(e) => handleNavigation('/settings', e)}
-            className={`flex items-center rounded-lg transition-colors cursor-pointer justify-center p-3 ${
+            className={cn(
+              "flex items-center justify-center rounded-md p-2.5 transition-all duration-200 outline-none ring-sidebar-ring focus-visible:ring-2",
               currentPath === '/settings'
-                ? 'bg-neutral-900 text-white'
-                : 'text-neutral-700 hover:bg-neutral-100'
-            }`}
+                ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+            )}
             title="Settings"
           >
-            <Settings className="h-5 w-5 flex-shrink-0" />
+            <Settings className="h-5 w-5 shrink-0" />
           </a>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden h-full min-h-0">
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0 min-h-0">
-          {/* Custom TitleBar (frameless window) */}
-          <div
-            className="h-10 flex items-center justify-end px-3 bg-white border-b border-neutral-200"
-            style={({ WebkitAppRegion: isElectron ? 'drag' : undefined } as any)}
-          >
-            <div className="flex items-center gap-1" style={({ WebkitAppRegion: 'no-drag' } as any)}>
-              {/* Notification Panel */}
-              <NotificationPanel />
-              
-              {/* Window Controls (Electron only) */}
-              {isElectron && (
-                <>
-                  <button
-                    onClick={() => window.phabdash?.windowMinimize?.()}
-                    className="p-2 rounded hover:bg-neutral-100 text-neutral-600"
-                    title="Minimize"
-                  >
-                    <Minus className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => window.phabdash?.windowToggleMaximize?.()}
-                    className="p-2 rounded hover:bg-neutral-100 text-neutral-600"
-                    title="Maximize"
-                  >
-                    <Square className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => window.phabdash?.windowClose?.()}
-                    className="p-2 rounded hover:bg-red-50 text-neutral-600 hover:text-red-600"
-                    title="Close"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </>
-              )}
-            </div>
+      {/* Main Content Area */}
+      <div className="flex flex-1 flex-col overflow-hidden bg-background">
+        {/* Custom TitleBar (frameless window) */}
+        <div
+          className="flex h-10 shrink-0 items-center justify-end border-b border-border bg-background px-4 select-none"
+          style={({ WebkitAppRegion: isElectron ? 'drag' : undefined } as any)}
+        >
+          <div className="flex items-center gap-2" style={({ WebkitAppRegion: 'no-drag' } as any)}>
+            {/* Notification Panel */}
+            <NotificationPanel />
+            
+            {/* Window Controls (Electron only) */}
+            {isElectron && (
+              <div className="ml-2 flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => window.phabdash?.windowMinimize?.()}
+                  className="h-7 w-7 rounded-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                  title="Minimize"
+                >
+                  <Minus className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => window.phabdash?.windowToggleMaximize?.()}
+                  className="h-7 w-7 rounded-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                  title="Maximize"
+                >
+                  <Square className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => window.phabdash?.windowClose?.()}
+                  className="h-7 w-7 rounded-sm text-muted-foreground hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                  title="Close"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
-
-          {/* Page Content - All pages mounted, show/hide based on route */}
-          <main ref={contentAreaRef} className="flex-1 overflow-hidden relative min-h-0">
-            {mountedPages.has('/') && (
-              <div style={{ display: currentPath === '/' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
-                <DashboardPage key={pageReloadKeys['/'] || 0} />
-              </div>
-            )}
-            {mountedPages.has('/tasks') && (
-              <div style={{ display: currentPath === '/tasks' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
-                <TasksPage key={pageReloadKeys['/tasks'] || 0} />
-              </div>
-            )}
-            {mountedPages.has('/projects') && (
-              <div style={{ display: currentPath === '/projects' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
-                <ProjectsPage key={pageReloadKeys['/projects'] || 0} />
-              </div>
-            )}
-            {mountedPages.has('/blogs') && (
-              <div data-blog-scroll style={{ display: currentPath === '/blogs' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
-                <BlogsPage key={pageReloadKeys['/blogs'] || 0} />
-              </div>
-            )}
-            {mountedPages.has('/settings') && (
-              <div style={{ display: currentPath === '/settings' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
-                <SettingsPage key={pageReloadKeys['/settings'] || 0} />
-              </div>
-            )}
-          </main>
         </div>
 
-        {/* Pinned Panel */}
-        <PinnedPanel />
+        {/* Page Content */}
+        <main ref={contentAreaRef} className="flex-1 overflow-hidden relative min-h-0 bg-muted/20">
+          {mountedPages.has('/') && (
+            <div style={{ display: currentPath === '/' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+              <DashboardPage key={pageReloadKeys['/'] || 0} />
+            </div>
+          )}
+          {mountedPages.has('/tasks') && (
+            <div style={{ display: currentPath === '/tasks' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+              <TasksPage key={pageReloadKeys['/tasks'] || 0} />
+            </div>
+          )}
+          {mountedPages.has('/projects') && (
+            <div style={{ display: currentPath === '/projects' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+              <ProjectsPage key={pageReloadKeys['/projects'] || 0} />
+            </div>
+          )}
+          {mountedPages.has('/blogs') && (
+            <div data-blog-scroll style={{ display: currentPath === '/blogs' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+              <BlogsPage key={pageReloadKeys['/blogs'] || 0} />
+            </div>
+          )}
+          {mountedPages.has('/settings') && (
+            <div style={{ display: currentPath === '/settings' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+              <SettingsPage key={pageReloadKeys['/settings'] || 0} />
+            </div>
+          )}
+        </main>
       </div>
+
+      {/* Pinned Panel */}
+      <PinnedPanel />
     </div>
   );
 }

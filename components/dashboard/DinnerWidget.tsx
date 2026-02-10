@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { UtensilsCrossed, TrendingUp, Users, Award, ChevronLeft, ChevronRight, RefreshCw, Clock, CalendarDays } from 'lucide-react';
-import { Skeleton } from '@/components/ui/Skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import { httpClient } from '@/lib/httpClient';
 import { useUser } from '@/contexts/UserContext';
 import { toast } from 'sonner';
@@ -19,6 +19,10 @@ import { isNonWorkingDay } from '@/lib/chinese-holidays';
 import { useLocalStorageState } from '@/hooks/useLocalStorageState';
 import { ApplyButtons } from './dinner/ApplyButtons';
 import { DailyDetailModal } from './dinner/DailyDetailModal';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 interface DinnerWidgetProps {
   className?: string;
@@ -261,66 +265,79 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
   }
 
   return (
-    <div className={`bg-white border border-neutral-200 rounded-lg ${className}`}>
+    <Card className={cn("overflow-hidden", className)}>
       {/* Header */}
-      <div className="p-4 border-b border-neutral-200">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <UtensilsCrossed className="w-4 h-4 text-orange-500" />
-            <h3 className="text-base font-semibold text-neutral-900">Dinner Subsidy</h3>
+      <div className="flex items-center justify-between border-b p-4">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-orange-100 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400">
+            <UtensilsCrossed className="h-4 w-4" />
           </div>
-          <div className="flex items-center gap-1">
-            <button onClick={() => goMonth(-1)} className="p-1 hover:bg-neutral-100 rounded">
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="text-sm font-medium min-w-[80px] text-center">
-              {selectedYear}-{String(selectedMonth).padStart(2, '0')}
-            </span>
-            <button onClick={() => goMonth(1)} className="p-1 hover:bg-neutral-100 rounded" disabled={isCurrentMonth}>
-              <ChevronRight className={`w-4 h-4 ${isCurrentMonth ? 'text-neutral-300' : ''}`} />
-            </button>
-            <button
-              onClick={() => { setMultiMode(!multiMode); setSelectedMonths(new Set()); }}
-              className={`ml-2 px-2 py-1 text-xs rounded ${multiMode ? 'bg-orange-100 text-orange-700' : 'bg-neutral-100 text-neutral-600'}`}
-            >
-              Multi
-            </button>
-            <button
-              onClick={() => setShowDailyDetail(true)}
-              className="p-1 hover:bg-neutral-100 rounded ml-1"
-              title="Daily Detail"
-            >
-              <CalendarDays className="w-3.5 h-3.5 text-orange-500" />
-            </button>
-            <button onClick={() => fetchMonth(selectedYear, selectedMonth)} className="p-1 hover:bg-neutral-100 rounded ml-1">
-              <RefreshCw className="w-3.5 h-3.5 text-neutral-500" />
-            </button>
-          </div>
+          <h3 className="text-base font-semibold leading-none">Dinner Subsidy</h3>
         </div>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => goMonth(-1)}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="min-w-[80px] text-center text-sm font-medium tabular-nums">
+            {selectedYear}-{String(selectedMonth).padStart(2, '0')}
+          </span>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => goMonth(1)} disabled={isCurrentMonth}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={multiMode ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => { setMultiMode(!multiMode); setSelectedMonths(new Set()); }}
+            className={cn("ml-2 h-8 text-xs", multiMode && "text-primary")}
+          >
+            Multi
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="ml-1 h-8 w-8 text-muted-foreground"
+            onClick={() => setShowDailyDetail(true)}
+            title="Daily Detail"
+          >
+            <CalendarDays className="h-4 w-4" />
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="ml-1 h-8 w-8 text-muted-foreground" 
+            onClick={() => fetchMonth(selectedYear, selectedMonth)}
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
 
-        {/* Multi-month selector */}
-        {multiMode && (
-          <div className="flex flex-wrap gap-1 mt-2">
+      {/* Multi-month selector */}
+      {multiMode && (
+        <div className="border-b bg-muted/30 p-2">
+          <div className="flex flex-wrap gap-1">
             {availableMonths.map(key => (
-              <button
+              <Badge
                 key={key}
+                variant={selectedMonths.has(key) ? "default" : "outline"}
+                className={cn(
+                  "cursor-pointer hover:bg-primary/20",
+                  !selectedMonths.has(key) && "bg-background hover:text-primary"
+                )}
                 onClick={() => {
                   toggleMonth(key);
                   const [y, m] = key.split('-').map(Number);
                   if (!monthsData.has(key)) fetchMonth(y, m);
                 }}
-                className={`px-2 py-1 text-xs rounded border ${
-                  selectedMonths.has(key) ? 'bg-orange-100 border-orange-300 text-orange-700' : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
-                }`}
               >
                 {key}
-              </button>
+              </Badge>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className="p-4">
+      <CardContent className="p-4">
         {loading && !data ? (
           <div className="space-y-4">
             <div className="grid grid-cols-4 gap-4">
@@ -329,72 +346,107 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
             <Skeleton className="h-48" />
           </div>
         ) : error && !data ? (
-          <div className="p-6 text-center">
-            <p className="text-sm text-neutral-500">{error}</p>
-            <button onClick={() => fetchMonth(selectedYear, selectedMonth)} className="mt-2 text-sm text-blue-600 hover:text-blue-700">Retry</button>
+          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+            <p className="text-sm">{error}</p>
+            <Button variant="link" onClick={() => fetchMonth(selectedYear, selectedMonth)} className="mt-2 h-auto p-0">
+              Retry
+            </Button>
           </div>
         ) : data ? (
           <div className="space-y-6">
             {/* Apply Section - only current month + time restrictions */}
             {isCurrentMonth && canApplyNow && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-neutral-500">申报:</span>
-                <ApplyButtons onApply={handleApply} disabled={applying} />
+              <div className="flex items-center gap-3 rounded-lg border bg-muted/30 p-3">
+                <span className="text-sm font-medium text-muted-foreground">Apply:</span>
+                <div className="flex-1">
+                  <ApplyButtons onApply={handleApply} disabled={applying} />
+                </div>
               </div>
             )}
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-orange-50 rounded-lg p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <UtensilsCrossed className="w-4 h-4 text-orange-600" />
-                  <span className="text-xs text-orange-700">My Count</span>
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <div className="rounded-lg border bg-card p-3 shadow-sm transition-all hover:shadow-md">
+                <div className="mb-1 flex items-center gap-2">
+                  <UtensilsCrossed className="h-4 w-4 text-orange-500" />
+                  <span className="text-xs font-medium text-muted-foreground">My Count</span>
                 </div>
-                <p className="text-xl font-bold text-orange-900">{data.currentUser?.monthTotal ?? '-'}</p>
-                <p className="text-xs text-orange-600">{data.currentUser?.employeeNo || 'Not found'}</p>
+                <p className="text-2xl font-bold tracking-tight">{data.currentUser?.monthTotal ?? '-'}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{data.currentUser?.employeeNo || 'Not found'}</p>
               </div>
-              <div className="bg-blue-50 rounded-lg p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <Award className="w-4 h-4 text-blue-600" />
-                  <span className="text-xs text-blue-700">My Rank</span>
+              <div className="rounded-lg border bg-card p-3 shadow-sm transition-all hover:shadow-md">
+                <div className="mb-1 flex items-center gap-2">
+                  <Award className="h-4 w-4 text-blue-500" />
+                  <span className="text-xs font-medium text-muted-foreground">My Rank</span>
                 </div>
-                <p className="text-xl font-bold text-blue-900">{data.currentUserRank ? `#${data.currentUserRank}` : '-'}</p>
-                <p className="text-xs text-blue-600">of {data.totalUsers} people</p>
+                <p className="text-2xl font-bold tracking-tight text-primary">
+                  {data.currentUserRank ? `#${data.currentUserRank}` : '-'}
+                </p>
+                <p className="text-[10px] text-muted-foreground">of {data.totalUsers} people</p>
               </div>
-              <div className="bg-green-50 rounded-lg p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <TrendingUp className="w-4 h-4 text-green-600" />
-                  <span className="text-xs text-green-700">Average</span>
+              <div className="rounded-lg border bg-card p-3 shadow-sm transition-all hover:shadow-md">
+                <div className="mb-1 flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-green-500" />
+                  <span className="text-xs font-medium text-muted-foreground">Average</span>
                 </div>
-                <p className="text-xl font-bold text-green-900">{data.statistics.avgTotal.toFixed(1)}</p>
-                <p className="text-xs text-green-600">Max: {data.statistics.maxTotal} | Med: {data.statistics.medianTotal}</p>
+                <p className="text-2xl font-bold tracking-tight">{data.statistics.avgTotal.toFixed(1)}</p>
+                <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <span>Max: {data.statistics.maxTotal}</span>
+                  <span>Med: {data.statistics.medianTotal}</span>
+                </div>
               </div>
-              <div className="bg-purple-50 rounded-lg p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <Users className="w-4 h-4 text-purple-600" />
-                  <span className="text-xs text-purple-700">Team Total</span>
+              <div className="rounded-lg border bg-card p-3 shadow-sm transition-all hover:shadow-md">
+                <div className="mb-1 flex items-center gap-2">
+                  <Users className="h-4 w-4 text-purple-500" />
+                  <span className="text-xs font-medium text-muted-foreground">Team Total</span>
                 </div>
-                <p className="text-xl font-bold text-purple-900">{data.statistics.grandTotal}</p>
-                <p className="text-xs text-purple-600">{data.totalUsers} people</p>
+                <p className="text-2xl font-bold tracking-tight">{data.statistics.grandTotal}</p>
+                <p className="text-[10px] text-muted-foreground">{data.totalUsers} people</p>
               </div>
             </div>
 
             {/* Bar Chart */}
             {barChartData.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium text-neutral-700 mb-3">
+              <div className="rounded-lg border p-4">
+                <h4 className="mb-4 text-sm font-medium text-muted-foreground">
                   {multiMode && selectedMonths.size > 1 ? 'Cumulative Ranking' : 'Monthly Ranking'}
                 </h4>
-                <div className="h-56">
+                <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={barChartData} margin={{ bottom: 60 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
-                      <XAxis dataKey="name" tick={{ fontSize: 9 }} angle={-55} textAnchor="end" interval={0} height={70} />
-                      <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                      <Tooltip formatter={(value: number) => [`${value} times`, 'Count']} />
-                      <Bar dataKey="total" radius={[3, 3, 0, 0]}>
+                    <BarChart data={barChartData} margin={{ bottom: 60, top: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                      <XAxis 
+                        dataKey="name" 
+                        tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} 
+                        angle={-45} 
+                        textAnchor="end" 
+                        interval={0} 
+                        height={60} 
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis 
+                        tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} 
+                        allowDecimals={false} 
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <Tooltip 
+                        cursor={{ fill: "hsl(var(--muted)/0.3)" }}
+                        contentStyle={{ 
+                          backgroundColor: "hsl(var(--popover))", 
+                          borderColor: "hsl(var(--border))",
+                          borderRadius: "var(--radius)",
+                          fontSize: "12px"
+                        }}
+                        formatter={(value: number) => [`${value} times`, 'Count']} 
+                      />
+                      <Bar dataKey="total" radius={[4, 4, 0, 0]}>
                         {barChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.isCurrentUser ? '#f97316' : '#94a3b8'} />
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={entry.isCurrentUser ? "hsl(var(--primary))" : "hsl(var(--muted))"} 
+                          />
                         ))}
                       </Bar>
                     </BarChart>
@@ -405,99 +457,128 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
 
             {/* Leaderboard */}
             {barChartData.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium text-neutral-700 mb-3">Top 10</h4>
-                <div className="space-y-2 max-h-60 overflow-y-auto">
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-muted-foreground">Top 10</h4>
+                <div className="grid gap-2">
                   {barChartData.slice(0, 10).map((u, index) => (
                     <div
                       key={`${u.name}-${index}`}
-                      className={`flex items-center justify-between p-2 rounded-lg ${
-                        u.isCurrentUser ? 'bg-orange-100 border border-orange-300' : 'bg-neutral-50'
-                      }`}
+                      className={cn(
+                        "flex items-center justify-between rounded-md border p-2 transition-colors",
+                        u.isCurrentUser ? "border-primary/30 bg-primary/5" : "bg-card hover:bg-muted/50"
+                      )}
                     >
                       <div className="flex items-center gap-3">
-                        <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${
-                          index === 0 ? 'bg-yellow-400 text-yellow-900' :
-                          index === 1 ? 'bg-gray-300 text-gray-700' :
-                          index === 2 ? 'bg-amber-600 text-white' :
-                          'bg-neutral-200 text-neutral-600'
-                        }`}>{index + 1}</span>
-                        <p className={`text-sm font-medium ${u.isCurrentUser ? 'text-orange-900' : 'text-neutral-900'}`}>
-                          {u.name}
-                          {u.isCurrentUser && <span className="ml-1 text-xs text-orange-600">(You)</span>}
-                        </p>
+                        <span className={cn(
+                          "flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold",
+                          index === 0 ? "bg-yellow-100 text-yellow-700" :
+                          index === 1 ? "bg-slate-100 text-slate-700" :
+                          index === 2 ? "bg-amber-100 text-amber-700" :
+                          "bg-muted text-muted-foreground"
+                        )}>
+                          {index + 1}
+                        </span>
+                        <div className="flex flex-col">
+                          <span className={cn(
+                            "text-sm font-medium",
+                            u.isCurrentUser ? "text-primary" : "text-foreground"
+                          )}>
+                            {u.name}
+                            {u.isCurrentUser && <span className="ml-1 text-[10px] font-normal text-muted-foreground">(You)</span>}
+                          </span>
+                        </div>
                       </div>
-                      <p className={`text-sm font-bold ${u.isCurrentUser ? 'text-orange-700' : 'text-neutral-700'}`}>{u.total}</p>
+                      <span className={cn(
+                        "font-mono text-sm font-bold",
+                        u.isCurrentUser ? "text-primary" : "text-muted-foreground"
+                      )}>
+                        {u.total}
+                      </span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Hidden Auto-Apply Section - always available once secret code entered */}
+            {/* Hidden Auto-Apply Section */}
             {showSecret && (
-              <div className="border border-dashed border-red-300 rounded-lg p-3 bg-red-50/50">
-                <div className="flex items-center gap-2 mb-2">
-                  <Clock className="w-4 h-4 text-red-500" />
-                  <span className="text-xs font-semibold text-red-700">Auto Apply</span>
-                  <button onClick={() => setShowSecret(false)} className="ml-auto text-xs text-red-400 hover:text-red-600">Hide</button>
+              <div className="mt-4 rounded-lg border border-dashed border-destructive/50 bg-destructive/5 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-destructive">
+                    <Clock className="h-4 w-4" />
+                    <span className="text-sm font-semibold">Auto Apply (Secret)</span>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => setShowSecret(false)} className="h-6 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive">
+                    Hide
+                  </Button>
                 </div>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <label className="flex items-center gap-1 text-xs">
+                
+                <div className="flex flex-wrap items-center gap-4 text-xs">
+                  <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={autoApplyEnabled}
                       onChange={e => setAutoApplyEnabled(e.target.checked)}
-                      className="rounded"
+                      className="rounded border-destructive text-destructive focus:ring-destructive"
                     />
-                    Enable
+                    <span className="font-medium">Enable</span>
                   </label>
-                  <label className="flex items-center gap-1 text-xs">
-                    Time:
+                  
+                  <div className="flex items-center gap-2">
+                    <span>Time:</span>
                     <input
                       type="time"
                       value={autoApplyTime}
                       onChange={e => setAutoApplyTime(e.target.value)}
-                      className="border rounded px-1 py-0.5 text-xs w-20"
+                      className="h-6 rounded border border-input bg-background px-1 text-xs"
                     />
-                  </label>
-                  <label className="flex items-center gap-1 text-xs">
-                    Date:
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <span>Date:</span>
                     <select
                       value={autoApplyDate}
                       onChange={e => setAutoApplyDate(Number(e.target.value))}
-                      className="border rounded px-1 py-0.5 text-xs"
+                      className="h-6 rounded border border-input bg-background px-1 text-xs"
                     >
                       <option value={0}>Today</option>
                       <option value={-1}>Yesterday</option>
                     </select>
-                  </label>
-                  <label className="flex items-center gap-1 text-xs">
-                    Times:
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <span>Times:</span>
                     <select
                       value={autoApplyTimes}
                       onChange={e => setAutoApplyTimes(Number(e.target.value))}
-                      className="border rounded px-1 py-0.5 text-xs"
+                      className="h-6 rounded border border-input bg-background px-1 text-xs"
                     >
                       <option value={1}>1</option>
                       <option value={2}>2</option>
                     </select>
-                  </label>
-                  {autoApplyEnabled && <span className="text-xs text-green-600">Active - {autoApplyDate === 0 ? 'today' : 'yesterday'} {autoApplyTimes}x at {autoApplyTime}</span>}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 mt-2 pt-2 border-t border-red-200">
-                  <span className="text-xs text-red-500">Manual:</span>
+                
+                {autoApplyEnabled && (
+                  <p className="mt-2 text-[10px] text-green-600 font-medium">
+                    Active - {autoApplyDate === 0 ? 'today' : 'yesterday'} {autoApplyTimes}x at {autoApplyTime}
+                  </p>
+                )}
+                
+                <div className="mt-3 flex items-center gap-2 border-t border-destructive/20 pt-3">
+                  <span className="text-xs font-medium text-destructive">Manual Override:</span>
                   <ApplyButtons onApply={handleApply} disabled={applying} showIcon={false} variant="danger" />
                 </div>
               </div>
             )}
           </div>
         ) : (
-          <div className="p-6 text-center">
-            <p className="text-sm text-neutral-500">No data available</p>
+          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+            <UtensilsCrossed className="mb-2 h-10 w-10 opacity-20" />
+            <p className="text-sm">No data available</p>
           </div>
         )}
-      </div>
+      </CardContent>
       {showDailyDetail && data && data.daysInMonth > 0 && !multiMode && (
         <DailyDetailModal
           data={data}
@@ -506,6 +587,6 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
           onClose={() => setShowDailyDetail(false)}
         />
       )}
-    </div>
+    </Card>
   );
 }

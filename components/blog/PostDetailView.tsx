@@ -14,6 +14,11 @@ import {
 } from 'lucide-react';
 import type { ApiBlogPost } from '@/lib/blog/types';
 import { formatEpoch, IMAGE_EXTENSIONS } from '@/lib/blog/helpers';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
 
 export function PostDetailView({ post, onBack }: { post: ApiBlogPost; onBack: () => void }) {
   const readTimeMin = Math.max(1, Math.ceil((post.body || '').length / 250));
@@ -131,137 +136,135 @@ export function PostDetailView({ post, onBack }: { post: ApiBlogPost; onBack: ()
   };
 
   return (
-    <div ref={containerRef} className="max-w-4xl mx-auto space-y-6">
+    <div ref={containerRef} className="max-w-4xl mx-auto space-y-8 py-6">
       {/* Floating scroll-to-top button */}
       {showScrollTop && (
-        <button
+        <Button
+          size="icon"
           onClick={scrollToTop}
-          className="fixed right-6 bottom-6 z-50 h-10 w-10 rounded-full bg-neutral-900 text-white shadow-lg flex items-center justify-center hover:bg-neutral-700 transition-colors"
+          className="fixed right-8 bottom-8 z-50 rounded-full shadow-lg"
           title="回到顶部"
         >
           <ArrowUp className="h-5 w-5" />
-        </button>
+        </Button>
       )}
 
       {/* Back button */}
-      <button
+      <Button
+        variant="ghost"
         onClick={onBack}
-        className="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 transition-colors"
+        className="text-muted-foreground hover:text-foreground pl-0 hover:bg-transparent"
       >
-        <ArrowLeft className="h-4 w-4" />
+        <ArrowLeft className="h-4 w-4 mr-2" />
         返回列表
-      </button>
+      </Button>
 
       {/* Article */}
-      <article className="bg-white border border-neutral-200 rounded-lg overflow-hidden">
-        <div className="h-1.5 bg-neutral-900" />
-        <div className="p-8 md:p-12">
+      <Card className="overflow-hidden border-none shadow-sm">
+        <div className="h-1.5 bg-primary w-full" />
+        <CardContent className="p-8 md:p-12">
           {/* Tags */}
           {post.projectTags && post.projectTags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-4">
+            <div className="flex flex-wrap gap-2 mb-6">
               {post.projectTags.map((tag) => (
-                <span key={tag} className="px-2 py-0.5 text-xs bg-neutral-100 text-neutral-600 rounded-md border border-neutral-200">
+                <Badge key={tag} variant="secondary" className="px-2.5 py-0.5 text-xs font-normal">
                   {tag}
-                </span>
+                </Badge>
               ))}
             </div>
           )}
 
           {/* Title */}
-          <h1 className="text-2xl md:text-3xl font-bold text-neutral-900 mb-4 leading-tight">
+          <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-6 leading-tight tracking-tight">
             {post.title}
           </h1>
 
           {/* Meta */}
-          <div className="flex flex-wrap items-center gap-4 text-sm text-neutral-500 mb-8 pb-6 border-b border-neutral-100">
-            <span className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-6 text-sm text-muted-foreground mb-10 pb-8 border-b border-border">
+            <span className="flex items-center gap-2">
               {post.authorImage ? (
-                <img src={post.authorImage} alt="" className="h-5 w-5 rounded-full" />
+                <img src={post.authorImage} alt="" className="h-6 w-6 rounded-full ring-2 ring-background" />
               ) : (
-                <User className="h-4 w-4" />
+                <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center">
+                  <User className="h-3.5 w-3.5" />
+                </div>
               )}
-              {post.authorName}
+              <span className="font-medium text-foreground">{post.authorName}</span>
             </span>
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-2">
               <Calendar className="h-4 w-4" />
               {formatEpoch(post.datePublished || post.dateCreated)}
             </span>
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-2">
               <Clock className="h-4 w-4" />
-              {readTimeMin} min
+              {readTimeMin} min read
             </span>
           </div>
 
           {/* Body — rendered from Remarkup → HTML */}
           <div
             ref={bodyContainerRef}
-            className="prose prose-neutral prose-sm md:prose-base max-w-none
-              prose-headings:font-semibold prose-headings:text-neutral-900
-              prose-h1:text-xl prose-h1:mt-8 prose-h1:mb-4
-              prose-h2:text-lg prose-h2:mt-6 prose-h2:mb-3
-              prose-h3:text-base prose-h3:mt-5 prose-h3:mb-2
-              prose-p:text-neutral-700 prose-p:leading-relaxed
-              prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline
-              prose-code:text-sm prose-code:bg-neutral-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none
-              prose-pre:bg-neutral-900 prose-pre:rounded-lg prose-pre:overflow-x-auto prose-pre:max-h-[30rem] prose-pre:overflow-y-auto
-              [&_pre]:text-white [&_pre]:leading-snug [&_pre_*]:!text-white [&_pre_code]:text-white [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:leading-snug
-              prose-blockquote:border-l-neutral-300 prose-blockquote:text-neutral-600
-              prose-img:rounded-lg prose-img:border prose-img:border-neutral-200
+            className="prose prose-neutral prose-sm md:prose-base max-w-none dark:prose-invert
+              prose-headings:font-bold prose-headings:tracking-tight
+              prose-h1:text-2xl prose-h1:mt-10 prose-h1:mb-6
+              prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-4
+              prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-3
+              prose-p:leading-7 prose-p:mb-4
+              prose-a:text-primary prose-a:no-underline hover:prose-a:underline
+              prose-code:text-sm prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:font-mono prose-code:before:content-none prose-code:after:content-none
+              prose-pre:bg-muted/80 prose-pre:text-foreground prose-pre:rounded-lg prose-pre:border prose-pre:border-border
+              [&_pre_code]:bg-transparent [&_pre_code]:text-foreground [&_pre_code]:p-0
+              prose-blockquote:border-l-4 prose-blockquote:border-primary/30 prose-blockquote:bg-muted/30 prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:rounded-r-lg prose-blockquote:not-italic
+              prose-img:rounded-lg prose-img:border prose-img:border-border prose-img:shadow-sm
               [&_.phabricator-image-center]:mx-auto [&_.phabricator-image-center]:block
-              [&_.remarkup-quote]:border-l-4 [&_.remarkup-quote]:border-neutral-300 [&_.remarkup-quote]:pl-4 [&_.remarkup-quote]:py-2 [&_.remarkup-quote]:my-3 [&_.remarkup-quote]:text-neutral-600 [&_.remarkup-quote]:bg-neutral-50 [&_.remarkup-quote]:rounded-r-md
-              [&_.remarkup-quote-attribution]:text-xs [&_.remarkup-quote-attribution]:text-neutral-400 [&_.remarkup-quote-attribution]:block [&_.remarkup-quote-attribution]:mb-1
-              [&_.remarkup-mention]:text-blue-600 [&_.remarkup-mention]:font-medium
-              [&_.remarkup-object-ref]:text-blue-600 [&_.remarkup-object-ref]:font-medium
-              [&_.remarkup-callout]:my-3 [&_.remarkup-callout]:p-3 [&_.remarkup-callout]:rounded-lg [&_.remarkup-callout]:text-sm
-              [&_.remarkup-callout-note]:bg-blue-50 [&_.remarkup-callout-note]:text-blue-800
-              [&_.remarkup-callout-warning]:bg-amber-50 [&_.remarkup-callout-warning]:text-amber-800
-              [&_.remarkup-callout-important]:bg-red-50 [&_.remarkup-callout-important]:text-red-800
-              [&_.remarkup-callout-tip]:bg-green-50 [&_.remarkup-callout-tip]:text-green-800
-              [&_.remarkup-table]:text-sm [&_.remarkup-table_th]:bg-neutral-50 [&_.remarkup-table_th]:px-3 [&_.remarkup-table_th]:py-2 [&_.remarkup-table_td]:px-3 [&_.remarkup-table_td]:py-2
-              [&_.remarkup-file-link]:text-blue-600 [&_.remarkup-file-link]:no-underline [&_.remarkup-file-link]:hover:underline
-              [&_.remarkup-file-embed_img]:rounded-lg [&_.remarkup-file-embed_img]:border [&_.remarkup-file-embed_img]:border-neutral-200
-              prose-table:text-sm prose-th:bg-neutral-50 prose-th:px-3 prose-th:py-2 prose-td:px-3 prose-td:py-2
+              [&_.remarkup-callout]:my-4 [&_.remarkup-callout]:p-4 [&_.remarkup-callout]:rounded-lg [&_.remarkup-callout]:text-sm [&_.remarkup-callout]:border
+              [&_.remarkup-callout-note]:bg-blue-50 [&_.remarkup-callout-note]:text-blue-900 [&_.remarkup-callout-note]:border-blue-100
+              [&_.remarkup-callout-warning]:bg-amber-50 [&_.remarkup-callout-warning]:text-amber-900 [&_.remarkup-callout-warning]:border-amber-100
+              [&_.remarkup-callout-important]:bg-red-50 [&_.remarkup-callout-important]:text-red-900 [&_.remarkup-callout-important]:border-red-100
+              [&_.remarkup-callout-tip]:bg-green-50 [&_.remarkup-callout-tip]:text-green-900 [&_.remarkup-callout-tip]:border-green-100
+              prose-table:text-sm prose-th:bg-muted/50 prose-th:p-3 prose-td:p-3 prose-td:border-b
             "
             dangerouslySetInnerHTML={{ __html: bodyHtml }}
           />
 
           {/* Like count — end of article */}
           {tokenCount > 0 && (
-            <div className="mt-10 pt-6 border-t border-neutral-100 flex items-center justify-center">
-              <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-neutral-50 text-neutral-500 text-sm border border-neutral-200">
-                <Heart className="h-4 w-4 text-red-400 fill-red-400" />
-                {tokenCount} 人觉得有帮助
-              </span>
+            <div className="mt-12 pt-8 border-t border-border flex items-center justify-center">
+              <Badge variant="outline" className="gap-2 px-4 py-1.5 text-sm font-normal rounded-full bg-muted/30">
+                <Heart className="h-4 w-4 text-red-500 fill-red-500" />
+                <span className="font-medium text-foreground">{tokenCount}</span> 人觉得有帮助
+              </Badge>
             </div>
           )}
-        </div>
-      </article>
+        </CardContent>
+      </Card>
 
       {/* ── Comments Section ─────────────────────────────────────────── */}
-      <section className="bg-white border border-neutral-200 rounded-lg overflow-hidden">
-        <div className="p-6 md:p-8">
-          <h2 className="text-base font-semibold text-neutral-900 flex items-center gap-2 mb-6">
-            <MessageSquare className="h-4 w-4 text-neutral-500" />
-            评论 {!commentsLoading && comments.length > 0 && <span className="text-xs font-normal text-neutral-400">({comments.length})</span>}
+      <Card className="border-none shadow-sm">
+        <CardContent className="p-8 md:p-10">
+          <h2 className="text-lg font-semibold text-foreground flex items-center gap-2 mb-8">
+            <MessageSquare className="h-5 w-5 text-primary" />
+            评论 {!commentsLoading && comments.length > 0 && <span className="text-sm font-normal text-muted-foreground">({comments.length})</span>}
           </h2>
 
           {/* Comment input */}
-          <div className="mb-6">
-            <textarea
+          <div className="mb-10 bg-muted/30 rounded-xl p-4 border border-border/50">
+            <Textarea
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
               placeholder="写下你的评论…"
               rows={3}
-              className="w-full px-4 py-3 text-sm border border-neutral-200 rounded-lg bg-neutral-50 focus:outline-none focus:ring-1 focus:ring-neutral-300 focus:bg-white transition-colors resize-none"
+              className="w-full bg-transparent border-none outline-none resize-none text-sm placeholder:text-muted-foreground focus-visible:ring-0 p-0 shadow-none min-h-[80px]"
             />
             {commentError && (
-              <p className="mt-1 text-xs text-red-500">{commentError}</p>
+              <p className="mt-2 text-xs text-destructive font-medium">{commentError}</p>
             )}
-            <div className="flex justify-end mt-2">
-              <button
+            <div className="flex justify-end mt-3 pt-3 border-t border-border/50">
+              <Button
                 onClick={handleSubmitComment}
                 disabled={commentSubmitting || !commentText.trim()}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-neutral-900 rounded-lg hover:bg-neutral-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                size="sm"
+                className="gap-2"
               >
                 {commentSubmitting ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -269,41 +272,40 @@ export function PostDetailView({ post, onBack }: { post: ApiBlogPost; onBack: ()
                   <Send className="h-3.5 w-3.5" />
                 )}
                 {commentSubmitting ? '提交中...' : '发表评论'}
-              </button>
+              </Button>
             </div>
           </div>
 
           {/* Comments list */}
           {commentsLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-4 w-4 animate-spin text-neutral-400" />
-              <span className="ml-2 text-sm text-neutral-400">加载评论...</span>
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <span className="ml-3 text-sm text-muted-foreground">加载评论...</span>
             </div>
           ) : comments.length === 0 ? (
-            <div className="text-center py-8 text-sm text-neutral-400">暂无评论，来发表第一条吧</div>
+            <div className="text-center py-12 text-sm text-muted-foreground bg-muted/20 rounded-lg border border-dashed border-border">
+              暂无评论，来发表第一条吧
+            </div>
           ) : (
-            <div className="space-y-5">
+            <div className="space-y-8">
               {comments.map((c) => (
-                <div key={c.id} className="flex gap-3">
+                <div key={c.id} className="flex gap-4 group">
                   {c.authorImage ? (
-                    <img src={c.authorImage} alt="" className="h-8 w-8 rounded-full flex-shrink-0 mt-0.5 object-cover" />
+                    <img src={c.authorImage} alt="" className="h-10 w-10 rounded-full flex-shrink-0 mt-1 object-cover ring-2 ring-background shadow-sm" />
                   ) : (
-                    <div className="h-8 w-8 rounded-full bg-neutral-200 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <User className="h-4 w-4 text-neutral-500" />
+                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-1 ring-2 ring-background shadow-sm">
+                      <User className="h-5 w-5 text-muted-foreground" />
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-medium text-neutral-800">{c.author}</span>
-                      <span className="text-xs text-neutral-400">{c.timestamp}</span>
+                    <div className="flex items-baseline justify-between mb-2">
+                      <span className="text-sm font-semibold text-foreground">{c.author}</span>
+                      <span className="text-xs text-muted-foreground">{c.timestamp}</span>
                     </div>
                     <div
-                      className="text-sm text-neutral-600 break-words
-                        [&_blockquote]:border-l-4 [&_blockquote]:border-neutral-300 [&_blockquote]:pl-3 [&_blockquote]:py-1 [&_blockquote]:my-2 [&_blockquote]:text-neutral-500 [&_blockquote]:bg-neutral-50 [&_blockquote]:rounded-r-md
-                        [&_.remarkup-quote]:border-l-4 [&_.remarkup-quote]:border-neutral-300 [&_.remarkup-quote]:pl-3 [&_.remarkup-quote]:py-1 [&_.remarkup-quote]:my-2 [&_.remarkup-quote]:text-neutral-500 [&_.remarkup-quote]:bg-neutral-50 [&_.remarkup-quote]:rounded-r-md
-                        [&_.remarkup-quote-attribution]:text-xs [&_.remarkup-quote-attribution]:text-neutral-400 [&_.remarkup-quote-attribution]:block [&_.remarkup-quote-attribution]:mb-1
-                        [&_.remarkup-mention]:text-blue-600 [&_.remarkup-mention]:font-medium
-                        [&_img]:max-w-full [&_img]:rounded [&_img]:my-2
+                      className="text-sm text-foreground/90 leading-relaxed bg-muted/20 p-4 rounded-r-xl rounded-bl-xl
+                        [&_blockquote]:border-l-4 [&_blockquote]:border-primary/20 [&_blockquote]:pl-3 [&_blockquote]:py-1 [&_blockquote]:my-2 [&_blockquote]:text-muted-foreground [&_blockquote]:bg-muted/50 [&_blockquote]:rounded-r
+                        [&_img]:max-w-full [&_img]:rounded-md [&_img]:my-2
                         [&_p]:my-1
                       "
                       dangerouslySetInnerHTML={{ __html: remarkupToHtml(c.content || '') }}
@@ -313,8 +315,8 @@ export function PostDetailView({ post, onBack }: { post: ApiBlogPost; onBack: ()
               ))}
             </div>
           )}
-        </div>
-      </section>
+        </CardContent>
+      </Card>
     </div>
   );
 }

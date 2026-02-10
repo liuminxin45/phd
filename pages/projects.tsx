@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Folder, Users, Loader2, ChevronRight, Archive, ArchiveRestore } from 'lucide-react';
+import { Folder, Users, Loader2, ChevronRight, Archive, ArchiveRestore, Search, X } from 'lucide-react';
 import { Project } from '@/lib/api';
 import { useUser } from '@/contexts/UserContext';
 import { httpClient } from '@/lib/httpClient';
 import { ProjectDetailPanel } from '@/components/project/ProjectDetailPanel';
 import { appStorage } from '@/lib/appStorage';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 const colorMap: Record<string, string> = {
   blue: 'bg-blue-500',
@@ -15,6 +20,9 @@ const colorMap: Record<string, string> = {
   red: 'bg-red-500',
   pink: 'bg-pink-500',
   indigo: 'bg-indigo-500',
+  grey: 'bg-slate-500',
+  violet: 'bg-violet-500',
+  yellow: 'bg-yellow-500',
 };
 
 interface ProjectStats {
@@ -35,6 +43,7 @@ export default function ProjectsPage() {
   const [projectProgress, setProjectProgress] = useState<Record<number, number>>({});
   const [projectMembers, setProjectMembers] = useState<Record<number, number>>({});
   const [loadingStats, setLoadingStats] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -74,10 +83,17 @@ export default function ProjectsPage() {
   }, [archivedProjectIds, archiveStateLoaded]);
 
   const displayedProjects = useMemo(() => {
-    return showArchived
+    let filtered = showArchived
       ? projects.filter(p => archivedProjectIds.has(p.id))
       : projects.filter(p => !archivedProjectIds.has(p.id));
-  }, [projects, archivedProjectIds, showArchived]);
+      
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(p => p.fields.name.toLowerCase().includes(query));
+    }
+    
+    return filtered;
+  }, [projects, archivedProjectIds, showArchived, searchQuery]);
 
   // Fetch projects for current user
   const fetchProjects = async (page: number = 1, append: boolean = false) => {
@@ -220,31 +236,51 @@ export default function ProjectsPage() {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-6 space-y-6 h-full flex flex-col overflow-hidden">
       {/* Loading Spinner */}
       {loading && (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-neutral-400" />
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/50" />
         </div>
       )}
 
       {/* Projects Grid */}
       {!loading && (
-        <>
-          <div className="mb-4 flex items-center justify-end">
-            <button
+        <div className="flex-1 overflow-y-auto min-h-0 pr-2">
+          <div className="mb-6 flex items-center justify-between">
+            <div className="relative w-64">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="搜索项目..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-9"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => setShowArchived(!showArchived)}
-              className={`flex items-center gap-1 text-sm ${
-                showArchived ? 'text-amber-600' : 'text-neutral-500 hover:text-neutral-700'
-              }`}
-              title={showArchived ? '显示活跃项目' : '显示已归档项目'}
+              className={cn(
+                "h-9 gap-1.5",
+                showArchived ? "text-amber-600 hover:text-amber-700 hover:bg-amber-50" : "text-muted-foreground"
+              )}
             >
               <Archive className="h-4 w-4" />
               {showArchived ? '显示活跃项目' : `已归档 (${archivedProjectIds.size})`}
-            </button>
+            </Button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6 pb-6">
             {displayedProjects.map((project) => {
               const colorKey = project.fields.color?.key || 'blue';
               const colorClass = colorMap[colorKey] || 'bg-blue-500';
@@ -253,19 +289,27 @@ export default function ProjectsPage() {
               const memberCount = projectMembers[project.id] || 0;
           
               return (
-                <div 
+                <Card 
                   key={project.id} 
                   onClick={() => handleProjectClick(project)}
-                  className="bg-white border border-neutral-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
+                  className="group relative overflow-hidden transition-all duration-200 hover:shadow-md cursor-pointer border-t-4"
+                  style={{ borderTopColor: 'transparent' }} // Reset to allow the color class to take effect if we applied it directly, but let's use a div instead
                 >
-                  <div className={`h-2 ${colorClass}`} />
-                  <div className="p-5">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <h3 className="text-base font-semibold text-neutral-900">{project.fields.name}</h3>
-                        <p className="text-sm text-neutral-500 mt-1 line-clamp-2">{project.fields.description || 'No description'}</p>
+                  <div className={cn("absolute top-0 left-0 right-0 h-1", colorClass)} />
+                  
+                  <CardContent className="p-5 pt-6">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex-1 min-w-0 pr-2">
+                        <h3 className="text-base font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+                          {project.fields.name}
+                        </h3>
+                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2 min-h-[2.5em]">
+                          {project.fields.description || 'No description provided'}
+                        </p>
                       </div>
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={(e) => {
                           e.stopPropagation();
                           if (showArchived) {
@@ -274,102 +318,96 @@ export default function ProjectsPage() {
                             archiveProject(project.id);
                           }
                         }}
-                        className={`p-1 rounded hover:bg-neutral-100 transition-colors flex-shrink-0 ml-2 ${
-                          showArchived ? 'text-amber-600' : 'text-neutral-400 hover:text-neutral-600'
-                        }`}
+                        className={cn(
+                          "h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity",
+                          showArchived ? "text-amber-600 hover:text-amber-700 hover:bg-amber-50" : "text-muted-foreground hover:text-foreground"
+                        )}
                         title={showArchived ? '取消归档' : '归档'}
                       >
-                        {showArchived ? (
-                          <ArchiveRestore className="h-4 w-4" />
-                        ) : (
-                          <Archive className="h-4 w-4" />
-                        )}
-                      </button>
+                        {showArchived ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
+                      </Button>
                     </div>
 
-                    <div className="space-y-3 mt-4">
+                    <div className="space-y-4">
                       <div className="space-y-1.5">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-neutral-700">Progress</span>
-                          <span className="text-neutral-900 font-medium">{loadingStats ? '...' : `${progress}%`}</span>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Progress</span>
+                          <span className="font-medium text-foreground">{loadingStats ? '...' : `${progress}%`}</span>
                         </div>
-                        <div className="h-2 w-full bg-neutral-200 rounded-full overflow-hidden">
+                        <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-neutral-900 transition-all"
+                            className={cn("h-full transition-all duration-500 ease-out", colorClass)}
                             style={{ width: `${progress}%` }}
                           />
                         </div>
                       </div>
 
-                      <div className="pt-3 border-t border-neutral-200">
-                        <div className="grid grid-cols-4 gap-2 text-center">
-                          <div>
-                            <p className="text-lg font-semibold text-neutral-900">{loadingStats ? '-' : stats.total}</p>
-                            <p className="text-xs text-neutral-500">总任务</p>
-                          </div>
-                          <div>
-                            <p className="text-lg font-semibold text-amber-600">{loadingStats ? '-' : stats.waiting}</p>
-                            <p className="text-xs text-neutral-500">未开始</p>
-                          </div>
-                          <div>
-                            <p className="text-lg font-semibold text-blue-600">{loadingStats ? '-' : stats.inProgress}</p>
-                            <p className="text-xs text-neutral-500">进行中</p>
-                          </div>
-                          <div>
-                            <p className="text-lg font-semibold text-green-600">{loadingStats ? '-' : stats.completed}</p>
-                            <p className="text-xs text-neutral-500">已完成</p>
-                          </div>
+                      <div className="grid grid-cols-4 gap-2 pt-4 border-t text-center">
+                        <div className="space-y-0.5">
+                          <p className="text-lg font-semibold text-foreground leading-none">{loadingStats ? '-' : stats.total}</p>
+                          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Total</p>
+                        </div>
+                        <div className="space-y-0.5">
+                          <p className="text-lg font-semibold text-amber-600 leading-none">{loadingStats ? '-' : stats.waiting}</p>
+                          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Wait</p>
+                        </div>
+                        <div className="space-y-0.5">
+                          <p className="text-lg font-semibold text-blue-600 leading-none">{loadingStats ? '-' : stats.inProgress}</p>
+                          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">WIP</p>
+                        </div>
+                        <div className="space-y-0.5">
+                          <p className="text-lg font-semibold text-green-600 leading-none">{loadingStats ? '-' : stats.completed}</p>
+                          <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Done</p>
                         </div>
                       </div>
 
-                      <div className="pt-3 border-t border-neutral-200 flex items-center">
-                        <div className="flex items-center gap-2 text-sm text-neutral-600">
-                          <Users className="h-4 w-4" />
+                      <div className="pt-3 border-t flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Users className="h-3.5 w-3.5" />
                           <span>{memberCount} members</span>
                         </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
                       </div>
                     </div>
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
               );
             })}
           </div>
 
           {/* Pagination */}
           {hasMore && (
-            <div className="mt-6 flex justify-center">
-              <button
+            <div className="flex justify-center py-4">
+              <Button
+                variant="outline"
                 onClick={handleLoadMore}
                 disabled={loadingMore}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-neutral-700 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full max-w-xs"
               >
-                {loadingMore ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
+                {loadingMore ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ChevronRight className="mr-2 h-4 w-4" />}
                 加载更多
-              </button>
+              </Button>
             </div>
           )}
 
           {/* Empty State */}
           {displayedProjects.length === 0 && (
-            <div className="text-center py-12">
-              <p className="text-neutral-500">没有找到项目</p>
+            <div className="h-full flex flex-col items-center justify-center text-muted-foreground/50">
+              <Folder className="h-16 w-16 mb-4 opacity-20" />
+              <p className="text-lg font-medium">没有找到项目</p>
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* Project Detail Modal */}
       {selectedProject && isProjectModalOpen && (
         <div
-          className="fixed top-0 left-0 right-0 bottom-0 z-[10000] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          className="fixed top-0 left-0 right-0 bottom-0 z-[10000] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in-0"
           style={{ margin: 0, padding: 0 }}
           onClick={handleCloseProjectModal}
         >
-          <div onClick={(e) => e.stopPropagation()}>
+          <div onClick={(e) => e.stopPropagation()} className="w-full h-full">
             <ProjectDetailPanel 
               project={selectedProject} 
               isModal={true}

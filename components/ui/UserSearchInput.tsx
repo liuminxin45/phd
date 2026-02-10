@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Check, Loader2 } from 'lucide-react';
 import { httpClient } from '@/lib/httpClient';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface UserSearchResult {
   phid: string;
@@ -15,7 +18,7 @@ interface UserSearchInputProps {
   onCancel: () => void;
   placeholder?: string;
   className?: string;
-  colorScheme?: 'blue' | 'green' | 'purple';
+  colorScheme?: 'blue' | 'green' | 'purple'; // Keeping prop for API compatibility but might standardize styles
   disabled?: boolean;
   maxResults?: number;
 }
@@ -25,7 +28,6 @@ export function UserSearchInput({
   onCancel,
   placeholder = '输入用户名或 PHID',
   className = '',
-  colorScheme = 'blue',
   disabled = false,
   maxResults = 20,
 }: UserSearchInputProps) {
@@ -36,38 +38,6 @@ export function UserSearchInput({
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  const colorClasses = {
-    blue: {
-      border: 'border-blue-300',
-      ring: 'focus:ring-blue-500',
-      text: 'text-blue-600',
-      hover: 'hover:bg-blue-100',
-      dropdown: 'border-blue-300',
-      dropdownHover: 'hover:bg-blue-50',
-      selected: 'bg-blue-100',
-    },
-    green: {
-      border: 'border-green-300',
-      ring: 'focus:ring-green-500',
-      text: 'text-green-600',
-      hover: 'hover:bg-green-100',
-      dropdown: 'border-green-300',
-      dropdownHover: 'hover:bg-green-50',
-      selected: 'bg-green-100',
-    },
-    purple: {
-      border: 'border-purple-300',
-      ring: 'focus:ring-purple-500',
-      text: 'text-purple-600',
-      hover: 'hover:bg-purple-100',
-      dropdown: 'border-purple-300',
-      dropdownHover: 'hover:bg-purple-50',
-      selected: 'bg-purple-100',
-    },
-  };
-
-  const colors = colorClasses[colorScheme];
 
   // Search users when input changes
   useEffect(() => {
@@ -204,61 +174,66 @@ export function UserSearchInput({
   };
 
   return (
-    <div className={`relative ${className}`} ref={dropdownRef}>
+    <div className={cn("relative", className)} ref={dropdownRef}>
       <div className="flex items-center gap-1">
         <div className="relative">
-          <input
+          <Input
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
-            className={`text-[11px] px-1.5 py-0.5 border ${colors.border} rounded focus:outline-none focus:ring-1 ${colors.ring} w-40`}
+            className="h-7 text-xs w-40 px-2 pr-6"
             disabled={disabled || isSubmitting}
             autoFocus
           />
           {isSearching && (
-            <Loader2 className={`absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 animate-spin ${colors.text}`} />
+            <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 animate-spin text-muted-foreground" />
           )}
         </div>
-        <button
+        <Button
+          size="icon"
+          variant="ghost"
           onClick={handleSubmit}
           disabled={disabled || isSubmitting || !inputValue.trim()}
-          className={`p-0.5 ${colors.text} ${colors.hover} rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+          className="h-7 w-7 hover:bg-muted text-muted-foreground hover:text-foreground"
           title="确认"
         >
-          <Check className="h-3 w-3" />
-        </button>
-        <button
+          <Check className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
           onClick={() => {
             setInputValue('');
             setShowDropdown(false);
             onCancel();
           }}
           disabled={isSubmitting}
-          className="p-0.5 text-neutral-600 hover:bg-neutral-100 rounded transition-colors"
+          className="h-7 w-7 hover:bg-muted text-muted-foreground hover:text-foreground"
           title="取消"
         >
-          <X className="h-3 w-3" />
-        </button>
+          <X className="h-3.5 w-3.5" />
+        </Button>
       </div>
 
       {/* Search Results Dropdown */}
       {showDropdown && searchResults.length > 0 && (
-        <div className={`absolute top-full left-0 mt-1 w-64 bg-white border ${colors.dropdown} rounded-md shadow-lg z-50 max-h-60 overflow-y-auto`}>
+        <div className="absolute top-full left-0 mt-1 w-64 bg-popover border border-border rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
           {searchResults.map((user, index) => (
             <button
               key={user.phid}
               onClick={() => handleSelectUser(user)}
               disabled={isSubmitting}
-              className={`w-full px-2 py-1.5 text-left text-[11px] ${colors.dropdownHover} transition-colors disabled:opacity-50 ${
-                index === selectedIndex ? colors.selected : ''
-              }`}
+              className={cn(
+                "w-full px-3 py-2 text-left text-xs transition-colors disabled:opacity-50 hover:bg-accent hover:text-accent-foreground",
+                index === selectedIndex && "bg-accent text-accent-foreground"
+              )}
             >
-              <div className="font-medium text-neutral-900">
+              <div className="font-medium">
                 {user.fields.realName}
               </div>
-              <div className="text-neutral-500">@{user.fields.username}</div>
+              <div className="text-muted-foreground">@{user.fields.username}</div>
             </button>
           ))}
         </div>

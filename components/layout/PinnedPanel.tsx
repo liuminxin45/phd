@@ -5,7 +5,10 @@ import { TaskDetailDialog } from '@/components/task/TaskDetailDialog';
 import { ProjectDetailPanel } from '@/components/project/ProjectDetailPanel';
 import { httpClient } from '@/lib/httpClient';
 import { Task, Project } from '@/lib/api';
-import * as Dialog from '@radix-ui/react-dialog';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 export function PinnedPanel() {
   const { pinnedItems, isPanelExpanded, togglePanel, removePinnedItem } = usePinnedPanel();
@@ -65,53 +68,52 @@ export function PinnedPanel() {
 
   const getTypeColor = (type: string) => {
     switch (type) {
-      case 'task': return 'bg-blue-500';
-      case 'project': return 'bg-purple-500';
-      case 'bookmark': return 'bg-amber-500';
-      default: return 'bg-neutral-500';
+      case 'task': return 'bg-blue-500 border-blue-500';
+      case 'project': return 'bg-purple-500 border-purple-500';
+      case 'bookmark': return 'bg-orange-500 border-orange-500';
+      default: return 'bg-muted border-muted-foreground';
     }
   };
 
-  // Always render the panel structure, just with 0 width when collapsed
-  // Webviews are always mounted to prevent refresh
   return (
-    <div className="relative flex">
+    <div className="relative flex h-full">
       {/* Toggle Button */}
       {pinnedItems.length > 0 && (
-        <button
+        <Button
           onClick={togglePanel}
-          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full z-10 bg-white border border-r-0 border-neutral-200 rounded-l-lg p-2 shadow-md hover:bg-neutral-50 transition-all"
+          variant="outline"
+          size="sm"
+          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full z-10 h-8 w-auto px-2 rounded-r-none border-r-0 shadow-md gap-1 bg-sidebar border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           title={isPanelExpanded ? 'Collapse pinned panel' : 'Expand pinned panel'}
         >
           {isPanelExpanded ? (
-            <ChevronRight className="h-4 w-4 text-neutral-600" />
+            <ChevronRight className="h-4 w-4" />
           ) : (
             <div className="flex items-center gap-1">
-              <Pin className="h-4 w-4 text-neutral-600" />
-              <span className="text-xs font-medium text-neutral-600">{pinnedItems.length}</span>
-              <ChevronLeft className="h-4 w-4 text-neutral-600" />
+              <Pin className="h-3.5 w-3.5" />
+              <span className="text-xs font-medium">{pinnedItems.length}</span>
+              <ChevronLeft className="h-3.5 w-3.5" />
             </div>
           )}
-        </button>
+        </Button>
       )}
 
       <aside
-        className={`bg-neutral-100 border-l border-neutral-200 flex flex-col transition-all duration-300 ${
-          isPanelExpanded ? 'w-80' : 'w-0 overflow-hidden'
-        }`}
+        className={cn(
+          "flex flex-col border-l border-sidebar-border bg-sidebar transition-all duration-300",
+          isPanelExpanded ? "w-80" : "w-0 overflow-hidden"
+        )}
       >
-        <div className="h-10 flex items-center justify-between px-3 border-b border-neutral-200 flex-shrink-0 bg-white">
-          <div className="flex items-center gap-2">
-            <Pin className="h-4 w-4 text-neutral-600" />
-            <span className="text-sm font-semibold text-neutral-900">Pinned</span>
-            <span className="text-xs text-neutral-500">({pinnedItems.length})</span>
-          </div>
+        <div className="flex h-10 shrink-0 items-center gap-2 border-b border-sidebar-border px-4 text-sidebar-foreground">
+          <Pin className="h-4 w-4" />
+          <span className="text-sm font-semibold">Pinned</span>
+          <span className="text-xs text-muted-foreground">({pinnedItems.length})</span>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2 space-y-2">
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {pinnedItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-neutral-400 p-4">
-              <Pin className="h-8 w-8 mb-2" />
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4">
+              <Pin className="h-8 w-8 mb-2 opacity-20" />
               <p className="text-sm text-center">No pinned items</p>
               <p className="text-xs text-center mt-1">Pin tasks to keep them here</p>
             </div>
@@ -123,40 +125,42 @@ export function PinnedPanel() {
               return (
                 <div 
                   key={item.id} 
-                  className={`rounded-lg overflow-hidden border-2 shadow-sm bg-white cursor-pointer transition-all ${
-                    isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-neutral-300 hover:border-blue-300'
-                  }`}
+                  className={cn(
+                    "group relative rounded-md border shadow-sm transition-all cursor-pointer overflow-hidden",
+                    isSelected ? "ring-2 ring-primary ring-offset-2" : "hover:shadow-md",
+                    getTypeColor(item.type).replace('bg-', 'border-l-4 border-l-') // Use color for left border
+                  )}
                   onClick={() => handleItemClick(item)}
                 >
-                  <div 
-                    className={`flex items-center justify-between px-3 py-2 select-none transition-colors ${getTypeColor(item.type)} hover:opacity-90`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      {isLoading ? (
-                        <Loader2 className="h-3.5 w-3.5 text-white flex-shrink-0 animate-spin" />
-                      ) : null}
-                      <span className="text-xs font-semibold text-white uppercase">
+                  <div className="bg-card p-3">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 uppercase tracking-wider font-bold h-5">
                         {item.type}
-                      </span>
-                      <span className="text-xs text-white/90 truncate" title={item.title}>
+                      </Badge>
+                      {isLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+                    </div>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-sm font-medium text-card-foreground line-clamp-2 leading-snug" title={item.title}>
                         {item.title}
                       </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removePinnedItem(item.id);
+                          if (selectedItem?.id === item.id) {
+                            setSelectedItem(null);
+                            setTaskData(null);
+                            setProjectData(null);
+                          }
+                        }}
+                        className="h-6 w-6 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all"
+                        title="Unpin"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removePinnedItem(item.id);
-                        if (selectedItem?.id === item.id) {
-                          setSelectedItem(null);
-                          setTaskData(null);
-                          setProjectData(null);
-                        }
-                      }}
-                      className="p-1 hover:bg-white/20 rounded transition-colors flex-shrink-0"
-                      title="Unpin"
-                    >
-                      <X className="h-3 w-3 text-white" />
-                    </button>
                   </div>
                 </div>
               );
@@ -184,7 +188,7 @@ export function PinnedPanel() {
       )}
 
       {selectedItem && selectedItem.type === 'project' && projectData && (
-        <Dialog.Root
+        <Dialog
           open={true}
           onOpenChange={(open) => {
             if (!open) {
@@ -193,20 +197,17 @@ export function PinnedPanel() {
             }
           }}
         >
-          <Dialog.Portal>
-            <Dialog.Overlay className="fixed inset-0 bg-black/50 z-[9000]" />
-            <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[9001]">
-              <ProjectDetailPanel
-                project={projectData}
-                isModal={true}
-                onClose={() => {
-                  setSelectedItem(null);
-                  setProjectData(null);
-                }}
-              />
-            </Dialog.Content>
-          </Dialog.Portal>
-        </Dialog.Root>
+          <DialogContent className="max-w-none w-auto h-auto p-0 bg-transparent border-0 shadow-none z-[9001]">
+            <ProjectDetailPanel
+              project={projectData}
+              isModal={true}
+              onClose={() => {
+                setSelectedItem(null);
+                setProjectData(null);
+              }}
+            />
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

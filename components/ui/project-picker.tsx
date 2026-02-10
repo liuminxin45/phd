@@ -1,5 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
-import { Search, X, Briefcase } from 'lucide-react';
+import { useState } from 'react';
+import { Search, X, Briefcase, Plus } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+import * as Popover from '@radix-ui/react-popover';
 
 interface Project {
   id: string;
@@ -13,9 +17,10 @@ interface ProjectPickerProps {
   onRemove: (projectId: string) => void;
   maxSelections?: number;
   dropdownZIndex?: number;
+  className?: string;
 }
 
-// Mock project data
+// Mock project data (In a real app, this might come from an API or props)
 const mockProjects: Project[] = [
   { id: '1', name: '工业维护Utility 1.5', color: 'blue' },
   { id: '2', name: '数据分析平台', color: 'green' },
@@ -26,11 +31,9 @@ const mockProjects: Project[] = [
   { id: '7', name: '日志服务', color: 'pink' },
 ];
 
-export function ProjectPicker({ selected, onAdd, onRemove, maxSelections, dropdownZIndex = 50 }: ProjectPickerProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function ProjectPicker({ selected, onAdd, onRemove, maxSelections, dropdownZIndex = 50, className }: ProjectPickerProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
 
   const filteredProjects = mockProjects.filter(
     (project) =>
@@ -47,101 +50,101 @@ export function ProjectPicker({ selected, onAdd, onRemove, maxSelections, dropdo
     setIsOpen(false);
   };
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node) &&
-        inputRef.current &&
-        !inputRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   const getColorClass = (color?: string) => {
+    // Mapping internal color names to our new Badge variants or specific classes
     const colors: Record<string, string> = {
-      blue: 'bg-blue-100 text-blue-700',
-      green: 'bg-green-100 text-green-700',
-      purple: 'bg-purple-100 text-purple-700',
-      orange: 'bg-orange-100 text-orange-700',
-      red: 'bg-red-100 text-red-700',
-      yellow: 'bg-yellow-100 text-yellow-700',
-      pink: 'bg-pink-100 text-pink-700',
+      blue: 'bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100/80',
+      green: 'bg-green-100 text-green-700 border-green-200 hover:bg-green-100/80',
+      purple: 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-100/80',
+      orange: 'bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-100/80',
+      red: 'bg-red-100 text-red-700 border-red-200 hover:bg-red-100/80',
+      yellow: 'bg-yellow-100 text-yellow-700 border-yellow-200 hover:bg-yellow-100/80',
+      pink: 'bg-pink-100 text-pink-700 border-pink-200 hover:bg-pink-100/80',
     };
     return colors[color || 'blue'] || colors.blue;
   };
 
+  const canAddMore = !maxSelections || selected.length < maxSelections;
+
   return (
-    <div className="flex-1 flex flex-wrap gap-1.5 items-center">
+    <div className={cn("flex flex-wrap items-center gap-2", className)}>
       {/* Selected Projects */}
       {selected.map((project) => (
-        <div
+        <Badge
           key={project.id}
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${getColorClass(project.color)}`}
+          variant="outline"
+          className={cn("gap-1 pr-1 font-normal", getColorClass(project.color))}
         >
-          <Briefcase className="h-3 w-3" />
+          <Briefcase className="h-3 w-3 opacity-70" />
           <span>{project.name}</span>
           <button
-            onClick={() => onRemove(project.id)}
-            className="hover:bg-black/10 rounded p-0.5 transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(project.id);
+            }}
+            className="ml-1 rounded-full p-0.5 hover:bg-black/10 transition-colors focus:outline-none"
           >
             <X className="h-3 w-3" />
           </button>
-        </div>
+        </Badge>
       ))}
 
-      {/* Search Input */}
-      {(!maxSelections || selected.length < maxSelections) && (
-        <div className="relative">
-          <div className="relative">
-            <input
-              ref={inputRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setIsOpen(true);
-              }}
-              onFocus={() => setIsOpen(true)}
-              placeholder="添加项目..."
-              className="text-xs px-2 py-1 pr-6 border border-neutral-300 rounded focus:outline-none focus:border-blue-600 min-w-[120px]"
-            />
-            <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-neutral-400" />
-          </div>
-
-          {/* Dropdown */}
-          {isOpen && (
-            <div
-              ref={dropdownRef}
-              className="absolute top-full left-0 mt-1 w-64 bg-white border border-neutral-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"
-              style={{ zIndex: dropdownZIndex }}
+      {/* Add Button with Popover */}
+      {canAddMore && (
+        <Popover.Root open={isOpen} onOpenChange={setIsOpen}>
+          <Popover.Trigger asChild>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded-md border border-dashed border-input px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:border-accent-foreground/50 hover:text-accent-foreground hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
-              {filteredProjects.length > 0 ? (
-                filteredProjects.map((project) => (
-                  <button
-                    key={project.id}
-                    onClick={() => handleAddProject(project)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-neutral-50 transition-colors text-left"
-                  >
-                    <div className={`h-6 w-6 rounded flex items-center justify-center ${getColorClass(project.color)}`}>
-                      <Briefcase className="h-3 w-3" />
-                    </div>
-                    <span className="text-neutral-900">{project.name}</span>
-                  </button>
-                ))
-              ) : (
-                <div className="px-3 py-2 text-xs text-neutral-500">
-                  {searchQuery ? '未找到匹配的项目' : '没有可用项目'}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+              <Plus className="h-3 w-3" />
+              添加项目
+            </button>
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Content
+              className="w-64 rounded-md border bg-popover p-2 text-popover-foreground shadow-md outline-none animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2"
+              style={{ zIndex: dropdownZIndex }}
+              sideOffset={5}
+              align="start"
+            >
+              {/* Search Input */}
+              <div className="relative mb-2">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="搜索项目..."
+                  className="pl-8 h-8 text-xs"
+                  autoFocus
+                />
+              </div>
+
+              {/* Project List */}
+              <div className="max-h-48 overflow-y-auto space-y-0.5">
+                {filteredProjects.length > 0 ? (
+                  filteredProjects.map((project) => (
+                    <button
+                      key={project.id}
+                      onClick={() => handleAddProject(project)}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-foreground hover:bg-accent hover:text-accent-foreground rounded-sm cursor-pointer transition-colors focus:outline-none"
+                    >
+                      <div className={cn("h-5 w-5 rounded flex items-center justify-center shrink-0 text-[10px]", getColorClass(project.color))}>
+                        <Briefcase className="h-3 w-3" />
+                      </div>
+                      <span className="truncate font-medium">{project.name}</span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="px-2 py-3 text-xs text-muted-foreground text-center">
+                    {searchQuery ? '未找到匹配的项目' : '没有可用项目'}
+                  </div>
+                )}
+              </div>
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
       )}
     </div>
   );

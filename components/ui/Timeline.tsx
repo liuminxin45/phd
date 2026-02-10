@@ -1,7 +1,12 @@
 import { useState, useCallback, useMemo } from 'react';
-import { Edit2, Trash2, Loader2, Check, MessageSquare, Download, Send } from 'lucide-react';
+import { Edit2, Trash2, Loader2, Check, MessageSquare, Download, Send, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { toastWithUndo } from '@/lib/toast';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Card } from '@/components/ui/card';
 
 export interface TimelineItem {
   id: number | string;
@@ -26,6 +31,7 @@ interface TimelineProps {
   fileCache?: Record<string, string>;
   fileMetadata?: Record<string, any>;
   onImagePreview?: (src: string, alt: string) => void;
+  className?: string;
 }
 
 // Process text to replace file references with inline display
@@ -60,7 +66,7 @@ function processTextWithFiles(
             key={`file-${fileId}-${match.index}`}
             src={dataURI}
             alt={metadata.name || `F${fileId}`}
-            className="inline-block max-w-[80px] h-auto rounded-lg shadow-sm my-1 cursor-zoom-in hover:opacity-90 transition-opacity"
+            className="inline-block max-w-[120px] h-auto rounded-md border shadow-sm my-1 cursor-zoom-in hover:opacity-90 transition-opacity"
             onClick={(e) => {
               e.stopPropagation();
               if (onImagePreview) {
@@ -74,7 +80,7 @@ function processTextWithFiles(
         parts.push(
           <a
             key={`file-${fileId}-${match.index}`}
-            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline cursor-pointer mx-1"
+            className="inline-flex items-center gap-1.5 text-primary hover:text-primary/80 hover:underline cursor-pointer mx-1 font-medium"
             onClick={async (e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -108,7 +114,7 @@ function processTextWithFiles(
               }
             }}
           >
-            <Download className="h-3 w-3" />
+            <Download className="h-3.5 w-3.5" />
             <span>{metadata.name || `F${fileId}`}</span>
           </a>
         );
@@ -116,7 +122,7 @@ function processTextWithFiles(
     } else {
       // File not loaded, show placeholder
       parts.push(
-        <span key={`file-${fileId}-${match.index}`} className="text-neutral-400 mx-1">
+        <span key={`file-${fileId}-${match.index}`} className="text-muted-foreground mx-1 text-xs bg-muted px-1 py-0.5 rounded">
           {match[0]}
         </span>
       );
@@ -146,6 +152,7 @@ export function Timeline({
   fileCache = {},
   fileMetadata = {},
   onImagePreview,
+  className,
 }: TimelineProps) {
   const [editingItemId, setEditingItemId] = useState<number | string | null>(null);
   const [editedText, setEditedText] = useState('');
@@ -261,157 +268,157 @@ export function Timeline({
   };
 
   return (
-    <div className="space-y-2">
+    <div className={cn("space-y-4", className)}>
       {/* Title Section */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-neutral-900 flex items-center gap-2">
-          <MessageSquare className="h-4 w-4" />
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+          <MessageSquare className="h-4 w-4 text-muted-foreground" />
           {title}
         </h3>
-        <span className="text-xs text-neutral-500">
+        <span className="text-xs text-muted-foreground">
           {visibleItems.length} 条{title.includes('评论') ? '评论' : '动态'}
         </span>
       </div>
 
       {/* Timeline Container */}
-      <div className="bg-gradient-to-br from-blue-50 to-neutral-50 border border-blue-200 rounded-lg p-4 shadow-sm">
+      <div className="bg-muted/30 border border-border rounded-lg p-4 shadow-sm">
         {/* Items List */}
-        <div className="mb-4 max-h-80 overflow-y-auto pr-1">
+        <div className="max-h-[400px] overflow-y-auto pr-2 space-y-4">
         {visibleItems.length === 0 ? (
-          <div className="text-center py-8">
-            <MessageSquare className="h-12 w-12 text-neutral-300 mx-auto mb-2" />
-            <p className="text-sm text-neutral-500">{emptyMessage}</p>
+          <div className="text-center py-10">
+            <MessageSquare className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">{emptyMessage}</p>
           </div>
         ) : (
-          <div className="space-y-2">
-      {visibleItems.map((item) => (
-        <div
-          key={item.id}
-          className="bg-white border border-neutral-200 rounded-lg p-3 hover:shadow-md transition-shadow group"
-        >
-          <div className="flex items-start justify-between mb-2">
-            <div className="flex items-center gap-2">
-              {item.authorImage ? (
-                <img
-                  src={item.authorImage}
-                  alt={item.author}
-                  className="w-6 h-6 rounded-full object-cover"
-                />
-              ) : (
-                <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-semibold">
-                  {item.author.charAt(0)}
-                </div>
-              )}
-              <span className="text-xs font-semibold text-neutral-900">{item.author}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-neutral-500">{item.timestamp}</span>
-              {showActions && (onEdit || onDelete) && (
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {onEdit && (
-                    <button
-                      onClick={() => handleEditClick(item)}
-                      className="p-1 hover:bg-blue-100 rounded transition-all"
-                      title="编辑"
-                    >
-                      <Edit2 className="h-3 w-3 text-blue-500" />
-                    </button>
-                  )}
-                  {onDelete && (
-                    <button
-                      onClick={() => handleDelete(item)}
-                      disabled={isDeleting === item.id}
-                      className="p-1 hover:bg-red-100 rounded transition-all disabled:opacity-50"
-                      title="删除"
-                    >
-                      {isDeleting === item.id ? (
-                        <Loader2 className="h-3 w-3 text-red-500 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-3 w-3 text-red-500" />
-                      )}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-          {editingItemId === item.id ? (
-            <div className="pl-8 space-y-2">
-              <textarea
-                value={editedText}
-                onChange={(e) => setEditedText(e.target.value)}
-                className="w-full text-xs text-neutral-700 bg-white border border-blue-300 rounded-lg p-2 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 resize-none"
-                rows={3}
-                autoFocus
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleSaveEdit(item)}
-                  disabled={isUpdating}
-                  className="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                >
-                  {isUpdating ? (
-                    <>
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      保存中...
-                    </>
+          <div className="space-y-4">
+            {visibleItems.map((item) => (
+              <div
+                key={item.id}
+                className="group relative flex gap-3"
+              >
+                <Avatar className="h-8 w-8 shrink-0 border">
+                  <AvatarImage src={item.authorImage || undefined} alt={item.author} />
+                  <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                    {item.author.charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
+                
+                <div className="flex-1 min-w-0">
+                   {/* Header: Author + Meta + Actions */}
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-foreground">{item.author}</span>
+                      <span className="text-xs text-muted-foreground">{item.timestamp}</span>
+                    </div>
+                    
+                    {showActions && (onEdit || onDelete) && (
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {onEdit && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                            onClick={() => handleEditClick(item)}
+                            title="编辑"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                        {onDelete && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleDelete(item)}
+                            disabled={isDeleting === item.id}
+                            title="删除"
+                          >
+                            {isDeleting === item.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3 w-3" />
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Content or Edit Form */}
+                  {editingItemId === item.id ? (
+                    <div className="space-y-2">
+                      <Textarea
+                        value={editedText}
+                        onChange={(e) => setEditedText(e.target.value)}
+                        className="min-h-[80px] text-sm"
+                        autoFocus
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleSaveEdit(item)}
+                          disabled={isUpdating}
+                        >
+                          {isUpdating ? (
+                            <>
+                              <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                              保存中
+                            </>
+                          ) : (
+                            <>
+                              <Check className="mr-2 h-3 w-3" />
+                              保存
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleCancelEdit}
+                        >
+                          取消
+                        </Button>
+                      </div>
+                    </div>
                   ) : (
-                    <>
-                      <Check className="h-3 w-3" />
-                      保存
-                    </>
+                    <div className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap break-words bg-background border border-border/50 rounded-md p-3 shadow-sm">
+                      {processTextWithFiles(item.content, fileCache, fileMetadata, onImagePreview)}
+                    </div>
                   )}
-                </button>
-                <button
-                  onClick={handleCancelEdit}
-                  className="px-3 py-1 text-neutral-600 text-xs hover:bg-neutral-100 rounded-lg transition-colors"
-                >
-                  取消
-                </button>
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="text-xs text-neutral-700 leading-relaxed pl-8 whitespace-pre-wrap break-words">
-              {processTextWithFiles(item.content, fileCache, fileMetadata, onImagePreview)}
-            </div>
-          )}
-        </div>
-      ))}
+            ))}
           </div>
         )}
-      </div>
-
-      {/* Add New Input */}
-      {showAddInput && onAdd && (
-        <div className="space-y-2 pt-3 border-t border-blue-200">
-          <textarea
-            value={newContent}
-            onChange={(e) => setNewContent(e.target.value)}
-            placeholder={addPlaceholder}
-            className="w-full text-sm px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 resize-none transition-all"
-            rows={3}
-            disabled={isAdding}
-          />
-          <div className="flex justify-end">
-            <button
-              onClick={handleAdd}
-              disabled={!newContent.trim() || isAdding}
-              className={`flex items-center gap-2 px-4 py-2 text-sm rounded-lg transition-all ${
-                newContent.trim() && !isAdding
-                  ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
-                  : 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
-              }`}
-            >
-              {isAdding ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Send className="h-3.5 w-3.5" />
-              )}
-              {isAdding ? '发布中...' : '发布动态'}
-            </button>
-          </div>
         </div>
-      )}
+
+        {/* Add New Input */}
+        {showAddInput && onAdd && (
+          <div className="mt-4 pt-4 border-t border-border space-y-3">
+            <Textarea
+              value={newContent}
+              onChange={(e) => setNewContent(e.target.value)}
+              placeholder={addPlaceholder}
+              className="min-h-[80px] text-sm resize-none"
+              disabled={isAdding}
+            />
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                onClick={handleAdd}
+                disabled={!newContent.trim() || isAdding}
+                className="gap-2"
+              >
+                {isAdding ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Send className="h-3.5 w-3.5" />
+                )}
+                {isAdding ? '发布中...' : '发布'}
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,4 +1,6 @@
 import { Send } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 const APPLY_OPTIONS = [
   { label: '今天1次', date: 0, times: 1 },
@@ -17,25 +19,25 @@ interface ApplyButtonsProps {
   variant?: 'primary' | 'danger';
 }
 
-const VARIANT_CLASSES = {
-  primary: 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100',
-  danger: 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100',
-} as const;
-
 export function ApplyButtons({ onApply, disabled, showIcon = true, variant = 'primary' }: ApplyButtonsProps) {
   return (
-    <>
+    <div className="flex flex-wrap gap-2">
       {APPLY_OPTIONS.map(({ label, date, times }) => (
-        <button
+        <Button
           key={label}
           onClick={() => onApply(date, times)}
           disabled={disabled}
-          className={`px-2 py-1 text-xs rounded border disabled:opacity-50 ${VARIANT_CLASSES[variant]}`}
+          variant={variant === 'danger' ? 'destructive' : 'outline'}
+          size="sm"
+          className={cn(
+            "h-7 text-xs px-2",
+            variant === 'primary' && "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 hover:text-orange-800"
+          )}
         >
-          {showIcon && <Send className="w-3 h-3 inline mr-1" />}
+          {showIcon && <Send className="w-3 h-3 mr-1" />}
           {label}
-        </button>
+        </Button>
       ))}
-    </>
+    </div>
   );
 }

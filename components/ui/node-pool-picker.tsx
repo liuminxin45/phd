@@ -1,5 +1,13 @@
-import { useState, useRef, useEffect } from 'react';
-import { Search, Layers } from 'lucide-react';
+import { useState } from 'react';
+import { Search, Layers, Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 
 interface NodePoolItem {
   id: number;
@@ -13,13 +21,19 @@ interface NodePoolPickerProps {
   items: NodePoolItem[];
   isLoading?: boolean;
   placeholder?: string;
+  className?: string;
 }
 
-export function NodePoolPicker({ value, onChange, items, isLoading, placeholder = '选择节点池节点...' }: NodePoolPickerProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function NodePoolPicker({ 
+  value, 
+  onChange, 
+  items, 
+  isLoading, 
+  placeholder = '选择节点池节点...',
+  className 
+}: NodePoolPickerProps) {
+  const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const selectedItem = items.find(item => item.phid === value);
 
@@ -30,24 +44,8 @@ export function NodePoolPicker({ value, onChange, items, isLoading, placeholder 
   const handleSelectItem = (item: NodePoolItem) => {
     onChange(item.phid);
     setSearchQuery('');
-    setIsOpen(false);
+    setOpen(false);
   };
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node) &&
-        inputRef.current &&
-        !inputRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   const getColorClass = (index: number) => {
     const colors = [
@@ -65,53 +63,67 @@ export function NodePoolPicker({ value, onChange, items, isLoading, placeholder 
   };
 
   return (
-    <div className="relative w-full">
-      <div className="relative">
-        <input
-          ref={inputRef}
-          type="text"
-          value={isOpen ? searchQuery : (selectedItem?.name || '')}
-          onChange={(e) => {
-            setSearchQuery(e.target.value);
-            setIsOpen(true);
-          }}
-          onFocus={() => {
-            setSearchQuery('');
-            setIsOpen(true);
-          }}
-          placeholder={isLoading ? '加载中...' : placeholder}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn("w-full justify-between font-normal", !value && "text-muted-foreground", className)}
           disabled={isLoading}
-          className="w-full text-sm px-3 py-2 pr-8 border border-neutral-300 rounded focus:outline-none focus:border-blue-600"
-        />
-        <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
-      </div>
-
-      {/* Dropdown */}
-      {isOpen && !isLoading && (
-        <div
-          ref={dropdownRef}
-          className="absolute top-full left-0 mt-1 w-full bg-white border border-neutral-200 rounded-lg shadow-lg max-h-64 overflow-y-auto z-50"
         >
+          <div className="flex items-center gap-2 truncate">
+            {selectedItem ? (
+              <>
+                <Layers className="h-4 w-4 shrink-0 opacity-50" />
+                <span className="truncate">{selectedItem.name}</span>
+              </>
+            ) : (
+              <span>{isLoading ? '加载中...' : placeholder}</span>
+            )}
+          </div>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-2" align="start">
+        <div className="relative mb-2">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="搜索节点..."
+            className="pl-8 h-8 text-sm"
+            autoFocus
+          />
+        </div>
+        
+        <div className="max-h-60 overflow-y-auto space-y-1">
           {filteredItems.length > 0 ? (
             filteredItems.map((item, index) => (
               <button
                 key={item.phid}
                 onClick={() => handleSelectItem(item)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-neutral-50 transition-colors text-left"
+                className={cn(
+                  "w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors text-left",
+                  value === item.phid && "bg-accent text-accent-foreground"
+                )}
               >
-                <div className={`h-6 w-6 rounded flex items-center justify-center ${getColorClass(index)}`}>
+                <div className={cn("h-6 w-6 rounded flex items-center justify-center shrink-0 text-xs", getColorClass(index))}>
                   <Layers className="h-3 w-3" />
                 </div>
-                <span className="text-neutral-900">{item.name}</span>
+                <span className="flex-1 truncate">{item.name}</span>
+                {value === item.phid && (
+                  <Check className="h-4 w-4 shrink-0 opacity-50" />
+                )}
               </button>
             ))
           ) : (
-            <div className="px-3 py-2 text-xs text-neutral-500">
+            <div className="py-4 text-center text-muted-foreground text-xs">
               {searchQuery ? '未找到匹配的节点' : '没有可用节点'}
             </div>
           )}
         </div>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }

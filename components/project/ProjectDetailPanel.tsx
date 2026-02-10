@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
+import { 
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose 
+} from '@/components/ui/dialog';
 import { X, Info, BarChart, Kanban, FileText, Users, User, TrendingUp, MessageSquare, Send, Plus, Settings, Trash2, Search, Filter, ChevronRight, GripVertical, Upload, ExternalLink, Edit2, Check, Loader2, Maximize2, Minimize2, Pin } from 'lucide-react';
 import { Project } from '@/lib/api';
 import { httpClient } from '@/lib/httpClient';
@@ -7,7 +9,13 @@ import { toast, toastWithUndo } from '@/lib/toast';
 import { PeoplePicker } from '@/components/ui/people-picker';
 import { Progress } from '@/components/ui/progress';
 import { DatePicker } from '@/components/ui/date-picker';
-import { Dropdown } from '@/components/ui/dropdown';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from '@/components/ui/input';
 import { NodePoolPicker } from '@/components/ui/node-pool-picker';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
@@ -1233,14 +1241,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose, defaultF
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-neutral-900">任务看板</h3>
                 <div className="flex items-center gap-2">
-                  <Dropdown
-                    options={[
-                      { value: 'All', label: '所有成员' },
-                      ...Array.from(new Set(kanbanTasks.map(t => t.assignee))).map(assignee => ({
-                        value: assignee,
-                        label: assignee
-                      }))
-                    ]}
+                  <Select
                     value={kanbanMemberFilter.length === 0 ? 'All' : kanbanMemberFilter[0]}
                     onValueChange={(value) => {
                       if (value === 'All') {
@@ -1249,19 +1250,40 @@ export function ProjectDetailPanel({ project, isModal = false, onClose, defaultF
                         setKanbanMemberFilter([value]);
                       }
                     }}
-                    icon={Users}
-                  />
-                  <Dropdown
-                    options={[
-                      { value: 'All', label: '所有状态' },
-                      { value: 'Waiting', label: '待办' },
-                      { value: 'In Progress', label: '进行中' },
-                      { value: 'Completed', label: '已完成' },
-                    ]}
+                  >
+                    <SelectTrigger className="w-[140px] h-8 text-xs">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-3 w-3 opacity-50" />
+                        <SelectValue placeholder="所有成员" />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All" className="text-xs">所有成员</SelectItem>
+                      {Array.from(new Set(kanbanTasks.map(t => t.assignee))).map(assignee => (
+                        <SelectItem key={assignee} value={assignee} className="text-xs">
+                          {assignee}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select
                     value={kanbanStatusFilter}
                     onValueChange={(value) => setKanbanStatusFilter(value)}
-                    icon={Filter}
-                  />
+                  >
+                    <SelectTrigger className="w-[120px] h-8 text-xs">
+                      <div className="flex items-center gap-2">
+                        <Filter className="h-3 w-3 opacity-50" />
+                        <SelectValue placeholder="所有状态" />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All" className="text-xs">所有状态</SelectItem>
+                      <SelectItem value="Waiting" className="text-xs">待办</SelectItem>
+                      <SelectItem value="In Progress" className="text-xs">进行中</SelectItem>
+                      <SelectItem value="Completed" className="text-xs">已完成</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               
@@ -1788,25 +1810,16 @@ export function ProjectDetailPanel({ project, isModal = false, onClose, defaultF
 
       {/* Milestone Edit Panel */}
       {isEditPanelOpen && editingMilestone && (
-        <Dialog.Root open={isEditPanelOpen} onOpenChange={setIsEditPanelOpen}>
-          <Dialog.Portal>
-            <Dialog.Overlay className="fixed inset-0 bg-black/50 z-[10100]" />
-            <Dialog.Content 
-              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl w-[600px] max-h-[90vh] overflow-y-auto z-[10100]"
-              onPointerDownOutside={(e) => e.preventDefault()}
-              onInteractOutside={(e) => e.preventDefault()}
-            >
-              <div className="p-6 space-y-6">
-                <div className="flex items-center justify-between mb-6">
-                  <Dialog.Title className="text-lg font-semibold text-neutral-900">
-                    {isAddMode ? '创建里程碑' : '编辑里程碑'}
-                  </Dialog.Title>
-                  <Dialog.Close className="p-2 hover:bg-neutral-100 rounded transition-colors">
-                    <X className="h-5 w-5 text-neutral-500" />
-                  </Dialog.Close>
-                </div>
+        <Dialog open={isEditPanelOpen} onOpenChange={setIsEditPanelOpen}>
+          <DialogContent className="max-w-[600px] max-h-[90vh] overflow-y-auto z-[10100] flex flex-col gap-0 p-0">
+            <div className="p-6 space-y-6">
+              <div className="flex items-center justify-between mb-2">
+                <DialogTitle className="text-lg font-semibold text-neutral-900">
+                  {isAddMode ? '创建里程碑' : '编辑里程碑'}
+                </DialogTitle>
+              </div>
 
-                <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                   {/* Node Name */}
                   <div className="col-span-2">
                     <label className="block text-xs font-medium text-neutral-600 mb-1.5">节点名称</label>
@@ -1837,19 +1850,22 @@ export function ProjectDetailPanel({ project, isModal = false, onClose, defaultF
                   {/* Pre Node */}
                   <div className="col-span-2">
                     <label className="block text-xs font-medium text-neutral-600 mb-1.5">前置节点</label>
-                    <Dropdown
-                      options={[
-                        { value: '-', label: '无' },
-                        ...milestones.filter(m => m.id !== editingMilestone.id).map(m => ({
-                          value: m.node,
-                          label: m.node
-                        }))
-                      ]}
+                    <Select
                       value={editingMilestone.preNode}
                       onValueChange={(value) => setEditingMilestone({ ...editingMilestone, preNode: value })}
-                      placeholder="选择前置节点"
-                      className="w-full justify-between border border-neutral-300"
-                    />
+                    >
+                      <SelectTrigger className="w-full text-sm">
+                        <SelectValue placeholder="选择前置节点" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="-">无</SelectItem>
+                        {milestones.filter(m => m.id !== editingMilestone.id).map(m => (
+                          <SelectItem key={m.node} value={m.node}>
+                            {m.node}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   {/* Original Plan */}
@@ -1892,31 +1908,6 @@ export function ProjectDetailPanel({ project, isModal = false, onClose, defaultF
                   {/* Process Node and Task ID fields are hidden - functionality not implemented yet
                   <div>
                     <label className="block text-xs font-medium text-neutral-600 mb-1.5">流程节点</label>
-                    <Dropdown
-                      options={[
-                        { value: '未开始', label: '未开始' },
-                        { value: '进行中', label: '进行中' },
-                        { value: '已完成', label: '已完成' },
-                        { value: '已延期', label: '已延期' }
-                      ]}
-                      value={editingMilestone.processNode}
-                      onValueChange={(value) => setEditingMilestone({ ...editingMilestone, processNode: value })}
-                      placeholder="选择流程节点"
-                      className="w-full justify-between border border-neutral-300"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-neutral-600 mb-1.5">任务编号</label>
-                    <Input
-                      type="text"
-                      value={editingMilestone.taskId}
-                      onChange={(e) => setEditingMilestone({ ...editingMilestone, taskId: e.target.value })}
-                      className="w-full text-sm"
-                      placeholder="T12345"
-                    />
-                  </div>
-                  */}
-
                   {/* Delay-related fields - Only show in edit mode */}
                   {!isAddMode && (
                     <>
@@ -1959,46 +1950,47 @@ export function ProjectDetailPanel({ project, isModal = false, onClose, defaultF
                       {/* Delay Team */}
                       <div>
                         <label className="block text-xs font-medium text-neutral-600 mb-1.5">延期团队</label>
-                        <Dropdown
-                          options={[
-                            { value: '', label: '请选择' },
-                            { value: '产品', label: '产品' },
-                            { value: '软件', label: '软件' },
-                            { value: '硬件', label: '硬件' },
-                            { value: '测试', label: '测试' },
-                            { value: '结构', label: '结构' },
-                            { value: 'ISP', label: 'ISP' },
-                            { value: '算法', label: '算法' },
-                            { value: '采购', label: '采购' },
-                            { value: '生产', label: '生产' },
-                            { value: 'CAD', label: 'CAD' },
-                            { value: '其它', label: '其它' },
-                            { value: '历史存档', label: '历史存档' }
-                          ]}
+                        <Select
                           value={delayTeam}
                           onValueChange={(value) => {
                             setDelayTeam(value);
                             setDelayReason('');
                           }}
-                          placeholder="选择延期团队"
-                          className="w-full justify-between border border-neutral-300"
-                        />
+                        >
+                          <SelectTrigger className="w-full text-sm">
+                            <SelectValue placeholder="选择延期团队" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="null_option">请选择</SelectItem>
+                            {['产品', '软件', '硬件', '测试', '结构', 'ISP', '算法', '采购', '生产', 'CAD', '其它', '历史存档'].map(team => (
+                              <SelectItem key={team} value={team}>{team}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
 
                       {/* Delay Reason - Conditional based on team */}
                       {delayTeam && (
                         <div>
                           <label className="block text-xs font-medium text-neutral-600 mb-1.5">延期原因</label>
-                          <Dropdown
-                            options={getDelayReasonOptions(delayTeam)}
+                          <Select
                             value={delayReason}
                             onValueChange={(value) => {
                               setDelayReason(value);
                               setEditingMilestone({ ...editingMilestone, delayCategory: `(${delayTeam})${value}` });
                             }}
-                            placeholder="选择延期原因"
-                            className="w-full justify-between border border-neutral-300"
-                          />
+                          >
+                            <SelectTrigger className="w-full text-sm">
+                              <SelectValue placeholder="选择延期原因" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {getDelayReasonOptions(delayTeam).map(option => (
+                                <SelectItem key={option.value || 'empty'} value={option.value || 'empty_val'}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                       )}
 
@@ -2239,9 +2231,8 @@ export function ProjectDetailPanel({ project, isModal = false, onClose, defaultF
                   </button>
                 </div>
               </div>
-            </Dialog.Content>
-          </Dialog.Portal>
-        </Dialog.Root>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

@@ -22,6 +22,11 @@ import {
   Info,
 } from 'lucide-react';
 import { CATEGORIES, TAGS, getLastWeekRange } from '@/lib/blog/helpers';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 // ─── Shared toolbar items ────────────────────────────────────────────────────
 
@@ -50,44 +55,42 @@ function EditorShell({ editorMode, setEditorMode, content, setContent, toolbarIt
   placeholder: string;
 }) {
   return (
-    <div className="bg-white border border-neutral-200 rounded-lg overflow-hidden">
+    <Card className="overflow-hidden">
       {/* Toolbar */}
-      <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-2">
+      <div className="flex items-center justify-between border-b px-4 py-2 bg-muted/20">
         <div className="flex items-center gap-1">
-          <button
+          <Button
             onClick={() => setEditorMode('edit')}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md transition-colors ${
-              editorMode === 'edit'
-                ? 'bg-neutral-900 text-white'
-                : 'text-neutral-500 hover:bg-neutral-100'
-            }`}
+            variant={editorMode === 'edit' ? 'default' : 'ghost'}
+            size="sm"
+            className="h-7 text-xs gap-1.5"
           >
             <Pencil className="h-3 w-3" />
             编辑
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => setEditorMode('preview')}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md transition-colors ${
-              editorMode === 'preview'
-                ? 'bg-neutral-900 text-white'
-                : 'text-neutral-500 hover:bg-neutral-100'
-            }`}
+            variant={editorMode === 'preview' ? 'default' : 'ghost'}
+            size="sm"
+            className="h-7 text-xs gap-1.5"
           >
             <Eye className="h-3 w-3" />
             预览
-          </button>
-          <div className="w-px h-4 bg-neutral-200 mx-1.5" />
+          </Button>
+          <div className="w-px h-4 bg-border mx-1.5" />
           {toolbarItems.map(({ icon: Icon, title }) => (
-            <button
+            <Button
               key={title}
               title={title}
-              className="p-1.5 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 rounded transition-colors"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
             >
               <Icon className="h-3.5 w-3.5" />
-            </button>
+            </Button>
           ))}
         </div>
-        <span className="text-xs text-neutral-400">支持 Markdown</span>
+        <span className="text-xs text-muted-foreground">支持 Markdown</span>
       </div>
 
       {/* Editor / Preview */}
@@ -96,22 +99,25 @@ function EditorShell({ editorMode, setEditorMode, content, setContent, toolbarIt
           placeholder={placeholder}
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          className="w-full min-h-[420px] p-4 text-sm text-neutral-800 placeholder:text-neutral-400 bg-transparent resize-y outline-none font-mono leading-relaxed"
+          className="w-full min-h-[500px] p-6 text-sm text-foreground placeholder:text-muted-foreground bg-transparent resize-y outline-none font-mono leading-relaxed"
         />
       ) : (
-        <div className="min-h-[420px] p-4">
+        <div className="min-h-[500px] p-6">
           {content ? (
-            <div className="prose prose-sm max-w-none text-neutral-800">
+            <div className="prose prose-sm max-w-none dark:prose-invert">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {content}
               </ReactMarkdown>
             </div>
           ) : (
-            <p className="text-sm text-neutral-400">暂无内容可预览</p>
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground min-h-[200px]">
+              <Eye className="h-8 w-8 mb-2 opacity-20" />
+              <p className="text-sm">暂无内容可预览</p>
+            </div>
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -126,38 +132,40 @@ function StatusSelector({ status, setStatus, draftLabel, publishedLabel, draftHi
   publishedHint: string;
 }) {
   return (
-    <div className="bg-white border border-neutral-200 rounded-lg p-4">
-      <p className="text-sm font-medium text-neutral-900 mb-3">
-        {draftLabel === '草稿' ? '周报状态' : '博客状态'}
-      </p>
-      <div className="flex gap-2">
-        <button
-          onClick={() => setStatus('draft')}
-          className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-md border transition-colors ${
-            status === 'draft'
-              ? 'bg-amber-50 text-amber-700 border-amber-200'
-              : 'text-neutral-500 border-neutral-200 hover:bg-neutral-50'
-          }`}
-        >
-          <FileText className="h-3.5 w-3.5" />
-          {draftLabel}
-        </button>
-        <button
-          onClick={() => setStatus('published')}
-          className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs rounded-md border transition-colors ${
-            status === 'published'
-              ? 'bg-green-50 text-green-700 border-green-200'
-              : 'text-neutral-500 border-neutral-200 hover:bg-neutral-50'
-          }`}
-        >
-          <Send className="h-3.5 w-3.5" />
-          {publishedLabel}
-        </button>
-      </div>
-      <p className="text-xs text-neutral-400 mt-2">
-        {status === 'draft' ? draftHint : publishedHint}
-      </p>
-    </div>
+    <Card>
+      <CardContent className="p-4">
+        <p className="text-sm font-medium text-foreground mb-3">
+          {draftLabel === '草稿' ? '周报状态' : '博客状态'}
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            onClick={() => setStatus('draft')}
+            variant={status === 'draft' ? 'secondary' : 'outline'}
+            className={cn(
+              "text-xs h-8 gap-1.5",
+              status === 'draft' && "bg-amber-100 text-amber-700 hover:bg-amber-200 border-transparent"
+            )}
+          >
+            <FileText className="h-3.5 w-3.5" />
+            {draftLabel}
+          </Button>
+          <Button
+            onClick={() => setStatus('published')}
+            variant={status === 'published' ? 'secondary' : 'outline'}
+            className={cn(
+              "text-xs h-8 gap-1.5",
+              status === 'published' && "bg-green-100 text-green-700 hover:bg-green-200 border-transparent"
+            )}
+          >
+            <Send className="h-3.5 w-3.5" />
+            {publishedLabel}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground mt-2 text-center">
+          {status === 'draft' ? draftHint : publishedHint}
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -166,27 +174,31 @@ function StatusSelector({ status, setStatus, draftLabel, publishedLabel, draftHi
 function AuthorTimeSidebar() {
   return (
     <>
-      <div className="bg-white border border-neutral-200 rounded-lg p-4">
-        <p className="text-sm font-medium text-neutral-900 mb-3">作者信息</p>
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-full bg-neutral-200 flex items-center justify-center">
-            <User className="h-4 w-4 text-neutral-500" />
+      <Card>
+        <CardContent className="p-4">
+          <p className="text-sm font-medium text-foreground mb-3">作者信息</p>
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center">
+              <User className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">当前用户</p>
+              <p className="text-xs text-muted-foreground">作者（只读）</p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm text-neutral-800">当前用户</p>
-            <p className="text-xs text-neutral-400">作者（只读）</p>
-          </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      <div className="bg-white border border-neutral-200 rounded-lg p-4">
-        <p className="text-sm font-medium text-neutral-900 mb-3">发布时间</p>
-        <div className="flex items-center gap-2 text-sm text-neutral-600">
-          <Calendar className="h-4 w-4 text-neutral-400" />
-          <span>{new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })}</span>
-          <span className="text-xs text-neutral-400 ml-1">（默认当前时间）</span>
-        </div>
-      </div>
+      <Card>
+        <CardContent className="p-4">
+          <p className="text-sm font-medium text-foreground mb-3">发布时间</p>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/30 p-2 rounded-md">
+            <Calendar className="h-4 w-4 shrink-0" />
+            <span>{new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })}</span>
+            <span className="text-xs ml-auto">（当前）</span>
+          </div>
+        </CardContent>
+      </Card>
     </>
   );
 }
@@ -220,35 +232,35 @@ export function CreateBlogView({ onBack }: { onBack: () => void }) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6 py-6 max-w-7xl mx-auto">
       {/* Action Bar */}
-      <div className="bg-white border border-neutral-200 rounded-lg px-4 py-3 flex items-center justify-between">
-        <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-neutral-600 hover:text-neutral-900 transition-colors">
-          <ArrowLeft className="h-4 w-4" />
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <Button onClick={onBack} variant="ghost" className="pl-0 hover:bg-transparent">
+          <ArrowLeft className="h-4 w-4 mr-2" />
           返回博客首页
-        </button>
-        <div className="flex items-center gap-2">
-          <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-neutral-600 border border-neutral-200 rounded-md hover:bg-neutral-50 transition-colors">
-            <Save className="h-3.5 w-3.5" />
+        </Button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Button variant="outline" className="flex-1 sm:flex-none">
+            <Save className="h-4 w-4 mr-2" />
             保存草稿
-          </button>
-          <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-white bg-neutral-900 rounded-md hover:bg-neutral-800 transition-colors">
-            <Send className="h-3.5 w-3.5" />
+          </Button>
+          <Button className="flex-1 sm:flex-none">
+            <Send className="h-4 w-4 mr-2" />
             发布博客
-          </button>
+          </Button>
         </div>
       </div>
 
-      <div className="flex gap-5">
+      <div className="flex flex-col lg:flex-row gap-6">
         {/* Editor */}
-        <div className="flex-1 min-w-0 space-y-4">
-          <div className="bg-white border border-neutral-200 rounded-lg p-4">
+        <div className="flex-1 min-w-0 space-y-6">
+          <div className="relative">
             <input
               type="text"
               placeholder="请输入博客标题"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full text-lg font-semibold text-neutral-900 placeholder:text-neutral-400 bg-transparent border-none outline-none"
+              className="w-full text-3xl font-bold text-foreground placeholder:text-muted-foreground/50 bg-transparent border-none outline-none py-2"
             />
           </div>
           <EditorShell
@@ -262,7 +274,7 @@ export function CreateBlogView({ onBack }: { onBack: () => void }) {
         </div>
 
         {/* Sidebar */}
-        <aside className="w-72 flex-shrink-0 space-y-4">
+        <aside className="w-full lg:w-80 flex-shrink-0 space-y-6">
           <StatusSelector
             status={status}
             setStatus={setStatus}
@@ -273,65 +285,67 @@ export function CreateBlogView({ onBack }: { onBack: () => void }) {
           />
 
           {/* Category */}
-          <div className="bg-white border border-neutral-200 rounded-lg p-4">
-            <p className="text-sm font-medium text-neutral-900 mb-3">分类</p>
-            <div className="flex flex-wrap gap-1.5">
-              {CATEGORIES.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
-                  className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
-                    selectedCategory === cat
-                      ? 'bg-neutral-900 text-white border-neutral-900'
-                      : 'text-neutral-600 border-neutral-200 hover:bg-neutral-50'
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Tags */}
-          <div className="bg-white border border-neutral-200 rounded-lg p-4">
-            <p className="text-sm font-medium text-neutral-900 mb-3">标签</p>
-            {selectedTags.size > 0 && (
-              <div className="flex flex-wrap gap-1.5 mb-3">
-                {[...selectedTags].map((tag) => (
-                  <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-neutral-900 text-white rounded-md">
-                    {tag}
-                    <button onClick={() => toggleTag(tag)} className="hover:text-neutral-300">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-sm font-medium text-foreground mb-3">分类</p>
+              <div className="flex flex-wrap gap-2">
+                {CATEGORIES.map((cat) => (
+                  <Badge
+                    key={cat}
+                    variant={selectedCategory === cat ? 'default' : 'outline'}
+                    className="cursor-pointer hover:bg-primary/20 hover:text-primary transition-colors"
+                    onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
+                  >
+                    {cat}
+                  </Badge>
                 ))}
               </div>
-            )}
-            <div className="flex gap-1.5 mb-3">
-              <input
-                type="text"
-                placeholder="输入新标签..."
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && addCustomTag()}
-                className="flex-1 px-2.5 py-1 text-xs border border-neutral-200 rounded-md bg-neutral-50 focus:outline-none focus:ring-1 focus:ring-neutral-300 focus:bg-white"
-              />
-              <button onClick={addCustomTag} className="px-2 py-1 text-xs text-neutral-600 border border-neutral-200 rounded-md hover:bg-neutral-50 transition-colors">
-                <Plus className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {TAGS.filter((t) => !selectedTags.has(t)).map((tag) => (
-                <button
-                  key={tag}
-                  onClick={() => toggleTag(tag)}
-                  className="px-2 py-0.5 text-xs text-neutral-500 border border-neutral-100 rounded-md hover:bg-neutral-50 transition-colors"
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-          </div>
+            </CardContent>
+          </Card>
+
+          {/* Tags */}
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-sm font-medium text-foreground mb-3">标签</p>
+              {selectedTags.size > 0 && (
+                <div className="flex flex-wrap gap-2 mb-4 p-3 bg-muted/30 rounded-md">
+                  {[...selectedTags].map((tag) => (
+                    <Badge key={tag} className="gap-1 pr-1">
+                      {tag}
+                      <button onClick={() => toggleTag(tag)} className="rounded-full hover:bg-primary-foreground/20 p-0.5">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2 mb-4">
+                <Input
+                  type="text"
+                  placeholder="输入新标签..."
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addCustomTag()}
+                  className="h-8 text-xs"
+                />
+                <Button onClick={addCustomTag} size="sm" variant="secondary" className="h-8 px-2">
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {TAGS.filter((t) => !selectedTags.has(t)).map((tag) => (
+                  <Badge
+                    key={tag}
+                    variant="outline"
+                    className="cursor-pointer font-normal hover:bg-muted text-muted-foreground hover:text-foreground"
+                    onClick={() => toggleTag(tag)}
+                  >
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
           <AuthorTimeSidebar />
         </aside>
@@ -349,35 +363,35 @@ export function CreateReportView({ onBack }: { onBack: () => void }) {
   const [status, setStatus] = useState<'draft' | 'published'>('draft');
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6 py-6 max-w-7xl mx-auto">
       {/* Action Bar */}
-      <div className="bg-white border border-neutral-200 rounded-lg px-4 py-3 flex items-center justify-between">
-        <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-neutral-600 hover:text-neutral-900 transition-colors">
-          <ArrowLeft className="h-4 w-4" />
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <Button onClick={onBack} variant="ghost" className="pl-0 hover:bg-transparent">
+          <ArrowLeft className="h-4 w-4 mr-2" />
           返回周报列表
-        </button>
-        <div className="flex items-center gap-2">
-          <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-neutral-600 border border-neutral-200 rounded-md hover:bg-neutral-50 transition-colors">
-            <Save className="h-3.5 w-3.5" />
+        </Button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Button variant="outline" className="flex-1 sm:flex-none">
+            <Save className="h-4 w-4 mr-2" />
             保存草稿
-          </button>
-          <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-white bg-neutral-900 rounded-md hover:bg-neutral-800 transition-colors">
-            <Send className="h-3.5 w-3.5" />
+          </Button>
+          <Button className="flex-1 sm:flex-none">
+            <Send className="h-4 w-4 mr-2" />
             发布周报
-          </button>
+          </Button>
         </div>
       </div>
 
-      <div className="flex gap-5">
+      <div className="flex flex-col lg:flex-row gap-6">
         {/* Editor */}
-        <div className="flex-1 min-w-0 space-y-4">
-          <div className="bg-white border border-neutral-200 rounded-lg p-4">
+        <div className="flex-1 min-w-0 space-y-6">
+          <div className="relative">
             <input
               type="text"
               placeholder="请输入周报标题"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full text-lg font-semibold text-neutral-900 placeholder:text-neutral-400 bg-transparent border-none outline-none"
+              className="w-full text-3xl font-bold text-foreground placeholder:text-muted-foreground/50 bg-transparent border-none outline-none py-2"
             />
           </div>
           <EditorShell
@@ -391,7 +405,7 @@ export function CreateReportView({ onBack }: { onBack: () => void }) {
         </div>
 
         {/* Sidebar */}
-        <aside className="w-72 flex-shrink-0 space-y-4">
+        <aside className="w-full lg:w-80 flex-shrink-0 space-y-6">
           <StatusSelector
             status={status}
             setStatus={setStatus}
@@ -404,7 +418,7 @@ export function CreateReportView({ onBack }: { onBack: () => void }) {
           <AuthorTimeSidebar />
 
           {/* Week range info */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-4">
             <p className="text-sm font-medium text-blue-900 mb-2 flex items-center gap-1.5">
               <Info className="h-3.5 w-3.5" />
               自动填充说明

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
-import { INPUT_CLASS, DISABLED_CLASS } from '@/lib/settings/styles';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface SecretInputProps {
   value: string;
@@ -14,24 +16,27 @@ export function SecretInput({ value, onChange, placeholder, disabled, className 
   const [visible, setVisible] = useState(false);
   return (
     <div className="relative">
-      <input
+      <Input
         type={visible ? 'text' : 'password'}
         value={value}
         onChange={onChange ? (e) => onChange(e.target.value) : undefined}
         placeholder={placeholder}
         disabled={disabled}
         readOnly={!onChange}
-        className={`pr-9 ${className || INPUT_CLASS} ${disabled ? DISABLED_CLASS : ''}`}
+        className={cn("pr-9", className)}
       />
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="icon"
         onClick={() => setVisible(!visible)}
-        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 transition-colors"
+        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent text-muted-foreground hover:text-foreground"
         tabIndex={-1}
         title={visible ? '隐藏' : '显示'}
+        disabled={disabled}
       >
         {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-      </button>
+      </Button>
     </div>
   );
 }

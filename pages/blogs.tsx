@@ -30,6 +30,11 @@ import { ReportView } from '@/components/blog/ReportView';
 import { PostDetailView } from '@/components/blog/PostDetailView';
 import { CreateBlogView, CreateReportView } from '@/components/blog/BlogEditor';
 import { FeaturedCard, PostListItem } from '@/components/blog/PostCards';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -188,12 +193,12 @@ export default function BlogsPage() {
   return (
     <div className="p-6 space-y-6 bg-background min-h-full">
       {/* ── 1. Header ──────────────────────────────────────────────────── */}
-      <header className="bg-white border border-neutral-200 rounded-lg p-4">
-        <div className="flex items-center justify-between">
+      <Card>
+        <CardContent className="p-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <BookOpen className="h-5 w-5 text-neutral-900" />
+            <BookOpen className="h-5 w-5 text-foreground" />
             <span
-              className="text-lg font-semibold text-neutral-900 cursor-pointer hover:text-neutral-700 transition-colors"
+              className="text-lg font-semibold text-foreground cursor-pointer hover:text-muted-foreground transition-colors"
               onClick={() => setCurrentView('landing')}
             >
               Phabricator Blog
@@ -204,69 +209,63 @@ export default function BlogsPage() {
                 { label: '技术博客', view: 'tech' as const },
                 { label: '周报', view: 'report' as const },
               ].map((item) => (
-                <button
+                <Button
                   key={item.label}
                   onClick={() => setCurrentView(item.view)}
-                  className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                    currentView === item.view
-                      ? 'bg-neutral-900 text-white'
-                      : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
-                  }`}
+                  variant={currentView === item.view ? 'default' : 'ghost'}
+                  size="sm"
+                  className="text-sm"
                 >
                   {item.label}
-                </button>
+                </Button>
               ))}
-              <button className="px-3 py-1.5 text-sm text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-md transition-colors">
+              <Button variant="ghost" size="sm" className="text-sm text-muted-foreground hover:text-foreground">
                 关于
-              </button>
+              </Button>
             </nav>
           </div>
           <div className="flex items-center gap-3">
             {(currentView === 'tech' || currentView === 'create') && (
-              <button
+              <Button
                 onClick={() => setCurrentView(currentView === 'create' ? 'tech' : 'create')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors ${
-                  currentView === 'create'
-                    ? 'bg-neutral-900 text-white'
-                    : 'text-neutral-600 border border-neutral-200 hover:bg-neutral-50'
-                }`}
+                variant={currentView === 'create' ? 'default' : 'outline'}
+                size="sm"
+                className="gap-1.5"
               >
                 {currentView === 'create' ? (
                   <><BookOpen className="h-3.5 w-3.5" /> 技术博客</>
                 ) : (
                   <><Plus className="h-3.5 w-3.5" /> 创建博客</>
                 )}
-              </button>
+              </Button>
             )}
             {(currentView === 'report' || currentView === 'create-report') && (
-              <button
+              <Button
                 onClick={() => setCurrentView(currentView === 'create-report' ? 'report' : 'create-report')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors ${
-                  currentView === 'create-report'
-                    ? 'bg-neutral-900 text-white'
-                    : 'text-neutral-600 border border-neutral-200 hover:bg-neutral-50'
-                }`}
+                variant={currentView === 'create-report' ? 'default' : 'outline'}
+                size="sm"
+                className="gap-1.5"
               >
                 {currentView === 'create-report' ? (
                   <><ClipboardList className="h-3.5 w-3.5" /> 周报列表</>
                 ) : (
                   <><Plus className="h-3.5 w-3.5" /> 创建周报</>
                 )}
-              </button>
+              </Button>
             )}
             <div className="relative w-64">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
-              <input
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
                 type="text"
                 placeholder="搜索博客..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 text-sm border border-neutral-200 rounded-md bg-neutral-50 focus:outline-none focus:ring-1 focus:ring-neutral-300 focus:bg-white transition-colors"
+                className="pl-9 h-9"
               />
             </div>
           </div>
-        </div>
-      </header>
+        </CardContent>
+      </Card>
 
       {/* ── View: Landing ────────────────────────────────────────────── */}
       {currentView === 'landing' && (
@@ -300,9 +299,9 @@ export default function BlogsPage() {
       {currentView === 'tech' && (<>
 
       {/* Hero */}
-      <section className="bg-neutral-900 text-white rounded-lg p-8">
+      <section className="bg-foreground text-background rounded-lg p-8">
         <h1 className="text-2xl font-bold mb-2">Engineering & Technology Blog</h1>
-        <p className="text-neutral-400 text-sm max-w-xl mb-5">
+        <p className="text-muted-foreground/80 text-sm max-w-xl mb-5">
           来自 Phabricator 社区的工程实践、架构设计与技术深度文章。记录我们在构建大规模系统过程中的思考与经验。
         </p>
       </section>
@@ -314,15 +313,15 @@ export default function BlogsPage() {
           {/* Featured Posts */}
           <section>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-neutral-900 flex items-center gap-2">
+              <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
                 <Star className="h-4 w-4 text-amber-500" />
                 精选文章
               </h2>
             </div>
             {loadingFeatured ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-5 w-5 animate-spin text-neutral-400" />
-                <span className="ml-2 text-sm text-neutral-500">加载精选文章...</span>
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">加载精选文章...</span>
               </div>
             ) : featuredBlogPosts.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -331,111 +330,107 @@ export default function BlogsPage() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 text-sm text-neutral-400">暂无精选文章</div>
+              <div className="text-center py-8 text-sm text-muted-foreground">暂无精选文章</div>
             )}
           </section>
 
           {/* Filter Bar */}
-          <div className="bg-white border border-neutral-200 rounded-lg p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border transition-colors ${
-                    showFilters || hasActiveFilters
-                      ? 'bg-neutral-900 text-white border-neutral-900'
-                      : 'text-neutral-600 border-neutral-200 hover:bg-neutral-50'
-                  }`}
-                >
-                  <Filter className="h-3.5 w-3.5" />
-                  筛选
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={() => setShowFilters(!showFilters)}
+                    variant={showFilters || hasActiveFilters ? 'default' : 'outline'}
+                    size="sm"
+                    className="gap-1.5 h-8"
+                  >
+                    <Filter className="h-3.5 w-3.5" />
+                    筛选
+                    {hasActiveFilters && (
+                      <span className="ml-1 px-1.5 py-0.5 text-xs bg-white/20 rounded">
+                        {(selectedCategory ? 1 : 0) + selectedTags.size}
+                      </span>
+                    )}
+                  </Button>
                   {hasActiveFilters && (
-                    <span className="ml-1 px-1.5 py-0.5 text-xs bg-white/20 rounded">
-                      {(selectedCategory ? 1 : 0) + selectedTags.size}
-                    </span>
+                    <Button
+                      onClick={clearFilters}
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1 h-8 text-muted-foreground"
+                    >
+                      <X className="h-3 w-3" />
+                      清除
+                    </Button>
                   )}
-                </button>
-                {hasActiveFilters && (
-                  <button
-                    onClick={clearFilters}
-                    className="inline-flex items-center gap-1 px-2 py-1.5 text-xs text-neutral-500 hover:text-neutral-700 transition-colors"
-                  >
-                    <X className="h-3 w-3" />
-                    清除
-                  </button>
-                )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  {SORT_OPTIONS.map((opt) => (
+                    <Button
+                      key={opt.value}
+                      onClick={() => setSortOrder(opt.value)}
+                      variant={sortOrder === opt.value ? 'secondary' : 'ghost'}
+                      size="sm"
+                      className="h-7 text-xs"
+                    >
+                      {opt.label}
+                    </Button>
+                  ))}
+                </div>
               </div>
-              <div className="flex items-center gap-1.5">
-                <ArrowUpDown className="h-3.5 w-3.5 text-neutral-400" />
-                {SORT_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setSortOrder(opt.value)}
-                    className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
-                      sortOrder === opt.value
-                        ? 'bg-neutral-900 text-white'
-                        : 'text-neutral-500 hover:bg-neutral-100'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
 
-            {/* Expandable filter panel */}
-            {showFilters && (
-              <div className="mt-3 pt-3 border-t border-neutral-100 space-y-3">
-                <div>
-                  <p className="text-xs font-medium text-neutral-500 mb-1.5">分类（单选）</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {CATEGORIES.map((cat) => (
-                      <button
-                        key={cat}
-                        onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
-                        className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
-                          selectedCategory === cat
-                            ? 'bg-neutral-900 text-white border-neutral-900'
-                            : 'text-neutral-600 border-neutral-200 hover:bg-neutral-50'
-                        }`}
-                      >
-                        {cat}
-                      </button>
-                    ))}
+              {/* Expandable filter panel */}
+              {showFilters && (
+                <div className="mt-3 pt-3 border-t border-border space-y-3">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1.5">分类（单选）</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {CATEGORIES.map((cat) => (
+                        <Button
+                          key={cat}
+                          onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
+                          variant={selectedCategory === cat ? 'default' : 'outline'}
+                          size="sm"
+                          className="h-7 text-xs"
+                        >
+                          {cat}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1.5">标签（多选）</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {availableTags.map((tag) => (
+                        <Button
+                          key={tag}
+                          onClick={() => toggleTag(tag)}
+                          variant={selectedTags.has(tag) ? 'default' : 'outline'}
+                          size="sm"
+                          className="h-7 text-xs"
+                        >
+                          {tag}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <p className="text-xs font-medium text-neutral-500 mb-1.5">标签（多选）</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {availableTags.map((tag) => (
-                      <button
-                        key={tag}
-                        onClick={() => toggleTag(tag)}
-                        className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
-                          selectedTags.has(tag)
-                            ? 'bg-neutral-900 text-white border-neutral-900'
-                            : 'text-neutral-600 border-neutral-200 hover:bg-neutral-50'
-                        }`}
-                      >
-                        {tag}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Posts List */}
           <section>
-            <h2 className="text-base font-semibold text-neutral-900 mb-4 flex items-center gap-2">
-              <Clock className="h-4 w-4 text-neutral-500" />
+            <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
               {sortOrder === 'recommended' ? '推荐文章' : sortOrder === 'tokenCount' ? '最多赞文章' : sortOrder === 'oldest' ? '最早文章' : '最新文章'}
             </h2>
             {loadingTech ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-5 w-5 animate-spin text-neutral-400" />
-                <span className="ml-2 text-sm text-neutral-500">加载文章列表...</span>
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">加载文章列表...</span>
               </div>
             ) : filteredTechPosts.length > 0 ? (
               <div className="space-y-3">
@@ -444,16 +439,17 @@ export default function BlogsPage() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 text-sm text-neutral-400">暂无更多文章</div>
+              <div className="text-center py-8 text-sm text-muted-foreground">暂无更多文章</div>
             )}
 
             {/* Load more */}
             {techCursor && (
               <div className="mt-6 flex justify-center">
-                <button
+                <Button
                   onClick={loadMoreTech}
                   disabled={loadingMoreTech}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-neutral-700 bg-white border border-neutral-300 rounded-lg hover:bg-neutral-50 transition-colors disabled:opacity-50"
+                  variant="outline"
+                  className="gap-2"
                 >
                   {loadingMoreTech ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -461,7 +457,7 @@ export default function BlogsPage() {
                     <ChevronDown className="h-4 w-4" />
                   )}
                   {loadingMoreTech ? '加载中...' : '加载更多'}
-                </button>
+                </Button>
               </div>
             )}
           </section>
@@ -469,88 +465,94 @@ export default function BlogsPage() {
 
         {/* Sidebar */}
         <aside className="hidden lg:block w-72 flex-shrink-0 space-y-5">
-          <div className="bg-white border border-neutral-200 rounded-lg p-4">
-            <p className="text-sm font-medium text-neutral-900 mb-2">搜索</p>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-neutral-400" />
-              <input
-                type="text"
-                placeholder="关键词搜索..."
-                className="w-full pl-8 pr-3 py-1.5 text-sm border border-neutral-200 rounded-md bg-neutral-50 focus:outline-none focus:ring-1 focus:ring-neutral-300 focus:bg-white transition-colors"
-              />
-            </div>
-          </div>
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-sm font-medium text-foreground mb-2">搜索</p>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="关键词搜索..."
+                  className="pl-8 h-8 text-sm"
+                />
+              </div>
+            </CardContent>
+          </Card>
 
-          <div className="bg-white border border-neutral-200 rounded-lg p-4">
-            <p className="text-sm font-medium text-neutral-900 mb-3">分类</p>
-            <ul className="space-y-1">
-              {CATEGORIES.map((cat) => (
-                <li key={cat}>
-                  <button className="w-full flex items-center justify-between px-2 py-1.5 text-sm text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50 rounded-md transition-colors">
-                    <span>{cat}</span>
-                    <ChevronRight className="h-3.5 w-3.5 text-neutral-300" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-sm font-medium text-foreground mb-3">分类</p>
+              <ul className="space-y-1">
+                {CATEGORIES.map((cat) => (
+                  <li key={cat}>
+                    <Button variant="ghost" className="w-full justify-between h-8 px-2 text-sm text-muted-foreground hover:text-foreground">
+                      <span>{cat}</span>
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
 
-          <div className="bg-white border border-neutral-200 rounded-lg p-4">
-            <p className="text-sm font-medium text-neutral-900 mb-3">标签云</p>
-            <div className="flex flex-wrap gap-1.5">
-              {availableTags.map((tag) => (
-                <span
-                  key={tag}
-                  onClick={() => toggleTag(tag)}
-                  className={`px-2 py-0.5 text-xs border rounded-md cursor-pointer transition-colors ${
-                    selectedTags.has(tag)
-                      ? 'bg-neutral-900 text-white border-neutral-900'
-                      : 'bg-neutral-50 text-neutral-600 border-neutral-200 hover:bg-neutral-100'
-                  }`}
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </div>
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-sm font-medium text-foreground mb-3">标签云</p>
+              <div className="flex flex-wrap gap-1.5">
+                {availableTags.map((tag) => (
+                  <Badge
+                    key={tag}
+                    variant={selectedTags.has(tag) ? 'default' : 'outline'}
+                    className="cursor-pointer font-normal"
+                    onClick={() => toggleTag(tag)}
+                  >
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
-          <div className="bg-white border border-neutral-200 rounded-lg p-4">
-            <p className="text-sm font-medium text-neutral-900 mb-3">最近发布</p>
-            <ul className="space-y-3">
-              {recentSidebarPosts.map((post) => (
-                <li key={post.id} className="group cursor-pointer">
-                  <p className="text-sm text-neutral-800 group-hover:text-neutral-600 line-clamp-2 transition-colors">
-                    {post.title}
-                  </p>
-                  <p className="text-xs text-neutral-400 mt-0.5 flex items-center gap-1">
-                    <Calendar className="h-3 w-3" />
-                    {post.publishedAt}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-sm font-medium text-foreground mb-3">最近发布</p>
+              <ul className="space-y-3">
+                {recentSidebarPosts.map((post) => (
+                  <li key={post.id} className="group cursor-pointer">
+                    <p className="text-sm text-foreground/90 group-hover:text-primary line-clamp-2 transition-colors">
+                      {post.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      {post.publishedAt}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
         </aside>
       </div>
 
       {/* Footer */}
-      <footer className="bg-white border border-neutral-200 rounded-lg p-5">
-        <div className="flex items-center justify-between text-xs text-neutral-400">
+      <Card>
+        <CardContent className="p-5 flex items-center justify-between text-xs text-muted-foreground">
           <div className="space-y-1">
-            <p className="text-sm text-neutral-600">Phabricator Blog</p>
+            <p className="text-sm text-foreground/80">Phabricator Blog</p>
             <p>工程实践与技术分享 · 由 Phabricator 社区驱动</p>
           </div>
           <div className="flex items-center gap-4">
-            <button className="flex items-center gap-1 hover:text-neutral-600 transition-colors">
+            <button className="flex items-center gap-1 hover:text-foreground transition-colors">
               <Rss className="h-3.5 w-3.5" />
               RSS
             </button>
             <span>© 2026 Phabricator Blog</span>
           </div>
-        </div>
-      </footer>
+        </CardContent>
+      </Card>
 
       </>)}{/* end tech view */}
     </div>
   );
 }
+

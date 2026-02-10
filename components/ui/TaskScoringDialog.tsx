@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
 import { X, Award } from 'lucide-react';
-import { Dropdown } from './dropdown';
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from 'sonner';
 
 interface TaskScoringDialogProps {
@@ -222,35 +228,47 @@ export function TaskScoringDialog({ isOpen, onClose, onConfirm, currentValues, a
             {/* 任务分类 */}
             <div className="space-y-2">
               <label className="text-sm font-semibold text-neutral-900">任务分类</label>
-              <Dropdown
-                options={WORK_CLASSES.map(cls => ({
-                  value: extractWorkClassValue(cls),
-                  label: cls
-                }))}
+              <Select
                 value={extractWorkClassValue(workClass)}
                 onValueChange={(value) => {
                   const displayText = findWorkClassDisplay(value);
                   setWorkClass(displayText);
                 }}
-                placeholder="请选择任务分类"
-              />
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="请选择任务分类" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  {WORK_CLASSES.map(cls => (
+                    <SelectItem key={extractWorkClassValue(cls)} value={extractWorkClassValue(cls)}>
+                      {cls}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* 工作质量评分 */}
             <div className="space-y-2">
               <label className="text-sm font-semibold text-neutral-900">工作质量评分</label>
-              <Dropdown
-                options={WORK_SCORES.map(score => ({
-                  value: extractWorkScoreValue(score),
-                  label: score
-                }))}
+              <Select
                 value={extractWorkScoreValue(workScore)}
                 onValueChange={(value) => {
                   const displayText = findWorkScoreDisplay(value);
                   setWorkScore(displayText);
                 }}
-                placeholder="请选择工作质量评分"
-              />
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="请选择工作质量评分" />
+                </SelectTrigger>
+                <SelectContent>
+                  {WORK_SCORES.map(score => (
+                    <SelectItem key={extractWorkScoreValue(score)} value={extractWorkScoreValue(score)}>
+                      {score}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
           </div>

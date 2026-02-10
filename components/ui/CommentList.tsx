@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Edit2, Trash2, Loader2, Check, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 
 export interface Comment {
   id: number | string;
@@ -117,27 +119,31 @@ export function CommentList({
               {showActions && (onEdit || onDelete) && (
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   {onEdit && (
-                    <button
+                    <Button
                       onClick={() => handleEditClick(comment)}
-                      className="p-1 hover:bg-blue-100 rounded transition-all"
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-blue-500 hover:bg-blue-50 hover:text-blue-600"
                       title="编辑评论"
                     >
-                      <Edit2 className="h-3 w-3 text-blue-500" />
-                    </button>
+                      <Edit2 className="h-3 w-3" />
+                    </Button>
                   )}
                   {onDelete && (
-                    <button
+                    <Button
                       onClick={() => handleDelete(comment)}
                       disabled={isDeletingComment === comment.id}
-                      className="p-1 hover:bg-red-100 rounded transition-all disabled:opacity-50"
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-red-500 hover:bg-red-50 hover:text-red-600"
                       title="删除评论"
                     >
                       {isDeletingComment === comment.id ? (
-                        <Loader2 className="h-3 w-3 text-red-500 animate-spin" />
+                        <Loader2 className="h-3 w-3 animate-spin" />
                       ) : (
-                        <Trash2 className="h-3 w-3 text-red-500" />
+                        <Trash2 className="h-3 w-3" />
                       )}
-                    </button>
+                    </Button>
                   )}
                 </div>
               )}
@@ -145,37 +151,40 @@ export function CommentList({
           </div>
           {editingCommentId === comment.id ? (
             <div className="pl-8 space-y-2">
-              <textarea
+              <Textarea
                 value={editedCommentText}
                 onChange={(e) => setEditedCommentText(e.target.value)}
-                className="w-full text-xs text-neutral-700 bg-white border border-blue-300 rounded-lg p-2 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 resize-none"
+                className="w-full text-xs min-h-[80px]"
                 rows={3}
                 autoFocus
               />
               <div className="flex gap-2">
-                <button
+                <Button
                   onClick={() => handleSaveEdit(comment)}
                   disabled={isUpdatingComment}
-                  className="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                  size="sm"
+                  className="h-7 text-xs bg-blue-600 hover:bg-blue-700"
                 >
                   {isUpdatingComment ? (
                     <>
-                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                       保存中...
                     </>
                   ) : (
                     <>
-                      <Check className="h-3 w-3" />
+                      <Check className="h-3 w-3 mr-1" />
                       保存
                     </>
                   )}
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={handleCancelEdit}
-                  className="px-3 py-1 text-neutral-600 text-xs hover:bg-neutral-100 rounded-lg transition-colors"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
                 >
                   取消
-                </button>
+                </Button>
               </div>
             </div>
           ) : (

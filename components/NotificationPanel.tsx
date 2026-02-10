@@ -1,6 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Bell } from 'lucide-react';
 import { httpClient } from '@/lib/httpClient';
+import { cn } from '@/lib/utils';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
 
 interface Notification {
   id: string;
@@ -22,7 +29,6 @@ export function NotificationPanel() {
   const [data, setData] = useState<NotificationsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
 
   const fetchNotifications = async () => {
     setLoading(true);
@@ -43,23 +49,9 @@ export function NotificationPanel() {
     return () => clearInterval(interval);
   }, []);
 
-  // Close panel when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [isOpen]);
-
-  const handleToggle = () => {
-    setIsOpen(!isOpen);
-    if (!isOpen && !data) {
+  const handleToggle = (open: boolean) => {
+    setIsOpen(open);
+    if (open && !data) {
       fetchNotifications();
     }
   };
@@ -70,100 +62,102 @@ export function NotificationPanel() {
   };
 
   return (
-    <div className="relative" ref={panelRef}>
-      {/* Bell Button */}
-      <button
-        onClick={handleToggle}
-        className="relative p-2 text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-md transition-colors"
-        aria-label="Notifications"
-      >
-        <Bell className="w-5 h-5" />
-        {data && data.unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full">
-            {data.unreadCount > 99 ? '99+' : data.unreadCount}
-          </span>
-        )}
-      </button>
+    <Popover open={isOpen} onOpenChange={handleToggle}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(
+            "relative h-8 w-8 text-muted-foreground hover:text-foreground",
+            isOpen && "bg-accent text-accent-foreground"
+          )}
+          aria-label="Notifications"
+        >
+          <Bell className="h-4 w-4" />
+          {data && data.unreadCount > 0 && (
+            <span className="absolute right-1.5 top-1.5 flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
 
-      {/* Notification Dropdown Panel */}
-      {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-96 bg-white border border-neutral-200 rounded-lg shadow-lg z-50">
-          {/* Header */}
-          <div className="p-3 border-b border-neutral-200 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-neutral-900">Notifications</h3>
-            {data && (
-              <span className="text-xs text-neutral-500">
-                {data.unreadCount > 0 && `${data.unreadCount} unread`}
-              </span>
-            )}
-          </div>
+      <PopoverContent className="w-80 sm:w-96 p-0" align="end">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <h3 className="text-sm font-semibold">Notifications</h3>
+          {data && data.unreadCount > 0 && (
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+              {data.unreadCount} new
+            </span>
+          )}
+        </div>
 
-          {/* Notification List */}
-          <div className="max-h-[400px] overflow-y-auto">
-            {loading ? (
-              <div className="p-8 text-center">
-                <div className="inline-block w-6 h-6 border-2 border-neutral-300 border-t-blue-500 rounded-full animate-spin"></div>
-                <p className="text-sm text-neutral-500 mt-2">Loading...</p>
-              </div>
-            ) : !data || data.notifications.length === 0 ? (
-              <div className="p-8 text-center">
-                <Bell className="w-12 h-12 mx-auto text-neutral-300 mb-2" />
-                <p className="text-sm text-neutral-500">No notifications</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-neutral-100">
-                {data.notifications.map((notification) => (
-                  <div
-                    key={notification.id}
-                    onClick={() => handleNotificationClick(notification)}
-                    className={`p-3 hover:bg-neutral-50 cursor-pointer transition-colors ${
-                      notification.isUnread ? 'bg-blue-50/50' : ''
-                    }`}
-                  >
-                    <div className="flex items-start gap-2">
-                      {notification.isUnread && (
-                        <div className="w-2 h-2 bg-blue-500 rounded-full mt-1.5 flex-shrink-0"></div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm ${notification.isUnread ? 'font-medium text-neutral-900' : 'text-neutral-700'} line-clamp-2`}>
-                          {notification.title}
-                        </p>
-                        {notification.content && notification.content !== notification.title && (
-                          <p className="text-xs text-neutral-500 mt-1 line-clamp-1">
-                            {notification.content}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-2 mt-1">
-                          {notification.author && (
-                            <span className="text-xs text-neutral-400">{notification.author}</span>
-                          )}
-                          {notification.dateCreated && (
-                            <span className="text-xs text-neutral-400">{notification.dateCreated}</span>
-                          )}
-                        </div>
-                      </div>
+        {/* Notification List */}
+        <div className="max-h-[400px] overflow-y-auto">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              <p className="mt-2 text-xs">Loading...</p>
+            </div>
+          ) : !data || data.notifications.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+              <Bell className="mb-2 h-8 w-8 opacity-20" />
+              <p className="text-sm">No notifications</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {data.notifications.map((notification) => (
+                <div
+                  key={notification.id}
+                  onClick={() => handleNotificationClick(notification)}
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 p-4 transition-colors hover:bg-muted/50",
+                    notification.isUnread && "bg-blue-50/30 dark:bg-blue-900/10"
+                  )}
+                >
+                  <div className={cn(
+                    "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                    notification.isUnread ? "bg-primary" : "bg-transparent"
+                  )} />
+                  <div className="flex-1 space-y-1">
+                    <p className={cn(
+                      "text-sm leading-none",
+                      notification.isUnread ? "font-medium text-foreground" : "text-muted-foreground"
+                    )}>
+                      {notification.title}
+                    </p>
+                    {notification.content && notification.content !== notification.title && (
+                      <p className="line-clamp-2 text-xs text-muted-foreground">
+                        {notification.content}
+                      </p>
+                    )}
+                    <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
+                      {notification.author && <span>{notification.author}</span>}
+                      {notification.dateCreated && <span>{notification.dateCreated}</span>}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Footer */}
-          {data && data.notifications.length > 0 && (
-            <div className="p-2 border-t border-neutral-200 bg-neutral-50">
-              <a
-                href={`${process.env.NEXT_PUBLIC_PHA_HOST || 'http://pha.tp-link.com.cn'}/notification/`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block text-center text-xs text-blue-600 hover:text-blue-700 py-1"
-              >
-                View all notifications
-              </a>
+                </div>
+              ))}
             </div>
           )}
         </div>
-      )}
-    </div>
+
+        {/* Footer */}
+        {data && data.notifications.length > 0 && (
+          <div className="border-t bg-muted/20 p-2">
+            <a
+              href={`${process.env.NEXT_PUBLIC_PHA_HOST || 'http://pha.tp-link.com.cn'}/notification/`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full rounded-sm px-2 py-1.5 text-center text-xs font-medium text-primary hover:bg-primary/10 hover:underline"
+            >
+              View all notifications
+            </a>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
