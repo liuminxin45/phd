@@ -33,17 +33,7 @@ import { httpClient } from '@/lib/httpClient';
 import { batchFetchSubtasks, getCachedProjects, getCachedUsers } from '@/lib/conduitBatch';
 import { usePinnedPanel } from '@/contexts/PinnedPanelContext';
 import { cn } from '@/lib/utils';
-
-interface Subtask {
-  id: number;
-  title: string;
-  completed: boolean;
-  status?: string;
-  expanded: boolean;
-  children: Subtask[];
-  hasChildren?: boolean;
-  isLoadingChildren?: boolean;
-}
+import type { Subtask } from '@/lib/task/types';
 
 interface Comment {
   id: number;
@@ -855,10 +845,10 @@ export function TaskDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn("max-w-4xl h-[85vh] p-0 flex flex-col gap-0", contentZIndex)}>
+      <DialogContent className={cn("max-w-[calc(100%-2rem)] sm:max-w-4xl h-[85vh] p-0 flex flex-col gap-0", contentZIndex)}>
         {/* Fixed Header */}
         <DialogHeader className="flex-shrink-0 border-b p-6 pb-4">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-2 pr-8">
             <div className="flex items-center gap-2">
               <span className="text-xs font-mono text-muted-foreground">T{task.id}</span>
               {task && (
@@ -915,7 +905,7 @@ export function TaskDetailDialog({
                 autoFocus
               />
             ) : (
-              <DialogTitle className="text-xl group flex items-start gap-2">
+              <DialogTitle className="text-xl group flex items-start gap-2 break-words min-w-0">
                 {taskTitle}
                 <button
                   onClick={() => setIsEditingTitle(true)}
@@ -929,12 +919,12 @@ export function TaskDetailDialog({
         </DialogHeader>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-8">
+        <div className="flex-1 overflow-y-auto p-6 space-y-8 overflow-x-hidden">
           {/* Properties Grid */}
-          <div className="grid grid-cols-2 gap-x-8 gap-y-6">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">状态</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+            <div className="space-y-6">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">状态</span>
                 <Select
                   value={taskStatus}
                   onValueChange={async (value) => {
@@ -960,12 +950,12 @@ export function TaskDetailDialog({
                     }
                   }}
                 >
-                  <SelectTrigger className="w-40 h-8 text-xs">
+                  <SelectTrigger className="flex-1 max-w-[200px] h-9 text-sm">
                     <SelectValue placeholder="选择状态" />
                   </SelectTrigger>
                   <SelectContent>
                     {Object.entries(TASK_STATUS_NAMES).map(([value, label]) => (
-                      <SelectItem key={value} value={value} className="text-xs">
+                      <SelectItem key={value} value={value} className="text-sm">
                         {label}
                       </SelectItem>
                     ))}
@@ -973,8 +963,8 @@ export function TaskDetailDialog({
                 </Select>
               </div>
               
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">优先级</span>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">优先级</span>
                 <Select
                   value={taskPriority}
                   onValueChange={async (value) => {
@@ -992,26 +982,26 @@ export function TaskDetailDialog({
                     } catch (error) { toast.error('更新优先级失败'); }
                   }}
                 >
-                  <SelectTrigger className="w-40 h-8 text-xs">
+                  <SelectTrigger className="flex-1 max-w-[200px] h-9 text-sm">
                     <SelectValue placeholder="选择优先级" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="100" className="text-xs">P1 紧急</SelectItem>
-                    <SelectItem value="90" className="text-xs">P2 高</SelectItem>
-                    <SelectItem value="80" className="text-xs">P3 中</SelectItem>
-                    <SelectItem value="50" className="text-xs">P4 普通</SelectItem>
-                    <SelectItem value="25" className="text-xs">P5 低</SelectItem>
-                    <SelectItem value="0" className="text-xs">P6 微不足道</SelectItem>
+                    <SelectItem value="100" className="text-sm">P1 紧急</SelectItem>
+                    <SelectItem value="90" className="text-sm">P2 高</SelectItem>
+                    <SelectItem value="80" className="text-sm">P3 中</SelectItem>
+                    <SelectItem value="50" className="text-sm">P4 普通</SelectItem>
+                    <SelectItem value="25" className="text-sm">P5 低</SelectItem>
+                    <SelectItem value="0" className="text-sm">P6 微不足道</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">指派给</span>
-                <div className="w-40 flex justify-end">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">指派给</span>
+                <div className="flex-1 max-w-[200px] flex justify-end">
                   <PeoplePicker
                     selected={assignee}
-                    onAdd={async (person) => {
+                    onAdd={async (person: { id: string; name: string; avatar?: string }) => {
                       setAssignee([person]);
                       try {
                         await httpClient('/api/tasks/edit', {
@@ -1032,16 +1022,16 @@ export function TaskDetailDialog({
                       } catch (error) { toast.error('移除指派失败'); }
                     }}
                     maxSelections={1}
-                    className="justify-end"
+                    className="justify-end w-full"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">工作量</span>
-                <div className="w-40">
+            <div className="space-y-6">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">工作量</span>
+                <div className="flex-1 max-w-[200px]">
                   <Input
                     value={workload}
                     onChange={(e) => setWorkload(e.target.value)}
@@ -1062,11 +1052,11 @@ export function TaskDetailDialog({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">计划完成</span>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">计划完成</span>
                 <DatePicker
                   value={plannedCompletion}
-                  onChange={async (date) => {
+                  onChange={async (date: Date | undefined) => {
                     setPlannedCompletion(date);
                     try {
                       const timestamp = date ? Math.floor(date.getTime() / 1000) : null;
@@ -1077,16 +1067,16 @@ export function TaskDetailDialog({
                       toast.success(date ? '计划完成时间已更新' : '已清除');
                     } catch (error) { toast.error('更新失败'); }
                   }}
-                  className="w-40 justify-end"
+                  className="flex-1 max-w-[200px] justify-end"
                 />
               </div>
 
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">项目</span>
-                <div className="w-40 flex justify-end">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">项目</span>
+                <div className="flex-1 max-w-[200px] flex justify-end">
                   <ProjectPicker
                     selected={projectTags}
-                    onAdd={async (project) => {
+                    onAdd={async (project: { id: string; name: string; color?: string }) => {
                       setProjectTags([project]);
                       try {
                         await httpClient('/api/tasks/edit', {
@@ -1096,7 +1086,7 @@ export function TaskDetailDialog({
                         toast.success(`已设置项目: ${project.name}`);
                       } catch (error) { toast.error('设置项目失败'); }
                     }}
-                    onRemove={async (projectId) => {
+                    onRemove={async (projectId: string) => {
                       setProjectTags([]);
                       try {
                         await httpClient('/api/tasks/edit', {
@@ -1107,7 +1097,7 @@ export function TaskDetailDialog({
                       } catch (error) { toast.error('移除项目失败'); }
                     }}
                     maxSelections={1}
-                    className="justify-end"
+                    className="justify-end w-full"
                   />
                 </div>
               </div>
@@ -1125,39 +1115,41 @@ export function TaskDetailDialog({
           </div>
 
           {isDetailsExpanded && (
-            <div className="bg-muted/30 rounded-lg p-4 grid grid-cols-2 gap-x-8 gap-y-4 text-sm animate-in slide-in-from-top-2 fade-in">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">订阅者</span>
-                <PeoplePicker
-                  selected={subscribers}
-                  onAdd={async (person) => {
-                    setSubscribers([...subscribers, person]);
-                    try {
-                      await httpClient('/api/tasks/edit', {
-                        method: 'POST',
-                        body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'subscribers.add', value: [person.id] }] }
-                      });
-                      toast.success(`已添加订阅者: ${person.name}`);
-                    } catch (error) { toast.error('添加失败'); }
-                  }}
-                  onRemove={async (personId) => {
-                    setSubscribers(subscribers.filter(s => s.id !== personId));
-                    try {
-                      await httpClient('/api/tasks/edit', {
-                        method: 'POST',
-                        body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'subscribers.remove', value: [personId] }] }
-                      });
-                      toast.success('已移除订阅者');
-                    } catch (error) { toast.error('移除失败'); }
-                  }}
-                  className="justify-end"
-                />
+            <div className="bg-muted/30 rounded-lg p-4 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 text-sm animate-in slide-in-from-top-2 fade-in">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-muted-foreground whitespace-nowrap font-medium">订阅者</span>
+                <div className="flex-1 max-w-[200px] flex justify-end">
+                  <PeoplePicker
+                    selected={subscribers}
+                    onAdd={async (person: { id: string; name: string; avatar?: string }) => {
+                      setSubscribers([...subscribers, person]);
+                      try {
+                        await httpClient('/api/tasks/edit', {
+                          method: 'POST',
+                          body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'subscribers.add', value: [person.id] }] }
+                        });
+                        toast.success(`已添加订阅者: ${person.name}`);
+                      } catch (error) { toast.error('添加失败'); }
+                    }}
+                    onRemove={async (personId: string) => {
+                      setSubscribers(subscribers.filter(s => s.id !== personId));
+                      try {
+                        await httpClient('/api/tasks/edit', {
+                          method: 'POST',
+                          body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'subscribers.remove', value: [personId] }] }
+                        });
+                        toast.success('已移除订阅者');
+                      } catch (error) { toast.error('移除失败'); }
+                    }}
+                    className="justify-end w-full"
+                  />
+                </div>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">更新计划</span>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-muted-foreground whitespace-nowrap font-medium">更新计划</span>
                 <DatePicker
                   value={updatedPlan}
-                  onChange={async (date) => {
+                  onChange={async (date: Date | undefined) => {
                     setUpdatedPlan(date);
                     try {
                       const timestamp = date ? Math.floor(date.getTime() / 1000) : null;
@@ -1168,14 +1160,14 @@ export function TaskDetailDialog({
                       toast.success(date ? '更新计划已设置' : '已清除');
                     } catch (error) { toast.error('更新失败'); }
                   }}
-                  className="justify-end"
+                  className="flex-1 max-w-[200px] justify-end"
                 />
               </div>
             </div>
           )}
 
           {/* Description */}
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold flex items-center gap-2">
                 <AlignLeft className="h-4 w-4 text-muted-foreground" />
@@ -1228,7 +1220,7 @@ export function TaskDetailDialog({
           </div>
 
           {/* Subtasks */}
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold flex items-center gap-2">
                 <ListTodo className="h-4 w-4 text-muted-foreground" />
@@ -1259,7 +1251,7 @@ export function TaskDetailDialog({
             ) : (
               <div className="space-y-3">
                 {subtasks.length > 0 && (
-                  <div className="space-y-1 pl-1">
+                  <div className="space-y-2 pl-1">
                     {filterSubtasks(subtasks).map((task) => (
                       <SubtaskItem
                         key={task.id}
@@ -1269,7 +1261,7 @@ export function TaskDetailDialog({
                         onExpand={toggleExpand}
                         onAddChild={setAddingSubtaskToId}
                         onDelete={deleteSubtask}
-                        onClick={(subtask) => openSecondaryTask(subtask.id)}
+                        onClick={(subtask: Subtask) => openSecondaryTask(subtask.id)}
                       />
                     ))}
                   </div>
@@ -1327,7 +1319,7 @@ export function TaskDetailDialog({
           </div>
 
           {/* Timeline */}
-          <div className="space-y-3 pt-2">
+          <div className="space-y-4 pt-2">
             {isLoadingComments ? (
               <div className="flex justify-center py-8">
                 <LoadingSpinner message="" size="md" />

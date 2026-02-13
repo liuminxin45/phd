@@ -22,6 +22,7 @@ import {
   Info,
 } from 'lucide-react';
 import { CATEGORIES, TAGS, getLastWeekRange } from '@/lib/blog/helpers';
+import { AiBlogWriter } from './AiBlogWriter';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -240,6 +241,7 @@ export function CreateBlogView({ onBack }: { onBack: () => void }) {
           返回博客首页
         </Button>
         <div className="flex items-center gap-2 w-full sm:w-auto">
+          <AiBlogWriter onFill={(t, c) => { setTitle(t); setContent(c); }} />
           <Button variant="outline" className="flex-1 sm:flex-none">
             <Save className="h-4 w-4 mr-2" />
             保存草稿

@@ -561,7 +561,7 @@ export default function TasksPage() {
         <div className="p-4 flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <span className="text-sm font-medium text-muted-foreground flex items-center gap-1 whitespace-nowrap shrink-0">
                 <User className="h-3.5 w-3.5" />
                 负责人
               </span>
@@ -578,7 +578,7 @@ export default function TasksPage() {
             <div className="h-6 w-px bg-border hidden sm:block" />
 
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <span className="text-sm font-medium text-muted-foreground flex items-center gap-1 whitespace-nowrap shrink-0">
                 <Filter className="h-3.5 w-3.5" />
                 状态
               </span>
@@ -597,7 +597,7 @@ export default function TasksPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <span className="text-sm font-medium text-muted-foreground flex items-center gap-1 whitespace-nowrap shrink-0">
                 <Calendar className="h-3.5 w-3.5" />
                 时间
               </span>
@@ -616,7 +616,7 @@ export default function TasksPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <span className="text-sm font-medium text-muted-foreground flex items-center gap-1 whitespace-nowrap shrink-0">
                 <Briefcase className="h-3.5 w-3.5" />
                 项目
               </span>

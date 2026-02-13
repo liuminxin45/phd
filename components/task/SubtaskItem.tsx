@@ -2,16 +2,7 @@ import { ChevronRight, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
-
-interface Subtask {
-  id: number;
-  title: string;
-  completed: boolean;
-  expanded: boolean;
-  children: Subtask[];
-  hasChildren?: boolean;
-  isLoadingChildren?: boolean;
-}
+import type { Subtask } from '@/lib/task/types';
 
 interface SubtaskItemProps {
   task: Subtask;
@@ -44,7 +35,7 @@ export function SubtaskItem({
     <div>
       <div 
         className={cn(
-          "flex items-center gap-2 text-sm group rounded px-2 py-1 transition-colors hover:bg-muted/50",
+          "flex items-center gap-2 text-sm group rounded px-2 py-1.5 my-0.5 transition-colors hover:bg-muted/50",
           task.completed && "opacity-60"
         )}
         style={{ paddingLeft: `${indent + 8}px` }}
@@ -95,7 +86,7 @@ export function SubtaskItem({
             }
           }}
           className={cn(
-            "flex-1 text-left text-sm cursor-pointer hover:underline underline-offset-2",
+            "flex-1 min-w-0 text-left text-sm cursor-pointer hover:underline underline-offset-2 break-words",
             task.completed ? "text-muted-foreground line-through" : "text-foreground"
           )}
         >
