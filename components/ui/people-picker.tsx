@@ -12,13 +12,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-
-interface Person {
-  id: string;
-  name: string;
-  username?: string;
-  avatar?: string;
-}
+import { Person } from '@/lib/types';
 
 interface PeoplePickerProps {
   selected: Person[];

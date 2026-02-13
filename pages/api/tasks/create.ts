@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { ConduitClient } from '@/lib/conduit/client';
+import { VALID_PRIORITY_KEYS } from '@/lib/constants/priority';
 
 // Ensure Next.js parses the body as JSON
 export const config = {
@@ -36,7 +37,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    const { title, parentId, parentTask, projectPHIDs, projects } = parsedBody;
+    const { title, parentId, parentTask, projectPHIDs, projects, owner, priority, description } = parsedBody;
 
     if (!title || typeof title !== 'string' || !title.trim()) {
       return res.status(400).json({ 
@@ -51,6 +52,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const transactions: any[] = [
       { type: 'title', value: title.trim() }
     ];
+
+    if (owner) {
+      if (typeof owner !== 'string') {
+        return res.status(400).json({ error: 'owner must be a PHID string' });
+      }
+      transactions.push({ type: 'owner', value: owner });
+    }
+
+    if (priority) {
+      if (!VALID_PRIORITY_KEYS.has(priority)) {
+        return res.status(400).json({
+          error: `Invalid priority key. Expected one of: ${[...VALID_PRIORITY_KEYS].join(', ')}`,
+          provided: priority,
+        });
+      }
+      transactions.push({ type: 'priority', value: priority });
+    }
+
+    if (description && typeof description === 'string' && description.trim()) {
+      transactions.push({ type: 'description', value: description.trim() });
+    }
 
     // Add parent task if provided (for subtasks)
     // Support both parentId (number) and parentTask (PHID)

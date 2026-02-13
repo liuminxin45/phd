@@ -51,7 +51,8 @@ export class ConduitClient {
     attachments: Record<string, boolean> = {},
     limit: number = 100,
     after: string | null = null,
-    queryKey?: string
+    queryKey?: string,
+    order?: string | string[]
   ): Promise<T> {
     const params: Record<string, any> = {
       constraints,
@@ -60,6 +61,10 @@ export class ConduitClient {
 
     if (queryKey) {
       params.queryKey = queryKey;
+    }
+
+    if (order) {
+      params.order = order;
     }
 
     if (Object.keys(attachments).length > 0) {

@@ -4,6 +4,7 @@ import { Task, Project } from '@/lib/api';
 import { getTaskStatusName, TASK_STATUS } from '@/lib/constants/taskStatus';
 import { TaskStatusBadge } from '@/components/ui/TaskStatusBadge';
 import { TaskDetailDialog } from '@/components/task/TaskDetailDialog';
+import { QuickAddTask } from '@/components/task/QuickAddTask';
 import { httpClient } from '@/lib/httpClient';
 import { toast } from '@/lib/toast';
 import { useUser } from '@/contexts/UserContext';
@@ -22,13 +23,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-
-interface Person {
-  id: string;
-  name: string;
-  username?: string;
-  avatar?: string;
-}
+import { Person } from '@/lib/types';
+import { getPriorityLeftBorderColor, getPriorityHexColor } from '@/lib/constants/priority';
 
 const PAGE_SIZE = 100;
 const STORAGE_KEY_TASK_ARCHIVE_IDS = 'archive.tasks.ids.v1';
@@ -36,18 +32,6 @@ const LEGACY_ARCHIVED_TASKS_KEY = 'archivedTaskIds';
 
 const DEFAULT_STATUS_FILTER = TASK_STATUS.OPEN;
 const DEFAULT_DATE_FILTER = 'quarter';
-
-const getPriorityColor = (priority: number | undefined): string => {
-  switch (priority) {
-    case 100: return 'bg-pink-500';
-    case 90: return 'bg-red-500';
-    case 80: return 'bg-orange-500';
-    case 50: return 'bg-yellow-400';
-    case 25: return 'bg-sky-400';
-    case 0: return 'bg-slate-300';
-    default: return 'bg-slate-200';
-  }
-};
 
 export default function TasksPage() {
   const { user } = useUser();
@@ -59,6 +43,7 @@ export default function TasksPage() {
   const [statusFilter, setStatusFilter] = useState<string>(DEFAULT_STATUS_FILTER);
   const [projectFilter, setProjectFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>(DEFAULT_DATE_FILTER);
+  const [sortOrder, setSortOrder] = useState<string>('priority');
   
   const [projects, setProjects] = useState<Project[]>([]);
   
@@ -219,6 +204,7 @@ export default function TasksPage() {
       // Build query params
       const params: Record<string, string> = {
         limit: String(PAGE_SIZE),
+        order: sortOrder,
       };
       
       // User filter - single person
@@ -300,7 +286,7 @@ export default function TasksPage() {
     
     setAfterCursor(null);
     fetchTasks(false);
-  }, [selectedPerson, statusFilter, projectFilter, dateFilter, initialUserSet, showArchived]);
+  }, [selectedPerson, statusFilter, projectFilter, dateFilter, sortOrder, initialUserSet, showArchived]);
   
   // When switching to archived view, load metadata for archived tasks
   useEffect(() => {
@@ -545,6 +531,14 @@ export default function TasksPage() {
     ...projects.map(p => ({ value: p.phid, label: p.fields.name }))
   ];
 
+  // Sort options
+  const sortOptions = [
+    { value: 'priority', label: '优先级' },
+    { value: 'updated', label: '最近更新' },
+    { value: 'created', label: '创建时间' },
+    { value: 'title', label: '标题' },
+  ];
+
   // Check if any filter is active
   const hasActiveFilters = statusFilter !== DEFAULT_STATUS_FILTER || projectFilter !== 'all' || dateFilter !== DEFAULT_DATE_FILTER;
 
@@ -634,6 +628,26 @@ export default function TasksPage() {
               </Select>
             </div>
 
+            <div className="h-6 w-px bg-border hidden sm:block" />
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground flex items-center gap-1 whitespace-nowrap shrink-0">
+                排序
+              </span>
+              <Select value={sortOrder} onValueChange={setSortOrder}>
+                <SelectTrigger className="w-[100px] h-8 text-xs">
+                  <SelectValue placeholder="排序" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sortOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value} className="text-xs">
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {hasActiveFilters && (
               <Button
                 variant="ghost"
@@ -711,6 +725,19 @@ export default function TasksPage() {
         </div>
       </Card>
 
+      {/* Quick Add Task */}
+      {!showArchived && (
+        <QuickAddTask
+          defaultOwner={selectedPerson}
+          projects={projects}
+          defaultProjectPHID={projectFilter}
+          onTaskCreated={() => {
+            setAfterCursor(null);
+            fetchTasks(false);
+          }}
+        />
+      )}
+
       {/* Loading Spinner */}
       {loading && (
         <div className="flex-1 flex items-center justify-center">
@@ -735,7 +762,8 @@ export default function TasksPage() {
                 const ownerName = task.fields.ownerPHID ? 
                   (userCache[task.fields.ownerPHID]?.realName || userCache[task.fields.ownerPHID]?.userName || '') : '';
                 const taskProjects = (task as any).attachments?.projects?.projectPHIDs || [];
-                const priorityColor = getPriorityColor(task.fields.priority?.value);
+                const priorityLeftBorder = getPriorityLeftBorderColor(task.fields.priority?.value);
+                const priorityHexColor = getPriorityHexColor(task.fields.priority?.value);
                 const estimatedDays = (task.fields as any)['custom.tp-link.estimated-days'];
                 const estimatedDate = (task.fields as any)['custom.tp-link.estimated-date-complete'];
                 const isArchived = archivedTaskIds.has(task.id);
@@ -751,8 +779,9 @@ export default function TasksPage() {
                     className={cn(
                       "group relative overflow-hidden transition-all duration-200 hover:shadow-md cursor-pointer border-l-4",
                       isRemoving && "opacity-40 scale-[0.98] pointer-events-none",
-                      priorityColor.replace('bg-', 'border-l-') // Use colored left border for priority
+                      priorityLeftBorder // Keep class for Tailwind reference, but inline style ensures it works
                     )}
+                    style={{ borderLeftColor: priorityHexColor }}
                     onClick={() => handleTaskClick(task)}
                   >
                     {isBatchMode && (

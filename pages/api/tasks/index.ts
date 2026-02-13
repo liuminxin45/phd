@@ -18,7 +18,7 @@ export default async function handler(
       return res.status(500).json({ error: 'Server configuration error' });
     }
 
-    const { limit = '100', after, status, assigned, ids, projects, createdStart } = req.query;
+    const { limit = '100', after, status, assigned, ids, projects, createdStart, order } = req.query;
     
     const client = new ConduitClient(host, token);
     
@@ -46,7 +46,9 @@ export default async function handler(
       constraints,
       {},
       parseInt(limit as string),
-      after as string | null
+      after as string | null,
+      undefined, // queryKey
+      order as string // order
     );
     
     res.status(200).json(result);

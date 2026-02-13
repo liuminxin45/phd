@@ -1,16 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { ConduitClient } from '@/lib/conduit/client';
-
-const PRIORITY_KEY_MAP: Record<string, string> = {
-  '100': 'unbreak',
-  '90': 'triage',
-  '80': 'high',
-  '50': 'normal',
-  '25': 'low',
-  '0': 'wish',
-};
-
-const PRIORITY_KEYS = new Set(Object.values(PRIORITY_KEY_MAP));
+import { NUMERIC_TO_KEY, VALID_PRIORITY_KEYS } from '@/lib/constants/priority';
 
 interface UpdateTaskRequest {
   taskId: string;
@@ -28,7 +18,7 @@ export default async function handler(
 
   const { taskId, status, priority } = req.body as UpdateTaskRequest;
   const priorityKey = priority
-    ? (PRIORITY_KEY_MAP[priority] ?? (PRIORITY_KEYS.has(priority) ? priority : null))
+    ? (NUMERIC_TO_KEY[priority] ?? (VALID_PRIORITY_KEYS.has(priority) ? priority : null))
     : null;
   
   // Build transactions array based on what fields are being updated
