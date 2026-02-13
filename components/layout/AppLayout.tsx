@@ -1,6 +1,6 @@
 import { useRouter } from 'next/router';
 import { ReactNode, useMemo, useState, useEffect, useRef } from 'react';
-import { Home, CheckSquare, Folder, BookOpen, Search, X, Minus, Square, Settings } from 'lucide-react';
+import { Home, CheckSquare, Folder, BookOpen, GitPullRequest, Search, X, Minus, Square, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/contexts/UserContext';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +23,7 @@ const DashboardPage = dynamic(() => import('@/pages/index'), { ssr: false, loadi
 const TasksPage = dynamic(() => import('@/pages/tasks'), { ssr: false, loading: PageLoader });
 const ProjectsPage = dynamic(() => import('@/pages/projects'), { ssr: false, loading: PageLoader });
 const BlogsPage = dynamic(() => import('@/pages/blogs'), { ssr: false, loading: PageLoader });
+const ReviewPage = dynamic(() => import('@/pages/review'), { ssr: false, loading: PageLoader });
 const SettingsPage = dynamic(() => import('@/pages/settings'), { ssr: false, loading: PageLoader });
 
 interface AppLayoutProps {
@@ -34,6 +35,7 @@ const navigation = [
   { name: 'Tasks', href: '/tasks', icon: CheckSquare },
   { name: 'Projects', href: '/projects', icon: Folder },
   { name: 'Blogs', href: '/blogs', icon: BookOpen },
+  { name: 'Review', href: '/review', icon: GitPullRequest },
 ];
 
 export default function AppLayout({ children }: AppLayoutProps) {
@@ -260,6 +262,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
           {mountedPages.has('/blogs') && (
             <div data-blog-scroll style={{ display: currentPath === '/blogs' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
               <BlogsPage key={pageReloadKeys['/blogs'] || 0} />
+            </div>
+          )}
+          {mountedPages.has('/review') && (
+            <div style={{ display: currentPath === '/review' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+              <ReviewPage key={pageReloadKeys['/review'] || 0} />
             </div>
           )}
           {mountedPages.has('/settings') && (
