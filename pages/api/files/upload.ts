@@ -1,6 +1,15 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { ConduitClient } from '@/lib/conduit/client';
 
+// Allow larger request bodies for file uploads (default is 1MB)
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb',
+    },
+  },
+};
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse

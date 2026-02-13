@@ -91,6 +91,12 @@ export function remarkupToHtml(raw: string): string {
   text = text.replace(/\[\[([^|\]\n]+)\|([^\]\n]+)\]\]/g, '<a href="$1" class="remarkup-link">$2</a>');
   text = text.replace(/\[\[([^\]\n]+)\]\]/g, '<a href="$1" class="remarkup-link">$1</a>');
 
+  // ── 5b. Markdown-style links: [label](url) — negative lookbehind avoids matching inside [[...]]
+  text = text.replace(/(?<!\[)\[([^\[\]\n]+?)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" class="remarkup-link" target="_blank" rel="noopener">$1</a>');
+
+  // ── 5c. Bare URLs: http://... or https://... (not already inside href="..." or >...</a>)
+  text = text.replace(/(?<!="|>)(https?:\/\/[^\s<>\])"]+)/g, '<a href="$1" class="remarkup-link" target="_blank" rel="noopener">$1</a>');
+
   // ── 6. @mentions
   text = text.replace(/@([a-zA-Z0-9_.-]+)/g, '<span class="remarkup-mention">@$1</span>');
 
@@ -99,8 +105,8 @@ export function remarkupToHtml(raw: string): string {
   const out: string[] = [];
   let inQuote = false;
   let quoteLines: string[] = [];
-  let inUl = false;
-  let inOl = false;
+  let listDepth = 0;
+  let listTags: string[] = [];
   let inTable = false;
   let tableRows: string[] = [];
 
@@ -112,8 +118,50 @@ export function remarkupToHtml(raw: string): string {
     inQuote = false;
   };
 
-  const flushUl = () => { if (inUl) { out.push('</ul>'); inUl = false; } };
-  const flushOl = () => { if (inOl) { out.push('</ol>'); inOl = false; } };
+  const isListLine = (l: string) => /^\s*[-*]\s+/.test(l) || /^\s*#\s+/.test(l);
+
+  const flushList = () => {
+    while (listDepth > 0) {
+      listDepth--;
+      out.push('</li>');
+      out.push(`</${listTags[listDepth]}>`);
+    }
+    listTags = [];
+  };
+
+  const pushListItem = (tag: 'ul' | 'ol', indent: number, content: string) => {
+    const rawDepth = Math.floor(indent / 2) + 1;
+    const targetDepth = Math.min(rawDepth, listDepth + 1);
+
+    if (listDepth > 0 && targetDepth <= listDepth && listTags[targetDepth - 1] !== tag) {
+      while (listDepth >= targetDepth) {
+        listDepth--;
+        out.push('</li>');
+        out.push(`</${listTags[listDepth]}>`);
+      }
+    }
+
+    if (targetDepth > listDepth) {
+      while (listDepth < targetDepth) {
+        out.push(`<${tag}>`);
+        listTags[listDepth] = tag;
+        listDepth++;
+      }
+      out.push(`<li>${content}`);
+    } else if (targetDepth === listDepth) {
+      out.push('</li>');
+      out.push(`<li>${content}`);
+    } else {
+      while (listDepth > targetDepth) {
+        listDepth--;
+        out.push('</li>');
+        out.push(`</${listTags[listDepth]}>`);
+      }
+      out.push('</li>');
+      out.push(`<li>${content}`);
+    }
+  };
+
   const flushTable = () => {
     if (inTable && tableRows.length > 0) {
       out.push('<table class="remarkup-table"><tbody>');
@@ -124,7 +172,7 @@ export function remarkupToHtml(raw: string): string {
     inTable = false;
   };
 
-  const flushAll = () => { flushQuote(); flushUl(); flushOl(); flushTable(); };
+  const flushAll = () => { flushQuote(); flushList(); flushTable(); };
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -151,7 +199,7 @@ export function remarkupToHtml(raw: string): string {
     // Pattern: >>! In T12345#comment, @user wrote:
     // or just >>! content
     if (line.startsWith('>>!') || line.startsWith('>> !')) {
-      flushUl(); flushOl(); flushTable();
+      flushList(); flushTable();
       // Start collecting quote block
       const content = line.replace(/^>>!?\s*/, '').replace(/^>>\s*!\s*/, '');
       if (!inQuote) inQuote = true;
@@ -169,7 +217,7 @@ export function remarkupToHtml(raw: string): string {
 
     // ── Regular blockquote: > line
     if (line.match(/^>\s/)) {
-      flushUl(); flushOl(); flushTable();
+      flushList(); flushTable();
       inQuote = true;
       quoteLines.push(line.replace(/^>\s?/, ''));
       continue;
@@ -184,7 +232,7 @@ export function remarkupToHtml(raw: string): string {
 
     // ── Table: | col | col |
     if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
-      flushQuote(); flushUl(); flushOl();
+      flushQuote(); flushList();
       inTable = true;
       const cells = line.trim().slice(1, -1).split('|').map(c => c.trim());
       // Check if it's a separator row (---|---)
@@ -195,23 +243,39 @@ export function remarkupToHtml(raw: string): string {
     }
     if (inTable) flushTable();
 
-    // ── Unordered list: - item or * item (at start of line)
-    if (line.match(/^[\-\*]\s+/)) {
-      flushQuote(); flushOl(); flushTable();
-      if (!inUl) { out.push('<ul>'); inUl = true; }
-      out.push(`<li>${line.replace(/^[\-\*]\s+/, '')}</li>`);
+    // ── Unordered list: - item or * item (with optional leading indent for nesting)
+    const ulMatch = line.match(/^(\s*)([-*])\s+(.*)/);
+    if (ulMatch) {
+      flushQuote(); flushTable();
+      pushListItem('ul', ulMatch[1].length, ulMatch[3]);
       continue;
     }
-    if (inUl) flushUl();
 
-    // ── Ordered list: # item
-    if (line.match(/^#\s+/)) {
-      flushQuote(); flushUl(); flushTable();
-      if (!inOl) { out.push('<ol>'); inOl = true; }
-      out.push(`<li>${line.replace(/^#\s+/, '')}</li>`);
+    // ── Ordered list: # item (with optional leading indent for nesting)
+    const olMatch = line.match(/^(\s*)#\s+(.*)/);
+    if (olMatch) {
+      flushQuote(); flushTable();
+      pushListItem('ol', olMatch[1].length, olMatch[2]);
       continue;
     }
-    if (inOl) flushOl();
+
+    // ── Empty line → paragraph break (checked before flushList so lookahead can keep list open)
+    if (line.trim() === '') {
+      // If inside a list, check if list continues after blank line(s)
+      if (listDepth > 0) {
+        let j = i + 1;
+        while (j < lines.length && lines[j].trim() === '') j++;
+        if (j < lines.length && isListLine(lines[j])) {
+          continue; // skip blank line, stay in list context
+        }
+      }
+      flushAll();
+      out.push('');
+      continue;
+    }
+
+    // Non-list, non-blank line encountered while in a list → close the list
+    if (listDepth > 0) flushList();
 
     // ── Horizontal rule
     if (line.match(/^-{3,}\s*$/)) {
@@ -227,13 +291,6 @@ export function remarkupToHtml(raw: string): string {
       flushAll();
       const type = calloutMatch[1].toLowerCase();
       out.push(`<div class="remarkup-callout remarkup-callout-${type}">${calloutMatch[2]}</div>`);
-      continue;
-    }
-
-    // ── Empty line → paragraph break
-    if (line.trim() === '') {
-      flushAll();
-      out.push('');
       continue;
     }
 
@@ -256,23 +313,22 @@ export function remarkupToHtml(raw: string): string {
   // ##monospace## (Remarkup alternative)
   html = html.replace(/##(.+?)##/g, '<code class="remarkup-inline-code">$1</code>');
 
-  // ── 9. Restore code blocks and inline code
-  html = html.replace(/\x00INLINECODE_(\d+)\x00/g, (_m, idx) => inlineCodes[parseInt(idx)] || '');
-  html = html.replace(/\x00CODEBLOCK_(\d+)\x00/g, (_m, idx) => codeBlocks[parseInt(idx)] || '');
-
-  // ── 10. Wrap bare text lines in <p> tags
-  // Split by block elements and wrap plain text
+  // ── 9. Wrap bare text lines in <p> tags (BEFORE restoring code blocks to avoid wrapping code lines)
   html = html
     .split('\n')
     .map(line => {
       const trimmed = line.trim();
       if (!trimmed) return '';
+      // Don't wrap code block / inline code placeholders
+      if (/\x00(CODEBLOCK|INLINECODE)_\d+\x00/.test(trimmed)) {
+        return trimmed;
+      }
       // Don't wrap if line is already an HTML block element
       if (/^<(h[1-6]|p|div|ul|ol|li|table|thead|tbody|tr|th|td|blockquote|pre|hr|img|section|article|nav|aside|figure|figcaption)\b/i.test(trimmed)) {
         return trimmed;
       }
       // Don't wrap closing tags
-      if (/^<\/(ul|ol|table|thead|tbody|blockquote|div|pre)\b/i.test(trimmed)) {
+      if (/^<\/(ul|ol|li|table|thead|tbody|blockquote|div|pre)\b/i.test(trimmed)) {
         return trimmed;
       }
       return `<p>${trimmed}</p>`;
@@ -281,6 +337,10 @@ export function remarkupToHtml(raw: string): string {
 
   // Clean up empty <p></p>
   html = html.replace(/<p>\s*<\/p>/g, '');
+
+  // ── 10. Restore code blocks and inline code
+  html = html.replace(/\x00INLINECODE_(\d+)\x00/g, (_m, idx) => inlineCodes[parseInt(idx)] || '');
+  html = html.replace(/\x00CODEBLOCK_(\d+)\x00/g, (_m, idx) => codeBlocks[parseInt(idx)] || '');
 
   return html;
 }

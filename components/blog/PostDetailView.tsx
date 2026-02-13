@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { httpGet, httpPost } from '@/lib/httpClient';
-import { remarkupToHtml } from '@/lib/parsers/remarkup';
+import { RemarkupRenderer } from '@/components/ui/RemarkupRenderer';
 import {
   User,
   Calendar,
@@ -13,7 +13,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import type { ApiBlogPost } from '@/lib/blog/types';
-import { formatEpoch, IMAGE_EXTENSIONS } from '@/lib/blog/helpers';
+import { formatEpoch } from '@/lib/blog/helpers';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,9 +23,6 @@ import { cn } from '@/lib/utils';
 export function PostDetailView({ post, onBack }: { post: ApiBlogPost; onBack: () => void }) {
   const readTimeMin = Math.max(1, Math.ceil((post.body || '').length / 250));
 
-  // Convert Remarkup body → HTML
-  const bodyHtml = useMemo(() => remarkupToHtml(post.body || ''), [post.body]);
-
   // Scroll to top on mount
   const containerRef = useCallback((node: HTMLDivElement | null) => {
     if (node) node.scrollIntoView({ block: 'start', behavior: 'instant' });
@@ -33,44 +30,6 @@ export function PostDetailView({ post, onBack }: { post: ApiBlogPost; onBack: ()
 
   // ── Like count (display only) ──
   const tokenCount = post.tokenCount;
-
-  // ── Resolve file embeds (image vs file) after body renders ──
-  const bodyContainerRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const container = bodyContainerRef.current;
-    if (!container) return;
-    const embeds = container.querySelectorAll<HTMLElement>('.remarkup-file-embed');
-    if (embeds.length === 0) return;
-
-    let cancelled = false;
-    embeds.forEach(async (el) => {
-      const fileId = el.dataset.fileId;
-      if (!fileId) return;
-      try {
-        const info = await httpGet<{ id: number; name: string; mimeType: string; url: string; isImage?: boolean }>(`/api/files/${fileId}/url`);
-        if (cancelled) return;
-        const ext = (info.name || '').toLowerCase().split('.').pop() || '';
-        const isImage = info.isImage ?? info.mimeType?.startsWith('image/') ?? IMAGE_EXTENSIONS.has(ext);
-        if (isImage) {
-          const sizeAttr = el.dataset.size || '';
-          const layoutAttr = el.dataset.layout || '';
-          let style = '';
-          if (sizeAttr === 'thumb') style = 'max-width:200px;';
-          else if (sizeAttr === 'full') style = 'width:100%;';
-          else if (parseFloat(sizeAttr) > 0 && parseFloat(sizeAttr) <= 1) style = `width:${Math.round(parseFloat(sizeAttr) * 100)}%;`;
-          else if (parseFloat(sizeAttr) > 1) style = `max-width:${sizeAttr}px;`;
-          const cls = layoutAttr === 'center' ? 'phabricator-image-center' : '';
-          el.innerHTML = `<img src="${info.url}" alt="${info.name || `F${fileId}`}" style="${style}" class="${cls}" loading="lazy" />`;
-        } else {
-          const sizeStr = info.mimeType ? ` (${info.mimeType})` : '';
-          el.innerHTML = `<a href="${info.url}" target="_blank" rel="noopener" class="remarkup-file-link" title="${info.name || `F${fileId}`}">📎 ${info.name || `F${fileId}`}${sizeStr}</a>`;
-        }
-      } catch {
-        // Leave the fallback link
-      }
-    });
-    return () => { cancelled = true; };
-  }, [bodyHtml]);
 
   // ── Comment state ──
   const [comments, setComments] = useState<any[]>([]);
@@ -202,30 +161,7 @@ export function PostDetailView({ post, onBack }: { post: ApiBlogPost; onBack: ()
           </div>
 
           {/* Body — rendered from Remarkup → HTML */}
-          <div
-            ref={bodyContainerRef}
-            className="prose prose-neutral prose-sm md:prose-base max-w-none dark:prose-invert
-              prose-headings:font-bold prose-headings:tracking-tight
-              prose-h1:text-2xl prose-h1:mt-10 prose-h1:mb-6
-              prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-4
-              prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-3
-              prose-p:leading-7 prose-p:mb-4
-              prose-a:text-primary prose-a:no-underline hover:prose-a:underline
-              prose-code:text-sm prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:font-mono prose-code:before:content-none prose-code:after:content-none
-              prose-pre:bg-muted/80 prose-pre:text-foreground prose-pre:rounded-lg prose-pre:border prose-pre:border-border
-              [&_pre_code]:bg-transparent [&_pre_code]:text-foreground [&_pre_code]:p-0
-              prose-blockquote:border-l-4 prose-blockquote:border-primary/30 prose-blockquote:bg-muted/30 prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:rounded-r-lg prose-blockquote:not-italic
-              prose-img:rounded-lg prose-img:border prose-img:border-border prose-img:shadow-sm
-              [&_.phabricator-image-center]:mx-auto [&_.phabricator-image-center]:block
-              [&_.remarkup-callout]:my-4 [&_.remarkup-callout]:p-4 [&_.remarkup-callout]:rounded-lg [&_.remarkup-callout]:text-sm [&_.remarkup-callout]:border
-              [&_.remarkup-callout-note]:bg-blue-50 [&_.remarkup-callout-note]:text-blue-900 [&_.remarkup-callout-note]:border-blue-100
-              [&_.remarkup-callout-warning]:bg-amber-50 [&_.remarkup-callout-warning]:text-amber-900 [&_.remarkup-callout-warning]:border-amber-100
-              [&_.remarkup-callout-important]:bg-red-50 [&_.remarkup-callout-important]:text-red-900 [&_.remarkup-callout-important]:border-red-100
-              [&_.remarkup-callout-tip]:bg-green-50 [&_.remarkup-callout-tip]:text-green-900 [&_.remarkup-callout-tip]:border-green-100
-              prose-table:text-sm prose-th:bg-muted/50 prose-th:p-3 prose-td:p-3 prose-td:border-b
-            "
-            dangerouslySetInnerHTML={{ __html: bodyHtml }}
-          />
+          <RemarkupRenderer content={post.body || ''} />
 
           {/* Like count — end of article */}
           {tokenCount > 0 && (
@@ -302,13 +238,10 @@ export function PostDetailView({ post, onBack }: { post: ApiBlogPost; onBack: ()
                       <span className="text-sm font-semibold text-foreground">{c.author}</span>
                       <span className="text-xs text-muted-foreground">{c.timestamp}</span>
                     </div>
-                    <div
-                      className="text-sm text-foreground/90 leading-relaxed bg-muted/20 p-4 rounded-r-xl rounded-bl-xl
-                        [&_blockquote]:border-l-4 [&_blockquote]:border-primary/20 [&_blockquote]:pl-3 [&_blockquote]:py-1 [&_blockquote]:my-2 [&_blockquote]:text-muted-foreground [&_blockquote]:bg-muted/50 [&_blockquote]:rounded-r
-                        [&_img]:max-w-full [&_img]:rounded-md [&_img]:my-2
-                        [&_p]:my-1
-                      "
-                      dangerouslySetInnerHTML={{ __html: remarkupToHtml(c.content || '') }}
+                    <RemarkupRenderer
+                      content={c.content || ''}
+                      compact
+                      className="text-sm text-foreground/90 leading-relaxed bg-muted/20 p-4 rounded-r-xl rounded-bl-xl"
                     />
                   </div>
                 </div>

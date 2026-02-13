@@ -17,7 +17,8 @@ import {
 import { PeoplePicker } from '@/components/ui/people-picker';
 import { ProjectPicker } from '@/components/ui/project-picker';
 import { DatePicker } from '@/components/ui/date-picker';
-import { RichContentRenderer } from '@/components/ui/rich-content-renderer';
+import { RemarkupRenderer } from '@/components/ui/RemarkupRenderer';
+import { RemarkupEditor } from '@/components/ui/RemarkupEditor';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1183,10 +1184,9 @@ export function TaskDetailDialog({
             
             {isEditingDescription ? (
               <div className="space-y-3">
-                <textarea
+                <RemarkupEditor
                   value={taskDescription}
-                  onChange={(e) => setTaskDescription(e.target.value)}
-                  className="w-full min-h-[150px] p-3 text-sm rounded-md border border-input bg-transparent shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-y"
+                  onChange={setTaskDescription}
                   autoFocus
                 />
                 <div className="flex gap-2 justify-end">
@@ -1214,7 +1214,7 @@ export function TaskDetailDialog({
               </div>
             ) : (
               <div className="text-sm text-foreground/90 bg-muted/20 rounded-md p-4 min-h-[60px] border border-border/50">
-                <RichContentRenderer content={taskDescription || '暂无描述'} />
+                <RemarkupRenderer content={taskDescription || '暂无描述'} compact />
               </div>
             )}
           </div>
@@ -1327,6 +1327,7 @@ export function TaskDetailDialog({
             ) : (
               <Timeline
                 title="评论和历史"
+                cacheKey={task ? `T${task.id}` : undefined}
                 items={comments.map((comment) => ({
                   id: comment.phid,
                   author: comment.author,

@@ -6,6 +6,7 @@ import { UnstandardWidget } from '@/components/dashboard/UnstandardWidget';
 import { DinnerWidget } from '@/components/dashboard/DinnerWidget';
 import { httpClient } from '@/lib/httpClient';
 import { toast } from 'sonner';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 
 export default function Dashboard() {
   // Task detail modal state
@@ -81,21 +82,17 @@ export default function Dashboard() {
       />
 
       {/* Project Detail Modal */}
-      {selectedProject && isProjectModalOpen && (
-        <div
-          className="fixed top-0 left-0 right-0 bottom-0 z-[10000] flex items-center justify-center bg-black/50 backdrop-blur-sm"
-          style={{ margin: 0, padding: 0 }}
-          onClick={handleCloseProjectModal}
-        >
-          <div onClick={(e) => e.stopPropagation()}>
+      <Dialog open={!!selectedProject && isProjectModalOpen} onOpenChange={(open) => !open && handleCloseProjectModal()}>
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-5xl h-[85vh] p-0 flex flex-col gap-0 overflow-hidden">
+          {selectedProject && (
             <ProjectDetailPanel 
               project={selectedProject} 
               isModal={true}
               onClose={handleCloseProjectModal}
             />
-          </div>
-        </div>
-      )}
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

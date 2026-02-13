@@ -1,12 +1,12 @@
-import { useState, useCallback, useMemo } from 'react';
-import { Edit2, Trash2, Loader2, Check, MessageSquare, Download, Send, X } from 'lucide-react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import { Edit2, Trash2, Loader2, Check, MessageSquare, Send, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { toastWithUndo } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Card } from '@/components/ui/card';
+import { RemarkupRenderer } from '@/components/ui/RemarkupRenderer';
+import { RemarkupEditor } from '@/components/ui/RemarkupEditor';
 
 export interface TimelineItem {
   id: number | string;
@@ -28,116 +28,12 @@ interface TimelineProps {
   addPlaceholder?: string;
   showActions?: boolean;
   showAddInput?: boolean;
-  fileCache?: Record<string, string>;
-  fileMetadata?: Record<string, any>;
-  onImagePreview?: (src: string, alt: string) => void;
   className?: string;
+  /** localStorage key for caching draft input (e.g. 'timeline-T123'). No caching if omitted. */
+  cacheKey?: string;
 }
 
-// Process text to replace file references with inline display
-function processTextWithFiles(
-  text: string, 
-  fileCache: Record<string, string>, 
-  fileMetadata: Record<string, any>,
-  onImagePreview?: (src: string, alt: string) => void
-): React.ReactNode[] {
-  const filePattern = /\{F(\d+)(?:[^}]*)?\}/g;
-  const parts: React.ReactNode[] = [];
-  let lastIndex = 0;
-  let match;
-
-  while ((match = filePattern.exec(text)) !== null) {
-    // Add text before the file reference
-    if (match.index > lastIndex) {
-      parts.push(text.substring(lastIndex, match.index));
-    }
-
-    const fileId = match[1];
-    const dataURI = fileCache[fileId];
-    const metadata = fileMetadata[fileId];
-
-    if (dataURI && metadata) {
-      const isImage = metadata.mimeType?.startsWith('image/');
-      
-      if (isImage) {
-        // Render image thumbnail
-        parts.push(
-          <img
-            key={`file-${fileId}-${match.index}`}
-            src={dataURI}
-            alt={metadata.name || `F${fileId}`}
-            className="inline-block max-w-[120px] h-auto rounded-md border shadow-sm my-1 cursor-zoom-in hover:opacity-90 transition-opacity"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (onImagePreview) {
-                onImagePreview(metadata.url || dataURI, metadata.name || `F${fileId}`);
-              }
-            }}
-          />
-        );
-      } else {
-        // Render file download link
-        parts.push(
-          <a
-            key={`file-${fileId}-${match.index}`}
-            className="inline-flex items-center gap-1.5 text-primary hover:text-primary/80 hover:underline cursor-pointer mx-1 font-medium"
-            onClick={async (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              
-              try {
-                const downloadSrc = metadata.url || dataURI;
-                if (!downloadSrc) {
-                  throw new Error('文件未正确加载');
-                }
-
-                if (downloadSrc.startsWith('data:')) {
-                  const response = await fetch(downloadSrc);
-                  const blob = await response.blob();
-                  const blobUrl = URL.createObjectURL(blob);
-                  const link = document.createElement('a');
-                  link.href = blobUrl;
-                  link.download = metadata.name || `F${fileId}`;
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                  URL.revokeObjectURL(blobUrl);
-                } else {
-                  if (window.phabdash?.openExternal) {
-                    await window.phabdash.openExternal(downloadSrc);
-                  } else {
-                    window.open(downloadSrc, '_blank');
-                  }
-                }
-              } catch (error) {
-                toast.error('下载文件失败');
-              }
-            }}
-          >
-            <Download className="h-3.5 w-3.5" />
-            <span>{metadata.name || `F${fileId}`}</span>
-          </a>
-        );
-      }
-    } else {
-      // File not loaded, show placeholder
-      parts.push(
-        <span key={`file-${fileId}-${match.index}`} className="text-muted-foreground mx-1 text-xs bg-muted px-1 py-0.5 rounded">
-          {match[0]}
-        </span>
-      );
-    }
-
-    lastIndex = match.index + match[0].length;
-  }
-
-  // Add remaining text
-  if (lastIndex < text.length) {
-    parts.push(text.substring(lastIndex));
-  }
-
-  return parts.length > 0 ? parts : [text];
-}
+const CACHE_PREFIX = 'remarkup-draft:';
 
 export function Timeline({
   title,
@@ -149,10 +45,8 @@ export function Timeline({
   addPlaceholder = '分享项目进展、想法或更新...',
   showActions = true,
   showAddInput = true,
-  fileCache = {},
-  fileMetadata = {},
-  onImagePreview,
   className,
+  cacheKey,
 }: TimelineProps) {
   const [editingItemId, setEditingItemId] = useState<number | string | null>(null);
   const [editedText, setEditedText] = useState('');
@@ -161,6 +55,32 @@ export function Timeline({
   const [newContent, setNewContent] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<number | string>>(new Set());
+
+  // Restore cached draft on mount
+  useEffect(() => {
+    if (!cacheKey) return;
+    try {
+      const cached = localStorage.getItem(CACHE_PREFIX + cacheKey);
+      if (cached) setNewContent(cached);
+    } catch { /* ignore */ }
+  }, [cacheKey]);
+
+  // Persist draft to localStorage on change
+  useEffect(() => {
+    if (!cacheKey) return;
+    try {
+      if (newContent.trim()) {
+        localStorage.setItem(CACHE_PREFIX + cacheKey, newContent);
+      } else {
+        localStorage.removeItem(CACHE_PREFIX + cacheKey);
+      }
+    } catch { /* ignore */ }
+  }, [newContent, cacheKey]);
+
+  const clearDraftCache = useCallback(() => {
+    if (!cacheKey) return;
+    try { localStorage.removeItem(CACHE_PREFIX + cacheKey); } catch { /* ignore */ }
+  }, [cacheKey]);
 
   // Filter out pending delete items
   const visibleItems = useMemo(() => 
@@ -259,6 +179,7 @@ export function Timeline({
     try {
       await onAdd(trimmedContent);
       setNewContent('');
+      clearDraftCache();
       // Toast is handled by the caller (onAdd callback)
     } catch (error: any) {
       toast.error(error.message || '发布失败');
@@ -283,7 +204,7 @@ export function Timeline({
       {/* Timeline Container */}
       <div className="bg-muted/30 border border-border rounded-lg p-4 shadow-sm">
         {/* Items List */}
-        <div className="max-h-[400px] overflow-y-auto pr-2 space-y-4">
+        <div className="max-h-[400px] overflow-y-auto overflow-x-hidden pr-2 space-y-4">
         {visibleItems.length === 0 ? (
           <div className="text-center py-10">
             <MessageSquare className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
@@ -347,10 +268,10 @@ export function Timeline({
                   {/* Content or Edit Form */}
                   {editingItemId === item.id ? (
                     <div className="space-y-2">
-                      <Textarea
+                      <RemarkupEditor
                         value={editedText}
-                        onChange={(e) => setEditedText(e.target.value)}
-                        className="min-h-[80px] text-sm"
+                        onChange={setEditedText}
+                        minHeight="80px"
                         autoFocus
                       />
                       <div className="flex gap-2">
@@ -381,9 +302,11 @@ export function Timeline({
                       </div>
                     </div>
                   ) : (
-                    <div className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap break-words bg-background border border-border/50 rounded-md p-3 shadow-sm">
-                      {processTextWithFiles(item.content, fileCache, fileMetadata, onImagePreview)}
-                    </div>
+                    <RemarkupRenderer
+                      content={item.content}
+                      compact
+                      className="text-sm text-foreground/90 leading-relaxed bg-background border border-border/50 rounded-md p-3 shadow-sm"
+                    />
                   )}
                 </div>
               </div>
@@ -395,12 +318,11 @@ export function Timeline({
         {/* Add New Input */}
         {showAddInput && onAdd && (
           <div className="mt-4 pt-4 border-t border-border space-y-3">
-            <Textarea
+            <RemarkupEditor
               value={newContent}
-              onChange={(e) => setNewContent(e.target.value)}
+              onChange={setNewContent}
               placeholder={addPlaceholder}
-              className="min-h-[80px] text-sm resize-none"
-              disabled={isAdding}
+              minHeight="80px"
             />
             <div className="flex justify-end">
               <Button

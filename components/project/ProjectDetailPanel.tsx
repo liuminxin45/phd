@@ -21,7 +21,7 @@ import { NodePoolPicker } from '@/components/ui/node-pool-picker';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { usePinnedPanel } from '@/contexts/PinnedPanelContext';
-import { RichContentRenderer } from '@/components/ui/rich-content-renderer';
+import { RemarkupRenderer } from '@/components/ui/RemarkupRenderer';
 import { TaskDetailDialog } from '@/components/task/TaskDetailDialog';
 import { Timeline, TimelineItem } from '@/components/ui/Timeline';
 
@@ -29,7 +29,6 @@ interface ProjectDetailPanelProps {
   project: Project;
   isModal?: boolean;
   onClose?: () => void;
-  defaultFullscreen?: boolean;
 }
 
 type TabId = 'info' | 'dashboard' | 'kanban' | 'docs';
@@ -307,7 +306,7 @@ const getDelayReasonOptions = (team: string): { value: string; label: string }[]
   ];
 };
 
-export function ProjectDetailPanel({ project, isModal = false, onClose, defaultFullscreen = false }: ProjectDetailPanelProps) {
+export function ProjectDetailPanel({ project, isModal = false, onClose }: ProjectDetailPanelProps) {
   const { addPinnedItem, removePinnedItem, isPinned } = usePinnedPanel();
   const [tabs, setTabs] = useState<Tab[]>([
     { id: 'info', label: '项目信息', icon: Info, active: true },
@@ -323,7 +322,6 @@ export function ProjectDetailPanel({ project, isModal = false, onClose, defaultF
   const [productManager, setProductManager] = useState<ProjectPerson[]>([]);
   const [projectAssistant, setProjectAssistant] = useState<ProjectPerson[]>([]);
   const [projectProgress, setProjectProgress] = useState(0);
-  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Dashboard tab state
   const [milestones, setMilestones] = useState<Milestone[]>([]);
@@ -721,12 +719,10 @@ export function ProjectDetailPanel({ project, isModal = false, onClose, defaultF
   const activeTab = tabs.find(t => t.active);
 
   return (
-    <div className={`flex flex-col h-full bg-white rounded-lg shadow-xl border border-neutral-200 transition-all duration-300 ease-in-out ${
-      isFullscreen ? 'fixed inset-4 z-30 w-auto max-h-none' : 'w-[700px] max-h-[85vh]'
-    }`}>
+    <div className="flex flex-col h-full w-full bg-background text-foreground">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-neutral-200 px-6 py-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-neutral-900">{project.fields.name}</h2>
+      <div className={`flex-shrink-0 border-b border-border px-6 py-4 flex items-center justify-between ${isModal ? 'pr-12' : ''}`}>
+        <h2 className="text-lg font-semibold">{project.fields.name}</h2>
         <div className="flex items-center gap-2">
           <button
             onClick={() => {
@@ -744,41 +740,27 @@ export function ProjectDetailPanel({ project, isModal = false, onClose, defaultF
             }}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded transition-colors ${
               isPinned(`project-${project.id}`)
-                ? 'text-blue-700 bg-blue-100 hover:bg-blue-200'
-                : 'text-neutral-700 bg-neutral-100 hover:bg-neutral-200'
+                ? 'text-primary bg-primary/10 hover:bg-primary/20'
+                : 'text-muted-foreground bg-muted hover:bg-muted/80'
             }`}
             title={isPinned(`project-${project.id}`) ? 'Unpin from panel' : 'Pin to panel'}
           >
             <Pin className="h-3.5 w-3.5" />
             <span>{isPinned(`project-${project.id}`) ? 'Pinned' : 'Pin'}</span>
           </button>
-          <button 
-            onClick={() => setIsFullscreen(!isFullscreen)} 
-            className="text-neutral-400 hover:text-neutral-600 transition-colors"
-            title={isFullscreen ? '恢复' : '全屏'}
-          >
-            {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
-          </button>
-          {isModal && onClose && (
-            <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600">
-              <X className="h-5 w-5" />
-            </button>
-          )}
         </div>
       </div>
 
       {/* Draggable Tabs */}
       <DndProvider backend={HTML5Backend}>
-        <div className="flex-shrink-0 border-b border-neutral-200 px-6 flex gap-1">
+        <div className="flex-shrink-0 border-b border-border px-6 flex gap-1">
           {tabs.map((tab, index) => (
-            <div key={tab.id}>
-              <TabItem 
-                tab={tab} 
-                index={index} 
-                moveTab={moveTab}
-                onClick={() => handleTabClick(tab.id)}
-              />
-            </div>
+            <TabItem 
+              tab={tab} 
+              index={index} 
+              moveTab={moveTab}
+              onClick={() => handleTabClick(tab.id)}
+            />
           ))}
         </div>
       </DndProvider>
@@ -790,16 +772,16 @@ export function ProjectDetailPanel({ project, isModal = false, onClose, defaultF
           <div className="space-y-6">
             {/* Basic Info */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-neutral-900">基本信息</h3>
+              <h3 className="text-sm font-semibold">基本信息</h3>
               
               <div className="space-y-3 text-sm">
                 <div className="flex items-start">
-                  <span className="text-neutral-500 w-24 flex-shrink-0">项目名称:</span>
-                  <span className="text-neutral-900">{project.fields.name}</span>
+                  <span className="text-muted-foreground w-24 flex-shrink-0">项目名称:</span>
+                  <span>{project.fields.name}</span>
                 </div>
                 <div className="flex items-start">
-                  <span className="text-neutral-500 w-24 flex-shrink-0">描述:</span>
-                  <span className="text-neutral-600 text-xs">
+                  <span className="text-muted-foreground w-24 flex-shrink-0">描述:</span>
+                  <span className="text-muted-foreground text-xs">
                     {project.fields.description || '暂无描述'}
                   </span>
                 </div>
@@ -1129,6 +1111,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose, defaultF
               ) : (
                 <Timeline
                   title="动态"
+                  cacheKey={`P${project.id}`}
                 items={progressUpdates}
                 emptyMessage="暂无动态，发布第一条动态吧"
                 addPlaceholder="分享项目进展、想法或更新..."
@@ -1741,7 +1724,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose, defaultF
                   <div className="flex-1 overflow-hidden rounded-lg border border-neutral-200 bg-white min-h-0">
                     {selectedDoc.content ? (
                       <div className="p-6 overflow-y-auto h-full">
-                        <RichContentRenderer content={selectedDoc.content} />
+                        <RemarkupRenderer content={selectedDoc.content} />
                       </div>
                     ) : selectedDoc.link.startsWith('blob:') || selectedDoc.link.startsWith('http') ? (
                       <div className="relative w-full h-full">
