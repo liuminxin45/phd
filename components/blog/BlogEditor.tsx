@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { CATEGORIES, TAGS, getLastWeekRange } from '@/lib/blog/helpers';
 import { AiBlogWriter } from './AiBlogWriter';
+import { AiReportWriter } from './AiReportWriter';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -373,6 +374,7 @@ export function CreateReportView({ onBack }: { onBack: () => void }) {
           返回周报列表
         </Button>
         <div className="flex items-center gap-2 w-full sm:w-auto">
+          <AiReportWriter onFill={(t, c) => { setTitle(t); setContent(c); }} />
           <Button variant="outline" className="flex-1 sm:flex-none">
             <Save className="h-4 w-4 mr-2" />
             保存草稿
