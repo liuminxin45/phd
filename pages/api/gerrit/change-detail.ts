@@ -7,6 +7,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const changeId = req.query.id as string;
+  const revisionId = req.query.revision as string | undefined;
+  const baseRevisionId = req.query.base as string | undefined;
   if (!changeId) {
     return res.status(400).json({ error: 'Missing change id' });
   }
@@ -15,23 +17,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const client = await createGerritClient();
 
     // Fetch change detail with all useful options
-    const change = await client.get(`/changes/${changeId}/detail`, {
-      'o': 'ALL_REVISIONS',
-    });
+    // Use queryChanges-style URL building for multiple 'o' params
+    const detailOptions = ['ALL_REVISIONS', 'LABELS', 'DETAILED_ACCOUNTS', 'DETAILED_LABELS', 'CURRENT_COMMIT', 'MESSAGES', 'SUBMITTABLE'];
+    const optionQuery = detailOptions.map((o) => `o=${o}`).join('&');
+    const change = await client.get(`/changes/${changeId}/detail?${optionQuery}`);
+
+    const effectiveRevision = revisionId || change.current_revision;
+    const filesPath = effectiveRevision
+      ? `/changes/${changeId}/revisions/${effectiveRevision}/files${baseRevisionId ? `?base=${encodeURIComponent(baseRevisionId)}` : ''}`
+      : null;
 
     // Also fetch with other options in parallel
-    const [comments, files] = await Promise.all([
+    const [comments, files, related] = await Promise.all([
       client.get(`/changes/${changeId}/comments`).catch(() => ({})),
-      // Get files for current revision
-      change.current_revision
-        ? client.get(`/changes/${changeId}/revisions/${change.current_revision}/files`).catch(() => ({}))
+      // Get files for selected revision (optionally compared with a base patch set)
+      filesPath
+        ? client.get(filesPath).catch(() => ({}))
         : Promise.resolve({}),
+      effectiveRevision
+        ? client.get(`/changes/${changeId}/revisions/${effectiveRevision}/related`).catch(() => ({ changes: [] }))
+        : Promise.resolve({ changes: [] }),
     ]);
 
     res.status(200).json({
       change,
       comments,
       files,
+      related: related?.changes || [],
     });
   } catch (error: any) {
     console.error('Gerrit change detail error:', error);

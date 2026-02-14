@@ -8,6 +8,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const changeId = req.query.id as string;
   const revisionId = (req.query.revision as string) || 'current';
+  const baseRevisionId = req.query.base as string | undefined;
   const filePath = req.query.file as string;
 
   if (!changeId || !filePath) {
@@ -17,7 +18,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const client = await createGerritClient();
     const encodedPath = encodeURIComponent(filePath);
-    const diff = await client.get(`/changes/${changeId}/revisions/${revisionId}/files/${encodedPath}/diff`);
+    const baseQuery = baseRevisionId ? `?base=${encodeURIComponent(baseRevisionId)}` : '';
+    const diff = await client.get(`/changes/${changeId}/revisions/${revisionId}/files/${encodedPath}/diff${baseQuery}`);
 
     res.status(200).json(diff);
   } catch (error: any) {

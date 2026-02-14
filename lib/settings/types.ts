@@ -47,4 +47,4 @@ export const SECRET_KEYS = new Set([
   'DINNER_SESSION',
 ]);
 
-export type TabId = 'llm' | 'env';
+export type TabId = 'llm' | 'env' | 'roadmap';

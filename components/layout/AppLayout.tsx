@@ -24,6 +24,7 @@ const TasksPage = dynamic(() => import('@/pages/tasks'), { ssr: false, loading: 
 const ProjectsPage = dynamic(() => import('@/pages/projects'), { ssr: false, loading: PageLoader });
 const BlogsPage = dynamic(() => import('@/pages/blogs'), { ssr: false, loading: PageLoader });
 const ReviewPage = dynamic(() => import('@/pages/review'), { ssr: false, loading: PageLoader });
+const ReviewAutoAiPage = dynamic(() => import('@/pages/review-auto-ai'), { ssr: false, loading: PageLoader });
 const SettingsPage = dynamic(() => import('@/pages/settings'), { ssr: false, loading: PageLoader });
 
 interface AppLayoutProps {
@@ -46,7 +47,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [currentPath, setCurrentPath] = useState('/');
-  const [mountedPages, setMountedPages] = useState<Set<string>>(new Set(['/']));
+  const [mountedPages, setMountedPages] = useState<Set<string>>(new Set(['/', '/review', '/review-auto-ai']));
   const [pageReloadKeys, setPageReloadKeys] = useState<Record<string, number>>({});
   const [isElectron, setIsElectron] = useState(false);
   const contentAreaRef = useRef<HTMLElement | null>(null);
@@ -267,6 +268,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
           {mountedPages.has('/review') && (
             <div style={{ display: currentPath === '/review' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
               <ReviewPage key={pageReloadKeys['/review'] || 0} />
+            </div>
+          )}
+          {mountedPages.has('/review-auto-ai') && (
+            <div style={{ display: currentPath === '/review-auto-ai' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+              <ReviewAutoAiPage key={pageReloadKeys['/review-auto-ai'] || 0} />
             </div>
           )}
           {mountedPages.has('/settings') && (

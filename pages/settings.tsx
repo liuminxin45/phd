@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { Settings, Bot, Server } from 'lucide-react';
+import { Settings, Bot, Server, Route } from 'lucide-react';
 import type { TabId } from '@/lib/settings/types';
 import { LlmTab } from '@/components/settings/LlmTab';
 import { EnvTab } from '@/components/settings/EnvTab';
+import { RoadmapTab } from '@/components/settings/RoadmapTab';
 
 const TABS: { id: TabId; label: string; icon: typeof Bot }[] = [
   { id: 'llm', label: 'AI / LLM', icon: Bot },
   { id: 'env', label: '环境变量', icon: Server },
+  { id: 'roadmap', label: 'Roadmap', icon: Route },
 ];
 
 export default function SettingsPage() {
@@ -50,6 +52,7 @@ export default function SettingsPage() {
 
         {activeTab === 'llm' && <LlmTab />}
         {activeTab === 'env' && <EnvTab />}
+        {activeTab === 'roadmap' && <RoadmapTab />}
       </div>
     </div>
   );

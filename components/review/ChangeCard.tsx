@@ -7,7 +7,9 @@ import {
   getStatusLabel,
 } from '@/lib/gerrit/helpers';
 import type { GerritChange } from '@/lib/gerrit/types';
+import type { RiskLevel } from '@/lib/gerrit/ai-types';
 import { LabelsSummary } from './LabelBadge';
+import { AiRiskDot } from './AiRiskDot';
 import { MessageSquare, GitBranch, ExternalLink } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
@@ -16,9 +18,11 @@ interface ChangeCardProps {
   onClick: () => void;
   gerritUrl?: string;
   showOwner?: boolean;
+  aiRiskLevel?: RiskLevel;
+  aiRiskReason?: string;
 }
 
-export function ChangeCard({ change, onClick, gerritUrl, showOwner = true }: ChangeCardProps) {
+export function ChangeCard({ change, onClick, gerritUrl, showOwner = true, aiRiskLevel, aiRiskReason }: ChangeCardProps) {
   const hasUnresolved = (change.unresolved_comment_count || 0) > 0;
 
   return (
@@ -39,7 +43,16 @@ export function ChangeCard({ change, onClick, gerritUrl, showOwner = true }: Cha
           <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
             <span className="flex items-center gap-1 truncate">
               <GitBranch className="h-3 w-3 shrink-0" />
-              <span className="truncate">{abbreviateProject(change.project)}</span>
+              <a
+                href={`${gerritUrl}/admin/repos/${encodeURIComponent(change.project)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="truncate hover:text-primary underline-offset-2 hover:underline"
+                title={change.project}
+              >
+                {abbreviateProject(change.project)}
+              </a>
               <span className="text-muted-foreground/50">→</span>
               <span className="truncate">{change.branch}</span>
             </span>
@@ -52,6 +65,8 @@ export function ChangeCard({ change, onClick, gerritUrl, showOwner = true }: Cha
           {gerritUrl && (
             <a
               href={`${gerritUrl}/c/${change._number}`}
+              target="_blank"
+              rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
               className="text-muted-foreground hover:text-foreground transition-colors"
               title="在 Gerrit 中打开"
@@ -71,6 +86,7 @@ export function ChangeCard({ change, onClick, gerritUrl, showOwner = true }: Cha
           <span className="flex items-center gap-1.5">
             <span className="text-green-600 font-medium">+{change.insertions || 0}</span>
             <span className="text-red-500 font-medium">-{change.deletions || 0}</span>
+            <AiRiskDot riskLevel={aiRiskLevel} briefReason={aiRiskReason} />
           </span>
 
           {/* Comments */}
@@ -86,9 +102,15 @@ export function ChangeCard({ change, onClick, gerritUrl, showOwner = true }: Cha
       {/* Row 3: Owner + time */}
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         {showOwner && (
-          <span className="truncate">
+          <a
+            href={`${gerritUrl}/q/owner:${encodeURIComponent(change.owner.email || change.owner.username || getAccountName(change.owner))}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="truncate hover:text-primary underline-offset-2 hover:underline"
+          >
             {getAccountName(change.owner)}
-          </span>
+          </a>
         )}
         <span className="shrink-0 ml-auto">{relativeTime(change.updated)}</span>
       </div>

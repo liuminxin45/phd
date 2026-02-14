@@ -42,6 +42,7 @@ export interface GerritChange {
   _number: number;
   owner: GerritAccount;
   labels?: Record<string, GerritLabelInfo>;
+  permitted_labels?: Record<string, string[]>;
   reviewers?: {
     REVIEWER?: GerritAccount[];
     CC?: GerritAccount[];
@@ -105,9 +106,22 @@ export interface GerritMessage {
   _revision_number?: number;
 }
 
+export interface GerritRelatedChange {
+  _change_number: number;
+  _revision_number: number;
+  _current_revision_number?: number;
+  change_id?: string;
+  commit?: string;
+  subject: string;
+  status: 'NEW' | 'MERGED' | 'ABANDONED' | 'DRAFT';
+  project?: string;
+  branch?: string;
+}
+
 export interface GerritCommentInfo {
   id: string;
   path?: string;
+  patch_set?: number;
   line?: number;
   range?: { start_line: number; start_character: number; end_line: number; end_character: number };
   in_reply_to?: string;
@@ -132,10 +146,10 @@ export interface DashboardResponse {
 
 export interface FileEntry {
   path: string;
-  status: string;
-  linesInserted: number;
-  linesDeleted: number;
-  binary: boolean;
+  status?: string;
+  linesInserted?: number;
+  linesDeleted?: number;
+  binary?: boolean;
 }
 
 export interface ReviewInput {

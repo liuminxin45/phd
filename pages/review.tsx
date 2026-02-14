@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/router';
 import { httpGet } from '@/lib/httpClient';
-import type { DashboardResponse, DashboardSection, GerritChange } from '@/lib/gerrit/types';
-import { relativeTime, getAccountName } from '@/lib/gerrit/helpers';
+import type { DashboardResponse, GerritChange } from '@/lib/gerrit/types';
+import { getAccountName, normalizeQueryInput } from '@/lib/gerrit/helpers';
+import { useAutoAiMonitor } from '@/hooks/useAutoAiMonitor';
 import { ChangeCard } from '@/components/review/ChangeCard';
 import { ChangeDetail } from '@/components/review/ChangeDetail';
 import { Card, CardContent } from '@/components/ui/card';
@@ -26,7 +28,7 @@ import {
   Keyboard,
 } from 'lucide-react';
 
-const GERRIT_URL = 'https://review.tp-link.net/gerrit';
+const DEFAULT_GERRIT_URL = 'https://review.tp-link.net/gerrit';
 
 const SECTION_ICONS: Record<string, typeof Inbox> = {
   '待我评审': Inbox,
@@ -45,9 +47,13 @@ const SECTION_COLORS: Record<string, string> = {
 type ViewState = 'dashboard' | 'detail' | 'search';
 
 export default function ReviewPage() {
+  const router = useRouter();
   // ── View navigation ─────────────────────────────────
   const [view, setView] = useState<ViewState>('dashboard');
   const [selectedChangeNumber, setSelectedChangeNumber] = useState<number | null>(null);
+
+  // ── Config ────────────────────────────────────────────
+  const [gerritUrl, setGerritUrl] = useState(DEFAULT_GERRIT_URL);
 
   // ── Dashboard data ──────────────────────────────────
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
@@ -64,11 +70,17 @@ export default function ReviewPage() {
   // ── Collapsed sections ──────────────────────────────
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set(['最近合入', '抄送我的']));
 
+  // ── AI auto-monitor (state + effects extracted to hook) ──
+  const {
+    riskMap,
+    autoAiEnabled,
+    setAutoAiEnabled,
+    autoAiPauseUntil,
+    autoAiStatusSummary,
+  } = useAutoAiMonitor(dashboard);
+
   // ── Auto-refresh ────────────────────────────────────
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // ── Keyboard navigation ─────────────────────────────
-  const [focusedIndex, setFocusedIndex] = useState(-1);
 
   const fetchDashboard = useCallback(async () => {
     setLoadingDashboard(true);
@@ -84,8 +96,11 @@ export default function ReviewPage() {
     }
   }, []);
 
-  // Initial load + auto-refresh every 60s
+  // Load config + initial dashboard + auto-refresh every 60s
   useEffect(() => {
+    httpGet<{ gerritUrl: string }>('/api/gerrit/config')
+      .then((cfg) => { if (cfg.gerritUrl) setGerritUrl(cfg.gerritUrl); })
+      .catch(() => {});
     fetchDashboard();
     refreshIntervalRef.current = setInterval(fetchDashboard, 60_000);
     return () => {
@@ -93,13 +108,24 @@ export default function ReviewPage() {
     };
   }, [fetchDashboard]);
 
+  useEffect(() => {
+    if (!router.isReady) return;
+    const rawChange = Array.isArray(router.query.change) ? router.query.change[0] : router.query.change;
+    const parsed = rawChange ? Number(rawChange) : NaN;
+    if (Number.isFinite(parsed) && parsed > 0) {
+      setSelectedChangeNumber(parsed);
+      setView('detail');
+    }
+  }, [router.isReady, router.query.change]);
+
   // Search handler
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
+    const normalizedQuery = normalizeQueryInput(searchQuery);
     setSearchLoading(true);
     setHasSearched(true);
     try {
-      const res = await httpGet<{ changes: GerritChange[] }>('/api/gerrit/changes', { q: searchQuery.trim() });
+      const res = await httpGet<{ changes: GerritChange[] }>('/api/gerrit/changes', { q: normalizedQuery });
       setSearchResults(res.changes || []);
       setView('search');
     } catch {
@@ -124,7 +150,8 @@ export default function ReviewPage() {
   const openChange = useCallback((change: GerritChange) => {
     setSelectedChangeNumber(change._number);
     setView('detail');
-  }, []);
+    router.replace({ pathname: '/review', query: { change: String(change._number) } }, undefined, { shallow: true }).catch(() => {});
+  }, [router]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -173,8 +200,12 @@ export default function ReviewPage() {
         <div className="max-w-6xl mx-auto p-6">
           <ChangeDetail
             changeNumber={selectedChangeNumber}
-            gerritUrl={GERRIT_URL}
-            onBack={() => setView(hasSearched && searchResults.length > 0 ? 'search' : 'dashboard')}
+            gerritUrl={gerritUrl}
+            onBack={() => {
+              setView(hasSearched && searchResults.length > 0 ? 'search' : 'dashboard');
+              setSelectedChangeNumber(null);
+              router.replace('/review', undefined, { shallow: true }).catch(() => {});
+            }}
           />
         </div>
       </div>
@@ -211,13 +242,24 @@ export default function ReviewPage() {
                   <Input
                     data-review-search
                     type="text"
-                    placeholder="搜索 (Gerrit query 语法, 按 / 聚焦)"
+                    placeholder="搜索（支持 #12345 / owner:self / 普通关键词）"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={handleSearchKeyDown}
                     className="pl-9 h-9 text-sm"
                   />
                 </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSearch}
+                  disabled={searchLoading || !searchQuery.trim()}
+                  className="gap-1.5"
+                >
+                  {searchLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                  搜索
+                </Button>
 
                 {/* Refresh */}
                 <Button
@@ -231,8 +273,37 @@ export default function ReviewPage() {
                   刷新
                 </Button>
 
+                <Button
+                  variant={autoAiEnabled ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setAutoAiEnabled((prev) => !prev)}
+                  className="text-xs"
+                  title="自动监控与分析和你相关的 Patch 更新"
+                >
+                  AI自动监控 {autoAiEnabled ? '开' : '关'}
+                </Button>
+
+                <div className="text-[11px] text-muted-foreground hidden xl:block">
+                  队列 P{autoAiStatusSummary.pending} · R{autoAiStatusSummary.running} · D{autoAiStatusSummary.done} · E{autoAiStatusSummary.error}
+                </div>
+
+                {autoAiPauseUntil && autoAiPauseUntil > Date.now() && (
+                  <div className="text-[11px] text-amber-700 hidden xl:block">
+                    限额暂停中，{new Date(autoAiPauseUntil).toLocaleTimeString()} 后重试
+                  </div>
+                )}
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => router.push('/review-auto-ai')}
+                >
+                  监控详情
+                </Button>
+
                 {/* External link */}
-                <a href={`${GERRIT_URL}/dashboard/self`}>
+                <a href={`${gerritUrl}/dashboard/self`} target="_blank" rel="noopener noreferrer">
                   <Button variant="ghost" size="sm" className="gap-1.5 text-xs">
                     <ExternalLink className="h-3.5 w-3.5" />
                     Gerrit
@@ -262,7 +333,7 @@ export default function ReviewPage() {
             ) : searchResults.length > 0 ? (
               <div className="grid gap-2">
                 {searchResults.map((change) => (
-                  <ChangeCard key={change._number} change={change} onClick={() => openChange(change)} gerritUrl={GERRIT_URL} />
+                  <ChangeCard key={change._number} change={change} onClick={() => openChange(change)} gerritUrl={gerritUrl} aiRiskLevel={riskMap[change._number]?.riskLevel} aiRiskReason={riskMap[change._number]?.briefReason} />
                 ))}
               </div>
             ) : (
@@ -380,8 +451,10 @@ export default function ReviewPage() {
                                   key={change._number}
                                   change={change}
                                   onClick={() => openChange(change)}
-                                  gerritUrl={GERRIT_URL}
+                                  gerritUrl={gerritUrl}
                                   showOwner={section.title !== '我发起的'}
+                                  aiRiskLevel={riskMap[change._number]?.riskLevel}
+                                  aiRiskReason={riskMap[change._number]?.briefReason}
                                 />
                               ))}
                             </div>

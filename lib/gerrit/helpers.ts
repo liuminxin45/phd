@@ -149,3 +149,17 @@ export function abbreviateProject(project: string): string {
   if (parts.length <= 2) return project;
   return parts.slice(0, -1).map((p) => p[0]).join('/') + '/' + parts[parts.length - 1];
 }
+
+/**
+ * Normalize user search input into a Gerrit query string.
+ * - "#12345" or "12345" → "change:12345"
+ * - Contains ":" → pass through as-is (already Gerrit query syntax)
+ * - Otherwise → "status:open <input>"
+ */
+export function normalizeQueryInput(input: string): string {
+  const q = input.trim();
+  if (!q) return q;
+  if (/^#?\d+$/.test(q)) return `change:${q.replace('#', '')}`;
+  if (q.includes(':')) return q;
+  return `status:open ${q}`;
+}

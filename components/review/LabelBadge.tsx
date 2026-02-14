@@ -3,6 +3,15 @@ import { getLabelScoreColor, getLabelScoreText, getLabelMaxScore } from '@/lib/g
 import type { GerritLabelInfo } from '@/lib/gerrit/types';
 import { Check, X, Minus } from 'lucide-react';
 
+const LABEL_DISPLAY_NAMES: Record<string, string> = {
+  'Code-Review': 'Code Review',
+  'Verified': 'Verified',
+  'Label-Verified': 'Verified',
+  'Label-Code-Review': 'Code Review',
+  'Unit-Test': 'Unit Test',
+  'Lint': 'Lint',
+};
+
 interface LabelBadgeProps {
   name: string;
   label: GerritLabelInfo;
@@ -13,17 +22,7 @@ export function LabelBadge({ name, label, compact }: LabelBadgeProps) {
   const score = getLabelMaxScore(label);
   const colorClass = getLabelScoreColor(score);
   const scoreText = getLabelScoreText(score);
-
-  // Readable label names
-  const LABEL_NAMES: Record<string, string> = {
-    'Code-Review': 'Code Review',
-    'Verified': 'Verified',
-    'Label-Verified': 'Verified',
-    'Label-Code-Review': 'Code Review',
-    'Unit-Test': 'Unit Test',
-    'Lint': 'Lint',
-  };
-  const shortName = LABEL_NAMES[name] || name.replace(/-/g, ' ');
+  const shortName = LABEL_DISPLAY_NAMES[name] || name.replace(/-/g, ' ');
 
   const icon = score >= 2 ? <Check className="h-3 w-3" /> :
                score <= -2 ? <X className="h-3 w-3" /> :
@@ -53,14 +52,11 @@ interface LabelsSummaryProps {
 export function LabelsSummary({ labels, compact }: LabelsSummaryProps) {
   if (!labels) return null;
 
-  // Show Code-Review and Verified first, then others
-  const orderedKeys = Object.keys(labels).sort((a, b) => {
-    if (a === 'Code-Review') return -1;
-    if (b === 'Code-Review') return 1;
-    if (a === 'Verified') return -1;
-    if (b === 'Verified') return 1;
-    return a.localeCompare(b);
-  });
+  const orderedKeys = Object.keys(labels)
+    .filter((key) => key === 'Code-Review' || key === 'Label-Code-Review')
+    .sort((a, b) => a.localeCompare(b));
+
+  if (orderedKeys.length === 0) return null;
 
   return (
     <div className="flex items-center gap-1 flex-wrap">

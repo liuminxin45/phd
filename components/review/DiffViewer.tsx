@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
-import type { GerritDiffInfo, GerritDiffContent, GerritCommentInfo } from '@/lib/gerrit/types';
+import type { GerritDiffInfo, GerritCommentInfo, FileEntry } from '@/lib/gerrit/types';
 import { getAccountName } from '@/lib/gerrit/helpers';
-import { MessageSquare, ChevronDown, ChevronRight, Search, Loader2 } from 'lucide-react';
+import { MessageSquare, ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 // ─── Diff Line Types ─────────────────────────────────────────────────────────
@@ -13,11 +13,14 @@ interface DiffLine {
   newLine?: number;
   content: string;
   skipCount?: number;
+  skipId?: string;
+  hiddenLines?: DiffLine[];
 }
 
 const CONTEXT_LINES = 5;
+const COMMENT_CONTEXT_LINES = 2;
 
-function buildDiffLines(diff: GerritDiffInfo): DiffLine[] {
+function buildDiffLines(diff: GerritDiffInfo, emphasizedNewLines: Set<number>): DiffLine[] {
   // First pass: build all lines
   const allLines: DiffLine[] = [];
   let oldLine = 1;
@@ -67,6 +70,17 @@ function buildDiffLines(diff: GerritDiffInfo): DiffLine[] {
     }
   }
 
+  // Keep commented/draft lines and nearby context visible even if they are away from changes
+  if (emphasizedNewLines.size > 0) {
+    for (let i = 0; i < allLines.length; i++) {
+      const line = allLines[i];
+      if (!line.newLine || !emphasizedNewLines.has(line.newLine)) continue;
+      for (let j = Math.max(0, i - COMMENT_CONTEXT_LINES); j <= Math.min(allLines.length - 1, i + COMMENT_CONTEXT_LINES); j++) {
+        keep[j] = 1;
+      }
+    }
+  }
+
   // Third pass: build output with skip markers for collapsed regions
   const result: DiffLine[] = [];
   let i = 0;
@@ -80,7 +94,13 @@ function buildDiffLines(diff: GerritDiffInfo): DiffLine[] {
       while (i < allLines.length && !keep[i]) i++;
       const skipped = i - skipStart;
       if (skipped > 0) {
-        result.push({ type: 'skip', content: '', skipCount: skipped });
+        result.push({
+          type: 'skip',
+          content: '',
+          skipCount: skipped,
+          skipId: `skip-${skipStart}-${i}`,
+          hiddenLines: allLines.slice(skipStart, i),
+        });
       }
     }
   }
@@ -123,7 +143,7 @@ function InlineComment({ comment, onReply }: { comment: GerritCommentInfo; onRep
               if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleReplySubmit(); }
               if (e.key === 'Escape') { setReplying(false); setReplyText(''); }
             }}
-            placeholder="回复评论... (Ctrl+Enter 提交, Esc 取消)"
+            placeholder="回复评论..."
             className="w-full min-h-[40px] p-1.5 rounded border border-border bg-background text-xs resize-y focus:outline-none focus:ring-1 focus:ring-ring"
             autoFocus
           />
@@ -165,7 +185,7 @@ function InlineCommentInput({ line, onSubmit, onCancel }: {
               if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSubmit(); }
               if (e.key === 'Escape') onCancel();
             }}
-            placeholder="写下评审意见... (Ctrl+Enter 提交, Esc 取消)"
+            placeholder="写下评审意见..."
             className="w-full min-h-[50px] p-2 rounded border border-border bg-background text-xs resize-y focus:outline-none focus:ring-1 focus:ring-ring"
             autoFocus
           />
@@ -185,13 +205,20 @@ interface DiffViewerProps {
   diff: GerritDiffInfo | null;
   filePath: string;
   comments?: GerritCommentInfo[];
+  pendingComments?: { localKey: string; line: number; message: string; in_reply_to?: string }[];
   loading?: boolean;
   onAddComment?: (line: number, message: string) => void;
   onReplyComment?: (commentId: string, line: number | undefined, message: string) => void;
+  onDeletePendingComment?: (localKey: string) => void;
 }
 
-export function DiffViewer({ diff, filePath, comments = [], loading, onAddComment, onReplyComment }: DiffViewerProps) {
+export function DiffViewer({ diff, filePath, comments = [], pendingComments = [], loading, onAddComment, onReplyComment, onDeletePendingComment }: DiffViewerProps) {
   const [commentingLine, setCommentingLine] = useState<number | null>(null);
+  const [expandedSkips, setExpandedSkips] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setExpandedSkips(new Set());
+  }, [diff, filePath]);
 
   if (loading) {
     return (
@@ -217,8 +244,6 @@ export function DiffViewer({ diff, filePath, comments = [], loading, onAddCommen
     );
   }
 
-  const lines = buildDiffLines(diff);
-
   // Index comments by line number (for new-side comments)
   const commentsByLine = new Map<number, GerritCommentInfo[]>();
   for (const c of comments) {
@@ -229,6 +254,20 @@ export function DiffViewer({ diff, filePath, comments = [], loading, onAddCommen
     }
   }
 
+  const pendingByLine = new Map<number, { localKey: string; line: number; message: string; in_reply_to?: string }[]>();
+  for (const c of pendingComments) {
+    if (!c.line || c.in_reply_to) continue;
+    const existing = pendingByLine.get(c.line) || [];
+    existing.push(c);
+    pendingByLine.set(c.line, existing);
+  }
+
+  const emphasizedLines = new Set<number>([
+    ...Array.from(commentsByLine.keys()),
+    ...Array.from(pendingByLine.keys()),
+  ]);
+  const lines = buildDiffLines(diff, emphasizedLines);
+
   const handleLineClick = (lineNum: number | undefined) => {
     if (!lineNum || !onAddComment) return;
     setCommentingLine(commentingLine === lineNum ? null : lineNum);
@@ -237,6 +276,91 @@ export function DiffViewer({ diff, filePath, comments = [], loading, onAddCommen
   const handleCommentSubmit = (line: number, message: string) => {
     onAddComment?.(line, message);
     setCommentingLine(null);
+  };
+
+  const renderDiffRow = (line: DiffLine, key: string) => {
+    const lineNum = line.newLine;
+    const lineComments = lineNum ? commentsByLine.get(lineNum) : undefined;
+    const linePending = lineNum ? pendingByLine.get(lineNum) : undefined;
+
+    return (
+      <React.Fragment key={key}>
+        <tr className="group" data-diff-line={lineNum ? `${filePath}:${lineNum}` : undefined}>
+          {/* Old line number */}
+          <td className={cn(
+            'w-12 text-right pr-2 pl-2 select-none border-r',
+            line.type === 'added' ? 'bg-green-50' :
+            line.type === 'removed' ? 'bg-red-50 text-red-400' :
+            'text-muted-foreground/50'
+          )}>
+            {line.oldLine || ''}
+          </td>
+          {/* New line number — clickable for comments */}
+          <td
+            className={cn(
+              'w-12 text-right pr-2 select-none border-r',
+              line.type === 'added' ? 'bg-green-50 text-green-500' :
+              line.type === 'removed' ? 'bg-red-50' :
+              'text-muted-foreground/50',
+              onAddComment && lineNum && 'cursor-pointer hover:bg-primary/10 hover:text-primary'
+            )}
+            onClick={() => handleLineClick(lineNum)}
+            title={onAddComment && lineNum ? `点击在第 ${lineNum} 行添加评论` : undefined}
+          >
+            {line.newLine || ''}
+          </td>
+          {/* Content */}
+          <td className={cn(
+            'px-3 whitespace-pre',
+            line.type === 'added' && 'bg-green-50/80',
+            line.type === 'removed' && 'bg-red-50/80'
+          )}>
+            <span className={cn(
+              line.type === 'added' && 'text-green-800',
+              line.type === 'removed' && 'text-red-700'
+            )}>
+              {line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' '}{line.content}
+            </span>
+          </td>
+        </tr>
+        {/* Existing comments on this line */}
+        {lineComments && lineComments.map((c) => (
+          <tr key={`${key}-comment-${c.id}`}>
+            <td colSpan={3} className="p-0">
+              <InlineComment comment={c} onReply={onReplyComment} />
+            </td>
+          </tr>
+        ))}
+        {linePending && linePending.map((c) => (
+          <tr key={`${key}-pending-${c.localKey}`}>
+            <td colSpan={3} className="p-0">
+              <div className="mx-2 my-1 p-2 rounded-md text-xs border border-blue-200 bg-blue-50">
+                <div className="flex items-center gap-2 mb-1">
+                  <Badge variant="outline" className="text-[10px] border-blue-300 text-blue-700">草稿</Badge>
+                  {onDeletePendingComment && (
+                    <button
+                      onClick={() => onDeletePendingComment(c.localKey)}
+                      className="ml-auto text-[10px] text-blue-700 hover:text-red-600"
+                    >
+                      删除
+                    </button>
+                  )}
+                </div>
+                <p className="text-blue-900 whitespace-pre-wrap">{c.message}</p>
+              </div>
+            </td>
+          </tr>
+        ))}
+        {/* Inline comment input */}
+        {commentingLine === lineNum && lineNum && (
+          <InlineCommentInput
+            line={lineNum}
+            onSubmit={handleCommentSubmit}
+            onCancel={() => setCommentingLine(null)}
+          />
+        )}
+      </React.Fragment>
+    );
   };
 
   return (
@@ -257,76 +381,35 @@ export function DiffViewer({ diff, filePath, comments = [], loading, onAddCommen
           <tbody>
             {lines.map((line, idx) => {
               if (line.type === 'skip') {
+                const isExpanded = !!line.skipId && expandedSkips.has(line.skipId);
+                if (isExpanded && line.hiddenLines) {
+                  return line.hiddenLines.map((hiddenLine, hiddenIdx) =>
+                    renderDiffRow(hiddenLine, `expanded-${line.skipId}-${hiddenIdx}`)
+                  );
+                }
+
                 return (
-                  <tr key={idx} className="bg-blue-50/50">
+                  <tr
+                    key={line.skipId || idx}
+                    className="bg-blue-50/50 cursor-pointer hover:bg-blue-100/50 transition-colors"
+                    onClick={() => {
+                      if (!line.skipId) return;
+                      setExpandedSkips((prev) => {
+                        const next = new Set(prev);
+                        next.add(line.skipId as string);
+                        return next;
+                      });
+                    }}
+                    title="点击展开省略行"
+                  >
                     <td colSpan={3} className="px-3 py-1 text-center text-blue-500 text-[11px]">
-                      ··· 省略 {line.skipCount} 行 ···
+                      ··· 省略 {line.skipCount} 行（点击展开）···
                     </td>
                   </tr>
                 );
               }
 
-              const lineNum = line.type === 'removed' ? line.oldLine : line.newLine;
-              const lineComments = lineNum ? commentsByLine.get(lineNum) : undefined;
-
-              return (
-                <React.Fragment key={idx}>
-                  <tr className="group">
-                    {/* Old line number */}
-                    <td className={cn(
-                      'w-12 text-right pr-2 pl-2 select-none border-r',
-                      line.type === 'added' ? 'bg-green-50' :
-                      line.type === 'removed' ? 'bg-red-50 text-red-400' :
-                      'text-muted-foreground/50'
-                    )}>
-                      {line.oldLine || ''}
-                    </td>
-                    {/* New line number — clickable for comments */}
-                    <td
-                      className={cn(
-                        'w-12 text-right pr-2 select-none border-r',
-                        line.type === 'added' ? 'bg-green-50 text-green-500' :
-                        line.type === 'removed' ? 'bg-red-50' :
-                        'text-muted-foreground/50',
-                        onAddComment && lineNum && 'cursor-pointer hover:bg-primary/10 hover:text-primary'
-                      )}
-                      onClick={() => handleLineClick(lineNum)}
-                      title={onAddComment && lineNum ? `点击在第 ${lineNum} 行添加评论` : undefined}
-                    >
-                      {line.newLine || ''}
-                    </td>
-                    {/* Content */}
-                    <td className={cn(
-                      'px-3 whitespace-pre',
-                      line.type === 'added' && 'bg-green-50/80',
-                      line.type === 'removed' && 'bg-red-50/80'
-                    )}>
-                      <span className={cn(
-                        line.type === 'added' && 'text-green-800',
-                        line.type === 'removed' && 'text-red-700'
-                      )}>
-                        {line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' '}{line.content}
-                      </span>
-                    </td>
-                  </tr>
-                  {/* Existing comments on this line */}
-                  {lineComments && lineComments.map((c) => (
-                    <tr key={`comment-${c.id}`}>
-                      <td colSpan={3} className="p-0">
-                        <InlineComment comment={c} onReply={onReplyComment} />
-                      </td>
-                    </tr>
-                  ))}
-                  {/* Inline comment input */}
-                  {commentingLine === lineNum && lineNum && (
-                    <InlineCommentInput
-                      line={lineNum}
-                      onSubmit={handleCommentSubmit}
-                      onCancel={() => setCommentingLine(null)}
-                    />
-                  )}
-                </React.Fragment>
-              );
+              return renderDiffRow(line, `line-${idx}`);
             })}
           </tbody>
         </table>
@@ -336,14 +419,6 @@ export function DiffViewer({ diff, filePath, comments = [], loading, onAddCommen
 }
 
 // ─── File List with Inline Accordion Diffs + Search ─────────────────────────
-
-interface FileEntry {
-  path: string;
-  status?: string;
-  linesInserted?: number;
-  linesDeleted?: number;
-  binary?: boolean;
-}
 
 interface FileListProps {
   files: FileEntry[];
@@ -357,6 +432,8 @@ interface FileListProps {
   fileComments?: GerritCommentInfo[];
   onAddComment?: (line: number, message: string) => void;
   onReplyComment?: (commentId: string, line: number | undefined, message: string) => void;
+  pendingCommentsByFile?: Record<string, { localKey: string; line: number; message: string; in_reply_to?: string }[]>;
+  onDeletePendingComment?: (filePath: string, localKey: string) => void;
   // Search
   onSearchFile?: (query: string) => void;
   searchExpandedFile?: string | null;
@@ -366,6 +443,7 @@ interface FileListProps {
 export function FileList({
   files, selectedFile, onSelectFile, totalInsertions, totalDeletions,
   currentDiff, loadingDiff, fileComments, onAddComment, onReplyComment,
+  pendingCommentsByFile, onDeletePendingComment,
   onSearchFile, searchExpandedFile, pendingCommentCounts,
 }: FileListProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -435,7 +513,7 @@ export function FileList({
                 onClick={() => onSelectFile(file.path)}
                 className={cn(
                   'w-full flex items-center justify-between px-3 py-2 text-xs hover:bg-muted/50 transition-colors text-left border-b border-border',
-                  isExpanded && 'bg-primary/5 border-l-2 border-l-primary'
+                  isExpanded && 'bg-primary/5 border-l-2 border-l-primary sticky top-0 z-20 shadow-sm'
                 )}
               >
                 <div className="flex items-center gap-2 min-w-0">
@@ -473,9 +551,11 @@ export function FileList({
                     diff={currentDiff || null}
                     filePath={file.path}
                     comments={fileComments}
+                    pendingComments={pendingCommentsByFile?.[file.path] || []}
                     loading={loadingDiff}
                     onAddComment={onAddComment}
                     onReplyComment={onReplyComment}
+                    onDeletePendingComment={(localKey) => onDeletePendingComment?.(file.path, localKey)}
                   />
                 </div>
               )}

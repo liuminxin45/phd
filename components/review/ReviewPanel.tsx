@@ -45,7 +45,7 @@ export function ReviewPanel({ onSubmit, availableLabels = ['Code-Review'], submi
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="写下你的评审意见... (Ctrl+Enter 提交)"
+          placeholder="写下你的评审意见..."
           className="w-full min-h-[80px] p-2.5 rounded-md border border-border bg-background text-sm resize-y focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
           disabled={submitting}
         />

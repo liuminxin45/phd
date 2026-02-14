@@ -13,7 +13,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
+export const GERRIT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
 
 export interface GerritCookieJar {
   JSESSIONID?: string;
@@ -50,7 +50,7 @@ function mergeCookies(existing: GerritCookieJar, incoming: GerritCookieJar): Ger
   return { ...existing, ...incoming };
 }
 
-function cookieStr(cookies: GerritCookieJar): string {
+export function cookieStr(cookies: GerritCookieJar): string {
   return Object.entries(cookies)
     .filter(([, v]) => v)
     .map(([k, v]) => `${k}=${v}`)
@@ -161,7 +161,7 @@ export async function refreshGerritSession(): Promise<GerritCookieJar> {
           headers: {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Cookie': cookieStr(allCookies),
-            'User-Agent': UA,
+            'User-Agent': GERRIT_UA,
           },
           redirect: 'manual',
         });
@@ -198,7 +198,7 @@ export async function refreshGerritSession(): Promise<GerritCookieJar> {
               'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
               'Content-Type': 'application/x-www-form-urlencoded',
               'Cookie': cookieStr(allCookies),
-              'User-Agent': UA,
+              'User-Agent': GERRIT_UA,
               'Origin': new URL(autoForm.action).origin,
               'Referer': currentUrl,
             },
@@ -224,11 +224,11 @@ export async function refreshGerritSession(): Promise<GerritCookieJar> {
             break;
           }
 
-          // Maybe it's another auto-submit form in chain
+          // Check if response is another auto-submit form in chain
           const nextForm = parseAutoSubmitForm(formHtml, autoForm.action);
           if (nextForm) {
-            // Will be handled in next iteration — set currentUrl to trigger GET
-            // Actually, let's just handle it inline by updating the html for the next check
+            currentUrl = nextForm.action;
+            continue;
           }
 
           console.error(`[Gerrit Session] Unexpected form response: ${formHtml.substring(0, 200)}`);
@@ -263,7 +263,7 @@ export async function refreshGerritSession(): Promise<GerritCookieJar> {
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Content-Type': 'application/x-www-form-urlencoded',
           'Cookie': cookieStr(allCookies),
-          'User-Agent': UA,
+          'User-Agent': GERRIT_UA,
           'Origin': 'https://tplogin.tp-link.com.cn',
           'Referer': casLoginUrl,
         },
@@ -294,7 +294,7 @@ export async function refreshGerritSession(): Promise<GerritCookieJar> {
           headers: {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Cookie': cookieStr(allCookies),
-            'User-Agent': UA,
+            'User-Agent': GERRIT_UA,
             'Referer': casLoginUrl,
           },
           redirect: 'manual',
@@ -365,7 +365,7 @@ async function completeSamlFlow(
     headers: {
       'Accept': 'text/html',
       'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent': UA,
+      'User-Agent': GERRIT_UA,
       'Origin': 'https://tplogin.tp-link.com.cn',
       'Referer': 'https://tplogin.tp-link.com.cn/',
     },
@@ -386,13 +386,12 @@ async function completeSamlFlow(
       ? nextLocation
       : `${gerritUrl}${nextLocation}`;
 
-
     const redirectRes = await fetch(redirectUrl, {
       method: 'GET',
       headers: {
         'Accept': 'text/html',
         'Cookie': cookieStr(gerritCookies),
-        'User-Agent': UA,
+        'User-Agent': GERRIT_UA,
         'Referer': 'https://tplogin.tp-link.com.cn/',
       },
       redirect: 'manual',

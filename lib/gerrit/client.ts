@@ -4,10 +4,10 @@ import {
   ensureGerritSession,
   refreshGerritSession,
   clearGerritSession,
+  cookieStr,
+  GERRIT_UA,
   type GerritCookieJar,
 } from './session';
-
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
 export class GerritClient {
   private baseUrl: string;
@@ -18,11 +18,8 @@ export class GerritClient {
     this.cookies = cookies;
   }
 
-  private cookieStr(): string {
-    return Object.entries(this.cookies)
-      .filter(([, v]) => v)
-      .map(([k, v]) => `${k}=${v}`)
-      .join('; ');
+  private cookieHeader(): string {
+    return cookieStr(this.cookies);
   }
 
   /**
@@ -50,7 +47,7 @@ export class GerritClient {
       // Retry with new cookies
       const retryInit = {
         ...init,
-        headers: { ...init.headers as Record<string, string>, 'Cookie': this.cookieStr() },
+        headers: { ...init.headers as Record<string, string>, 'Cookie': this.cookieHeader() },
       };
       response = await fetch(url, retryInit);
     }
@@ -76,9 +73,9 @@ export class GerritClient {
     const response = await this.fetchWithRetry(url.toString(), {
       method: 'GET',
       headers: {
-        'Cookie': this.cookieStr(),
+        'Cookie': this.cookieHeader(),
         'Accept': 'application/json',
-        'User-Agent': UA,
+        'User-Agent': GERRIT_UA,
       },
     });
 
@@ -88,10 +85,10 @@ export class GerritClient {
   async post<T = any>(path: string, body?: any): Promise<T> {
     const url = `${this.baseUrl}/a${path}`;
     const headers: Record<string, string> = {
-      'Cookie': this.cookieStr(),
+      'Cookie': this.cookieHeader(),
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      'User-Agent': UA,
+      'User-Agent': GERRIT_UA,
     };
     // Gerrit requires XSRF token header for POST requests
     if (this.cookies.XSRF_TOKEN) {
@@ -110,9 +107,9 @@ export class GerritClient {
   async delete<T = any>(path: string): Promise<T> {
     const url = `${this.baseUrl}/a${path}`;
     const headers: Record<string, string> = {
-      'Cookie': this.cookieStr(),
+      'Cookie': this.cookieHeader(),
       'Accept': 'application/json',
-      'User-Agent': UA,
+      'User-Agent': GERRIT_UA,
     };
     if (this.cookies.XSRF_TOKEN) {
       headers['X-Gerrit-Auth'] = this.cookies.XSRF_TOKEN;
@@ -141,9 +138,9 @@ export class GerritClient {
     const response = await this.fetchWithRetry(url.toString(), {
       method: 'GET',
       headers: {
-        'Cookie': this.cookieStr(),
+        'Cookie': this.cookieHeader(),
         'Accept': 'application/json',
-        'User-Agent': UA,
+        'User-Agent': GERRIT_UA,
       },
     });
 
