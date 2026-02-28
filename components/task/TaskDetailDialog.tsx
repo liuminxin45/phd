@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  X, Edit2, Clock, Hash, AlertCircle, User, Flag, ChevronDown, AlignLeft, 
+  X, Edit2, Clock, Hash, AlertCircle, User, Flag, ChevronDown, ChevronUp, AlignLeft, 
   ListTodo, Plus, MessageSquare, Send, Users, Briefcase, CalendarDays, 
   CalendarClock, Award, Check, Copy, Pin, PinOff, Loader2 
 } from 'lucide-react';
@@ -23,6 +23,7 @@ import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { SubtaskItem } from './SubtaskItem';
 import { TaskScoringDialog } from '@/components/ui/TaskScoringDialog';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
@@ -122,6 +123,12 @@ export function TaskDetailDialog({
   const [editingCommentText, setEditingCommentText] = useState('');
 
   useEffect(() => {
+    if (!open) {
+      setIsRatingPanelOpen(false);
+    }
+  }, [open]);
+
+  useEffect(() => {
     if (!task || !open) return;
 
     const fetchTaskDetails = async () => {
@@ -153,7 +160,7 @@ export function TaskDetailDialog({
 
         const customFields = data.task.fields as any;
         const workloadValue = customFields['custom.tp-link.estimated-days'] || '';
-        setWorkload(workloadValue);
+        setWorkload(String(workloadValue));
         
         if (data.subtasks && data.subtasks.length > 0) {
           const rootSubtasks: Subtask[] = data.subtasks
@@ -846,12 +853,17 @@ export function TaskDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn("max-w-[calc(100%-2rem)] sm:max-w-4xl h-[85vh] p-0 flex flex-col gap-0", contentZIndex)}>
-        {/* Fixed Header */}
-        <DialogHeader className="flex-shrink-0 border-b p-6 pb-4">
-          <div className="flex items-center justify-between mb-2 pr-8">
+      <DialogContent className={cn(
+        "max-w-[100vw] h-[100vh] sm:max-w-[90vw] sm:h-[90vh] md:max-w-6xl p-0 flex flex-col gap-0 border-none shadow-2xl bg-background overflow-hidden",
+        contentZIndex
+      )}>
+        {/* Header */}
+        <div className="flex-none px-6 py-4 border-b flex items-start justify-between gap-6 bg-background/80 backdrop-blur z-20">
+          <div className="flex-1 min-w-0 space-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-mono text-muted-foreground">T{task.id}</span>
+              <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 h-5 text-muted-foreground/70 border-border/50 bg-muted/20">
+                T{task.id}
+              </Badge>
               {task && (
                 <button
                   onClick={() => {
@@ -868,514 +880,507 @@ export function TaskDetailDialog({
                     }
                   }}
                   className={cn(
-                    "p-1.5 rounded-full transition-colors",
+                    "p-1 rounded-full transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100",
                     isPinned(`task-${task.id}`) 
-                      ? "bg-primary/10 text-primary" 
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      ? "opacity-100 bg-primary/10 text-primary" 
+                      : "text-muted-foreground/40 hover:bg-muted hover:text-foreground"
                   )}
                   title={isPinned(`task-${task.id}`) ? '取消固定' : '固定'}
                 >
-                  {isPinned(`task-${task.id}`) ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+                  {isPinned(`task-${task.id}`) ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
                 </button>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsRatingPanelOpen(true)}
-                className={cn(
-                  "h-8 gap-1.5 text-xs font-medium",
-                  hasRating && "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                )}
-              >
-                <Award className="h-3.5 w-3.5" />
-                {hasRating ? '修改评分' : '任务打分'}
-              </Button>
+            
+            <div className="group relative">
+              {isEditingTitle ? (
+                <Input
+                  value={taskTitle}
+                  onChange={(e) => setTaskTitle(e.target.value)}
+                  onBlur={handleTitleSave}
+                  onKeyDown={(e) => e.key === 'Enter' && handleTitleSave()}
+                  className="text-xl md:text-2xl font-semibold h-auto py-1 px-0 border-transparent bg-transparent focus-visible:ring-0 focus-visible:border-b focus-visible:border-primary rounded-none shadow-none"
+                  autoFocus
+                />
+              ) : (
+                <DialogTitle 
+                  className="text-xl md:text-2xl font-semibold leading-tight text-foreground/90 cursor-text py-1 hover:text-foreground transition-colors"
+                  onClick={() => setIsEditingTitle(true)}
+                >
+                  {taskTitle}
+                </DialogTitle>
+              )}
             </div>
           </div>
-          
-          <div className="flex items-start gap-3">
-            {isEditingTitle ? (
-              <Input
-                value={taskTitle}
-                onChange={(e) => setTaskTitle(e.target.value)}
-                onBlur={handleTitleSave}
-                onKeyDown={(e) => e.key === 'Enter' && handleTitleSave()}
-                className="text-lg font-semibold h-auto py-1 px-2 -ml-2"
-                autoFocus
-              />
-            ) : (
-              <DialogTitle className="text-xl group flex items-start gap-2 break-words min-w-0">
-                {taskTitle}
-                <button
-                  onClick={() => setIsEditingTitle(true)}
-                  className="mt-1 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
-                >
-                  <Edit2 className="h-4 w-4" />
-                </button>
-              </DialogTitle>
-            )}
+
+          <div className="flex items-center gap-2 flex-none pt-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsRatingPanelOpen(true)}
+              className={cn(
+                "h-8 gap-1.5 text-xs font-medium rounded-full px-3 transition-all",
+                hasRating 
+                  ? "bg-amber-50 text-amber-600 hover:bg-amber-100 hover:text-amber-700 dark:bg-amber-950/30 dark:text-amber-400" 
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              <Award className="h-4 w-4" />
+              {hasRating ? '已评分' : '评分'}
+            </Button>
+            <div className="w-px h-4 bg-border/50 mx-1" />
+            <DialogClose asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-muted-foreground/70 hover:text-foreground hover:bg-muted/50">
+                <X className="h-5 w-5" />
+              </Button>
+            </DialogClose>
           </div>
-        </DialogHeader>
+        </div>
 
-        {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-8 overflow-x-hidden">
-          {/* Properties Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-            <div className="space-y-6">
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">状态</span>
-                <Select
-                  value={taskStatus}
-                  onValueChange={async (value) => {
-                    setTaskStatus(value);
-                    try {
-                      await httpClient('/api/tasks/edit', {
-                        method: 'POST',
-                        body: {
-                          objectIdentifier: `T${task.id}`,
-                          transactions: [{ type: 'status', value }]
-                        }
-                      });
-                      toast.success(`状态已更新为: ${getTaskStatusName(value)}`);
-                      if (onTaskUpdate) {
-                        const updatedTask = { 
-                          ...task, 
-                          fields: { ...task.fields, status: { value, name: getTaskStatusName(value), color: task.fields.status.color } } 
-                        };
-                        onTaskUpdate(updatedTask);
-                      }
-                    } catch (error) {
-                      toast.error('更新状态失败');
-                    }
-                  }}
-                >
-                  <SelectTrigger className="flex-1 max-w-[200px] h-9 text-sm">
-                    <SelectValue placeholder="选择状态" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(TASK_STATUS_NAMES).map(([value, label]) => (
-                      <SelectItem key={value} value={value} className="text-sm">
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+        {/* Content Body - Two Column Layout */}
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+          
+          {/* LEFT: Main Content (Scrollable) */}
+          <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+            <div className="max-w-3xl mx-auto p-6 md:p-10 space-y-10">
               
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">优先级</span>
-                <Select
-                  value={taskPriority}
-                  onValueChange={async (value) => {
-                    const priorityKeywordMap: Record<string, string> = {
-                      '100': 'unbreak', '90': 'triage', '80': 'high', '50': 'normal', '25': 'low', '0': 'wish'
-                    };
-                    const priorityKeyword = priorityKeywordMap[value] || 'normal';
-                    setTaskPriority(value);
-                    try {
-                      await httpClient('/api/tasks/edit', {
-                        method: 'POST',
-                        body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'priority', value: priorityKeyword }] }
-                      });
-                      toast.success('优先级已更新');
-                    } catch (error) { toast.error('更新优先级失败'); }
-                  }}
-                >
-                  <SelectTrigger className="flex-1 max-w-[200px] h-9 text-sm">
-                    <SelectValue placeholder="选择优先级" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="100" className="text-sm">P1 紧急</SelectItem>
-                    <SelectItem value="90" className="text-sm">P2 高</SelectItem>
-                    <SelectItem value="80" className="text-sm">P3 中</SelectItem>
-                    <SelectItem value="50" className="text-sm">P4 普通</SelectItem>
-                    <SelectItem value="25" className="text-sm">P5 低</SelectItem>
-                    <SelectItem value="0" className="text-sm">P6 微不足道</SelectItem>
-                  </SelectContent>
-                </Select>
+              {/* Description Section */}
+              <div className="space-y-4 group">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                    <AlignLeft className="h-4 w-4" />
+                    描述
+                  </h3>
+                  {!isEditingDescription && (
+                    <Button variant="ghost" size="sm" onClick={() => setIsEditingDescription(true)} className="h-6 text-xs opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground">
+                      <Edit2 className="h-3 w-3 mr-1.5" />
+                      编辑
+                    </Button>
+                  )}
+                </div>
+                
+                {isEditingDescription ? (
+                  <div className="space-y-3 animate-in fade-in zoom-in-99 duration-200">
+                    <RemarkupEditor
+                      value={taskDescription}
+                      onChange={setTaskDescription}
+                      autoFocus
+                      minHeight="200px"
+                    />
+                    <div className="flex gap-2 justify-end">
+                      <Button variant="ghost" size="sm" onClick={() => setIsEditingDescription(false)}>取消</Button>
+                      <Button 
+                        size="sm" 
+                        onClick={async () => {
+                          setIsEditingDescription(false);
+                          try {
+                            await httpClient('/api/tasks/edit', {
+                              method: 'POST',
+                              body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'description', value: taskDescription }] }
+                            });
+                            toast.success('描述已更新');
+                            if (onTaskUpdate) {
+                              const updatedTask = { ...task, fields: { ...task.fields, description: { raw: taskDescription } } };
+                              onTaskUpdate(updatedTask);
+                            }
+                          } catch (error) { toast.error('更新描述失败'); }
+                        }}
+                      >
+                        保存
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div 
+                    className="text-base leading-7 text-foreground/90 min-h-[80px] cursor-text rounded-md p-1 -ml-1 transition-colors hover:bg-muted/10"
+                    onClick={() => setIsEditingDescription(true)}
+                  >
+                    {taskDescription ? (
+                      <RemarkupRenderer content={taskDescription} />
+                    ) : (
+                      <span className="text-muted-foreground/40 italic">暂无描述，点击添加...</span>
+                    )}
+                  </div>
+                )}
               </div>
 
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">指派给</span>
-                <div className="flex-1 max-w-[200px] flex justify-end">
-                  <PeoplePicker
-                    selected={assignee}
-                    onAdd={async (person: { id: string; name: string; avatar?: string }) => {
-                      setAssignee([person]);
+              <Separator className="bg-border/30" />
+
+              {/* Subtasks Section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                    <ListTodo className="h-4 w-4" />
+                    子任务
+                    {isLoadingSubtasksBackground && (
+                      <Loader2 className="h-3 w-3 animate-spin ml-2" />
+                    )}
+                  </h3>
+                  {subtasks.length > 0 && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setShowCompletedSubtasks(!showCompletedSubtasks)}
+                      className="h-6 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      {showCompletedSubtasks ? '隐藏已完成' : '显示已完成'}
+                    </Button>
+                  )}
+                </div>
+
+                {isLoadingSubtasks ? (
+                  <div className="flex justify-center py-8">
+                    <LoadingSpinner message="" size="md" />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {subtasks.length > 0 && (
+                      <div className="space-y-1">
+                        {filterSubtasks(subtasks).map((task) => (
+                          <SubtaskItem
+                            key={task.id}
+                            task={task}
+                            level={0}
+                            onToggle={toggleSubtask}
+                            onExpand={toggleExpand}
+                            onAddChild={setAddingSubtaskToId}
+                            onDelete={deleteSubtask}
+                            onClick={(subtask: Subtask) => openSecondaryTask(subtask.id)}
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Add Subtask Input */}
+                    {addingSubtaskToId !== null ? (
+                      <div className="flex items-center gap-2 p-3 bg-muted/30 rounded-lg animate-in fade-in zoom-in-95 mt-2">
+                        <Input
+                          value={newSubtaskTitle}
+                          onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') addSubtask(addingSubtaskToId === 0 ? null : addingSubtaskToId);
+                            if (e.key === 'Escape') {
+                              setAddingSubtaskToId(null);
+                              setNewSubtaskTitle('');
+                            }
+                          }}
+                          placeholder="输入子任务标题..."
+                          className="h-9 text-sm border-transparent bg-background shadow-sm"
+                          autoFocus
+                        />
+                        <Button 
+                          size="sm" 
+                          className="h-9"
+                          disabled={!newSubtaskTitle.trim()}
+                          onClick={() => addSubtask(addingSubtaskToId === 0 ? null : addingSubtaskToId)}
+                        >
+                          添加
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-9"
+                          onClick={() => {
+                            setAddingSubtaskToId(null);
+                            setNewSubtaskTitle('');
+                          }}
+                        >
+                          取消
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-start text-muted-foreground/60 hover:text-primary hover:bg-primary/5 h-9 text-sm"
+                        onClick={() => setAddingSubtaskToId(0)}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        添加子任务
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <Separator className="bg-border/30" />
+
+              {/* Timeline Section */}
+              <div className="space-y-4 pb-10">
+                {isLoadingComments ? (
+                  <div className="flex justify-center py-8">
+                    <LoadingSpinner message="" size="md" />
+                  </div>
+                ) : (
+                  <Timeline
+                    title="评论和历史"
+                    cacheKey={task ? `T${task.id}` : undefined}
+                    items={comments.map((comment) => ({
+                      id: comment.phid,
+                      author: comment.author,
+                      authorImage: null,
+                      content: comment.content,
+                      timestamp: comment.date,
+                    }))}
+                    emptyMessage="暂无动态"
+                    addPlaceholder="写下评论..."
+                    showAddInput={true}
+                    onEdit={async (itemId: number | string, newContent: string) => {
+                      if (!task) return;
+                      const transactionPHID = String(itemId);
+                      const marker = `[phabdash-edit:${transactionPHID}]\n${newContent}`;
+                      await httpClient('/api/tasks/edit', {
+                        method: 'POST',
+                        body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'comment', value: marker }] },
+                      });
+                      await refreshComments(task.id);
+                      toast.success('评论已更新');
+                    }}
+                    onDelete={async (itemId: number | string) => {
+                      if (!task) return;
+                      const transactionPHID = String(itemId);
+                      const marker = `[phabdash-delete:${transactionPHID}]\nThis comment has been deleted.`;
+                      await httpClient('/api/tasks/edit', {
+                        method: 'POST',
+                        body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'comment', value: marker }] },
+                      });
+                      await refreshComments(task.id);
+                    }}
+                    onAdd={async (content: string) => {
+                      if (!task) return;
+                      await httpClient('/api/tasks/edit', {
+                        method: 'POST',
+                        body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'comment', value: content }] },
+                      });
+                      await refreshComments(task.id);
+                      toast.success('评论已发布');
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT: Sidebar Metadata */}
+          <div className="w-full md:w-[420px] lg:w-[480px] flex-none border-l bg-muted/10 overflow-y-auto overflow-x-hidden border-border/40">
+            <div className="p-6 space-y-8">
+              
+              {/* Status & Priority Group */}
+              <div className="space-y-5">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">状态</label>
+                  <Select
+                    value={taskStatus}
+                    onValueChange={async (value) => {
+                      setTaskStatus(value);
                       try {
                         await httpClient('/api/tasks/edit', {
                           method: 'POST',
-                          body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'owner', value: person.id }] }
+                          body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'status', value }] }
                         });
+                        toast.success(`状态已更新为: ${getTaskStatusName(value)}`);
+                        if (onTaskUpdate) {
+                          const updatedTask = { ...task, fields: { ...task.fields, status: { value, name: getTaskStatusName(value), color: task.fields.status.color } } };
+                          onTaskUpdate(updatedTask);
+                        }
+                      } catch (error) { toast.error('更新状态失败'); }
+                    }}
+                  >
+                    <SelectTrigger className="w-full h-9 bg-background border border-border/50 hover:border-border hover:shadow-sm transition-all text-sm rounded-md font-medium">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(TASK_STATUS_NAMES).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>{label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">优先级</label>
+                  <Select
+                    value={taskPriority}
+                    onValueChange={async (value) => {
+                      const priorityKeywordMap: Record<string, string> = { '100': 'unbreak', '90': 'triage', '80': 'high', '50': 'normal', '25': 'low', '0': 'wish' };
+                      const priorityKeyword = priorityKeywordMap[value] || 'normal';
+                      setTaskPriority(value);
+                      try {
+                        await httpClient('/api/tasks/edit', {
+                          method: 'POST',
+                          body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'priority', value: priorityKeyword }] }
+                        });
+                        toast.success('优先级已更新');
+                      } catch (error) { toast.error('更新优先级失败'); }
+                    }}
+                  >
+                    <SelectTrigger className="w-full h-9 bg-background border border-border/50 hover:border-border hover:shadow-sm transition-all text-sm rounded-md font-medium">
+                      <SelectValue placeholder="选择优先级" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="100">P1 紧急</SelectItem>
+                      <SelectItem value="90">P2 高</SelectItem>
+                      <SelectItem value="80">P3 中</SelectItem>
+                      <SelectItem value="50">P4 普通</SelectItem>
+                      <SelectItem value="25">P5 低</SelectItem>
+                      <SelectItem value="0">P6 微不足道</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <Separator className="bg-border/30" />
+
+              {/* People Group */}
+              <div className="space-y-5">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <User className="h-3 w-3" /> 负责人
+                  </label>
+                  <PeoplePicker
+                    selected={assignee}
+                    onAdd={async (person) => {
+                      setAssignee([person]);
+                      try {
+                        await httpClient('/api/tasks/edit', { method: 'POST', body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'owner', value: person.id }] } });
                         toast.success(`已指派给: ${person.name}`);
                       } catch (error) { toast.error('指派失败'); }
                     }}
                     onRemove={async () => {
                       setAssignee([]);
                       try {
-                        await httpClient('/api/tasks/edit', {
-                          method: 'POST',
-                          body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'owner', value: '' }] }
-                        });
+                        await httpClient('/api/tasks/edit', { method: 'POST', body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'owner', value: '' }] } });
                         toast.success('已移除指派');
                       } catch (error) { toast.error('移除指派失败'); }
                     }}
                     maxSelections={1}
-                    className="justify-end w-full"
+                    className="w-full"
+                    triggerClassName="w-full h-auto min-h-[36px] py-1.5 px-3 bg-transparent hover:bg-muted/40 border border-transparent hover:border-border/50 rounded-md transition-all justify-start"
                   />
                 </div>
-              </div>
-            </div>
 
-            <div className="space-y-6">
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">工作量</span>
-                <div className="flex-1 max-w-[200px]">
-                  <Input
-                    value={workload}
-                    onChange={(e) => setWorkload(e.target.value)}
-                    onBlur={async () => {
-                      if (!workload.trim()) return;
-                      // Simplified logic for brevity - assume formatted
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Users className="h-3 w-3" /> 订阅者
+                  </label>
+                  <PeoplePicker
+                    selected={subscribers}
+                    onAdd={async (person) => {
+                      setSubscribers([...subscribers, person]);
                       try {
-                        await httpClient('/api/tasks/edit', {
-                          method: 'POST',
-                          body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'custom.tp-link.estimated-days', value: workload }] }
-                        });
-                        toast.success('工作量已更新');
-                      } catch (error) { toast.error('更新工作量失败'); }
+                        await httpClient('/api/tasks/edit', { method: 'POST', body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'subscribers.add', value: [person.id] }] } });
+                        toast.success(`已添加订阅者: ${person.name}`);
+                      } catch (error) { toast.error('添加失败'); }
                     }}
-                    className="h-9 text-right"
-                    placeholder="如: 1d"
+                    onRemove={async (personId) => {
+                      setSubscribers(subscribers.filter(s => s.id !== personId));
+                      try {
+                        await httpClient('/api/tasks/edit', { method: 'POST', body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'subscribers.remove', value: [personId] }] } });
+                        toast.success('已移除订阅者');
+                      } catch (error) { toast.error('移除失败'); }
+                    }}
+                    className="w-full"
+                    triggerClassName="w-full h-auto min-h-[36px] py-1.5 px-3 bg-transparent hover:bg-muted/40 border border-transparent hover:border-border/50 rounded-md transition-all justify-start"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">计划完成</span>
-                <DatePicker
-                  value={plannedCompletion}
-                  onChange={async (date: Date | undefined) => {
-                    setPlannedCompletion(date);
-                    try {
-                      const timestamp = date ? Math.floor(date.getTime() / 1000) : null;
-                      await httpClient('/api/tasks/edit', {
-                        method: 'POST',
-                        body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'custom.tp-link.estimated-date-complete', value: timestamp }] }
-                      });
-                      toast.success(date ? '计划完成时间已更新' : '已清除');
-                    } catch (error) { toast.error('更新失败'); }
-                  }}
-                  className="flex-1 max-w-[200px] justify-end"
-                />
-              </div>
+              <Separator className="bg-border/30" />
 
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">项目</span>
-                <div className="flex-1 max-w-[200px] flex justify-end">
+              {/* Attributes Group */}
+              <div className="space-y-5">
+                <div className="space-y-1.5">
+                   <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Briefcase className="h-3 w-3" /> 项目
+                  </label>
                   <ProjectPicker
                     selected={projectTags}
-                    onAdd={async (project: { id: string; name: string; color?: string }) => {
+                    onAdd={async (project) => {
                       setProjectTags([project]);
                       try {
-                        await httpClient('/api/tasks/edit', {
-                          method: 'POST',
-                          body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'projects.add', value: [project.id] }] }
-                        });
+                        await httpClient('/api/tasks/edit', { method: 'POST', body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'projects.add', value: [project.id] }] } });
                         toast.success(`已设置项目: ${project.name}`);
                       } catch (error) { toast.error('设置项目失败'); }
                     }}
-                    onRemove={async (projectId: string) => {
+                    onRemove={async (projectId) => {
                       setProjectTags([]);
                       try {
-                        await httpClient('/api/tasks/edit', {
-                          method: 'POST',
-                          body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'projects.remove', value: [projectId] }] }
-                        });
+                        await httpClient('/api/tasks/edit', { method: 'POST', body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'projects.remove', value: [projectId] }] } });
                         toast.success('已移除项目标签');
                       } catch (error) { toast.error('移除项目失败'); }
                     }}
                     maxSelections={1}
-                    className="justify-end w-full"
+                    className="w-full"
+                    triggerClassName="w-full h-auto min-h-[36px] py-1.5 px-3 bg-transparent hover:bg-muted/40 border border-transparent hover:border-border/50 rounded-md transition-all justify-start"
                   />
                 </div>
-              </div>
-            </div>
-          </div>
 
-          <div className="flex items-center justify-between border-t pt-4">
-            <button
-              onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
-              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-            >
-              <ChevronDown className={cn("h-3 w-3 transition-transform", isDetailsExpanded && "rotate-180")} />
-              {isDetailsExpanded ? '收起更多详情' : '展开更多详情'}
-            </button>
-          </div>
-
-          {isDetailsExpanded && (
-            <div className="bg-muted/30 rounded-lg p-4 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 text-sm animate-in slide-in-from-top-2 fade-in">
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-muted-foreground whitespace-nowrap font-medium">订阅者</span>
-                <div className="flex-1 max-w-[200px] flex justify-end">
-                  <PeoplePicker
-                    selected={subscribers}
-                    onAdd={async (person: { id: string; name: string; avatar?: string }) => {
-                      setSubscribers([...subscribers, person]);
-                      try {
-                        await httpClient('/api/tasks/edit', {
-                          method: 'POST',
-                          body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'subscribers.add', value: [person.id] }] }
-                        });
-                        toast.success(`已添加订阅者: ${person.name}`);
-                      } catch (error) { toast.error('添加失败'); }
-                    }}
-                    onRemove={async (personId: string) => {
-                      setSubscribers(subscribers.filter(s => s.id !== personId));
-                      try {
-                        await httpClient('/api/tasks/edit', {
-                          method: 'POST',
-                          body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'subscribers.remove', value: [personId] }] }
-                        });
-                        toast.success('已移除订阅者');
-                      } catch (error) { toast.error('移除失败'); }
-                    }}
-                    className="justify-end w-full"
-                  />
-                </div>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-muted-foreground whitespace-nowrap font-medium">更新计划</span>
-                <DatePicker
-                  value={updatedPlan}
-                  onChange={async (date: Date | undefined) => {
-                    setUpdatedPlan(date);
-                    try {
-                      const timestamp = date ? Math.floor(date.getTime() / 1000) : null;
-                      await httpClient('/api/tasks/edit', {
-                        method: 'POST',
-                        body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'custom.tp-link.update-date-complete', value: timestamp }] }
-                      });
-                      toast.success(date ? '更新计划已设置' : '已清除');
-                    } catch (error) { toast.error('更新失败'); }
-                  }}
-                  className="flex-1 max-w-[200px] justify-end"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Description */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <AlignLeft className="h-4 w-4 text-muted-foreground" />
-                描述
-              </h3>
-              {!isEditingDescription && (
-                <Button variant="ghost" size="sm" onClick={() => setIsEditingDescription(true)} className="h-7 text-xs">
-                  <Edit2 className="h-3 w-3 mr-1.5" />
-                  编辑
-                </Button>
-              )}
-            </div>
-            
-            {isEditingDescription ? (
-              <div className="space-y-3">
-                <RemarkupEditor
-                  value={taskDescription}
-                  onChange={setTaskDescription}
-                  autoFocus
-                />
-                <div className="flex gap-2 justify-end">
-                  <Button variant="ghost" size="sm" onClick={() => setIsEditingDescription(false)}>取消</Button>
-                  <Button 
-                    size="sm" 
-                    onClick={async () => {
-                      setIsEditingDescription(false);
-                      try {
-                        await httpClient('/api/tasks/edit', {
-                          method: 'POST',
-                          body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'description', value: taskDescription }] }
-                        });
-                        toast.success('描述已更新');
-                        if (onTaskUpdate) {
-                          const updatedTask = { ...task, fields: { ...task.fields, description: { raw: taskDescription } } };
-                          onTaskUpdate(updatedTask);
-                        }
-                      } catch (error) { toast.error('更新描述失败'); }
-                    }}
-                  >
-                    保存
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="text-sm text-foreground/90 bg-muted/20 rounded-md p-4 min-h-[60px] border border-border/50">
-                <RemarkupRenderer content={taskDescription || '暂无描述'} compact />
-              </div>
-            )}
-          </div>
-
-          {/* Subtasks */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <ListTodo className="h-4 w-4 text-muted-foreground" />
-                子任务
-                {isLoadingSubtasksBackground && (
-                  <span className="text-xs font-normal text-muted-foreground flex items-center gap-1 ml-2">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    加载中...
-                  </span>
-                )}
-              </h3>
-              {subtasks.length > 0 && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => setShowCompletedSubtasks(!showCompletedSubtasks)}
-                  className="h-7 text-xs"
-                >
-                  {showCompletedSubtasks ? '隐藏已完成' : '显示已完成'}
-                </Button>
-              )}
-            </div>
-
-            {isLoadingSubtasks ? (
-              <div className="flex justify-center py-8">
-                <LoadingSpinner message="" size="md" />
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {subtasks.length > 0 && (
-                  <div className="space-y-2 pl-1">
-                    {filterSubtasks(subtasks).map((task) => (
-                      <SubtaskItem
-                        key={task.id}
-                        task={task}
-                        level={0}
-                        onToggle={toggleSubtask}
-                        onExpand={toggleExpand}
-                        onAddChild={setAddingSubtaskToId}
-                        onDelete={deleteSubtask}
-                        onClick={(subtask: Subtask) => openSecondaryTask(subtask.id)}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                {/* Add Subtask Input */}
-                {addingSubtaskToId !== null ? (
-                  <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-md animate-in fade-in zoom-in-95">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <Clock className="h-3 w-3" /> 工作量
+                    </label>
                     <Input
-                      value={newSubtaskTitle}
-                      onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') addSubtask(addingSubtaskToId === 0 ? null : addingSubtaskToId);
-                        if (e.key === 'Escape') {
-                          setAddingSubtaskToId(null);
-                          setNewSubtaskTitle('');
-                        }
+                      value={workload}
+                      onChange={(e) => setWorkload(e.target.value)}
+                      onBlur={async () => {
+                        if (!workload.trim()) return;
+                        try {
+                          await httpClient('/api/tasks/edit', { method: 'POST', body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'custom.tp-link.estimated-days', value: workload }] } });
+                          toast.success('工作量已更新');
+                        } catch (error) { toast.error('更新工作量失败'); }
                       }}
-                      placeholder="输入子任务标题..."
-                      className="h-8 text-sm"
-                      autoFocus
+                      className="h-9 text-sm bg-transparent border-border/50 hover:border-border/80 focus-visible:ring-0 focus-visible:border-primary px-3 shadow-none transition-colors"
+                      placeholder="如: 1d"
                     />
-                    <Button 
-                      size="sm" 
-                      className="h-8"
-                      disabled={!newSubtaskTitle.trim()}
-                      onClick={() => addSubtask(addingSubtaskToId === 0 ? null : addingSubtaskToId)}
-                    >
-                      添加
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-8"
-                      onClick={() => {
-                        setAddingSubtaskToId(null);
-                        setNewSubtaskTitle('');
-                      }}
-                    >
-                      取消
-                    </Button>
                   </div>
-                ) : (
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start text-muted-foreground hover:text-foreground border-dashed"
-                    onClick={() => setAddingSubtaskToId(0)}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    添加子任务
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
 
-          {/* Timeline */}
-          <div className="space-y-4 pt-2">
-            {isLoadingComments ? (
-              <div className="flex justify-center py-8">
-                <LoadingSpinner message="" size="md" />
+                   <div className="space-y-1.5">
+                    <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <CalendarDays className="h-3 w-3" /> 计划完成
+                    </label>
+                    <DatePicker
+                      value={plannedCompletion}
+                      onChange={async (date) => {
+                        setPlannedCompletion(date);
+                        try {
+                          const timestamp = date ? Math.floor(date.getTime() / 1000) : null;
+                          await httpClient('/api/tasks/edit', { method: 'POST', body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'custom.tp-link.estimated-date-complete', value: timestamp }] } });
+                          toast.success(date ? '计划完成时间已更新' : '已清除');
+                        } catch (error) { toast.error('更新失败'); }
+                      }}
+                      className="w-full"
+                      triggerClassName="h-9 bg-transparent border-border/50 hover:border-border/80 rounded-md px-3 shadow-none transition-colors justify-start text-sm"
+                    />
+                  </div>
+                </div>
+
+                 <div className="space-y-1.5">
+                    <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <CalendarClock className="h-3 w-3" /> 更新计划
+                    </label>
+                    <DatePicker
+                      value={updatedPlan}
+                      onChange={async (date) => {
+                        setUpdatedPlan(date);
+                        try {
+                          const timestamp = date ? Math.floor(date.getTime() / 1000) : null;
+                          await httpClient('/api/tasks/edit', { method: 'POST', body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'custom.tp-link.update-date-complete', value: timestamp }] } });
+                          toast.success(date ? '更新计划已设置' : '已清除');
+                        } catch (error) { toast.error('更新失败'); }
+                      }}
+                      className="w-full"
+                      triggerClassName="h-9 bg-transparent border-border/50 hover:border-border/80 rounded-md px-3 shadow-none transition-colors justify-start text-sm"
+                    />
+                  </div>
               </div>
-            ) : (
-              <Timeline
-                title="评论和历史"
-                cacheKey={task ? `T${task.id}` : undefined}
-                items={comments.map((comment) => ({
-                  id: comment.phid,
-                  author: comment.author,
-                  authorImage: null,
-                  content: comment.content,
-                  timestamp: comment.date,
-                }))}
-                emptyMessage="暂无评论"
-                addPlaceholder="添加评论..."
-                showAddInput={true}
-                onEdit={async (itemId: number | string, newContent: string) => {
-                  if (!task) return;
-                  const transactionPHID = String(itemId);
-                  const marker = `[phabdash-edit:${transactionPHID}]\n${newContent}`;
-                  await httpClient('/api/tasks/edit', {
-                    method: 'POST',
-                    body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'comment', value: marker }] },
-                  });
-                  await refreshComments(task.id);
-                  toast.success('评论已更新');
-                }}
-                onDelete={async (itemId: number | string) => {
-                  if (!task) return;
-                  const transactionPHID = String(itemId);
-                  const marker = `[phabdash-delete:${transactionPHID}]\nThis comment has been deleted.`;
-                  await httpClient('/api/tasks/edit', {
-                    method: 'POST',
-                    body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'comment', value: marker }] },
-                  });
-                  await refreshComments(task.id);
-                }}
-                onAdd={async (content: string) => {
-                  if (!task) return;
-                  await httpClient('/api/tasks/edit', {
-                    method: 'POST',
-                    body: { objectIdentifier: `T${task.id}`, transactions: [{ type: 'comment', value: content }] },
-                  });
-                  await refreshComments(task.id);
-                  toast.success('评论已添加');
-                }}
-              />
-            )}
+
+            </div>
           </div>
         </div>
       </DialogContent>
 
       <TaskScoringDialog
-        isOpen={isRatingPanelOpen}
+        isOpen={open && isRatingPanelOpen}
         onClose={() => setIsRatingPanelOpen(false)}
         onConfirm={handleScoringConfirm}
         currentValues={taskScoring || undefined}
@@ -1404,9 +1409,10 @@ export function TaskDetailDialog({
       )}
 
       {isLoadingSecondaryTask && (
-        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-[10240]">
-          <div className="bg-white rounded-lg shadow-lg px-4 py-3">
-            <LoadingSpinner message="加载子任务详情..." size="md" />
+        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-[10240] backdrop-blur-sm">
+          <div className="bg-background/80 backdrop-blur-md rounded-xl shadow-2xl px-8 py-6 flex flex-col items-center gap-3 border border-border/20">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm font-medium">加载中...</p>
           </div>
         </div>
       )}

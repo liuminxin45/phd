@@ -7,6 +7,21 @@ const PROJECT_ROOT = process.cwd();
 
 const ENV_LOCAL_PATH = path.join(PROJECT_ROOT, '.env.local');
 
+const DEFAULT_ENV_ENTRIES: EnvEntry[] = [
+  { key: 'PHA_HOST', value: 'http://pha.tp-link.com.cn/' },
+  { key: 'GERRIT_URL', value: 'https://review.tp-link.net/gerrit' },
+  { key: 'PHA_TOKEN', value: '' },
+  { key: 'LOGIN_USER', value: '' },
+  { key: 'LOGIN_PASS', value: '' },
+  { key: 'PHA_USER', value: '' },
+  { key: 'PHA_SESSION', value: '' },
+  { key: 'DINNER_SESSION', value: '' },
+  { key: 'GERRIT_SESSION', value: '' },
+  { key: 'BLOG_PHID_MAP', value: '{}' },
+];
+
+const REQUIRED_SETUP_KEYS = ['PHA_TOKEN', 'LOGIN_USER', 'LOGIN_PASS'];
+
 function parseEnvFile(filePath: string): { entries: EnvEntry[]; raw: string } {
   if (!fs.existsSync(filePath)) {
     return { entries: [], raw: '' };
@@ -47,11 +62,31 @@ function serializeEnvEntries(entries: EnvEntry[]): string {
   return lines.join('\n') + '\n';
 }
 
+function ensureEnvLocalExists(): { created: boolean; entries: EnvEntry[] } {
+  if (fs.existsSync(ENV_LOCAL_PATH)) {
+    const { entries } = parseEnvFile(ENV_LOCAL_PATH);
+    return { created: false, entries };
+  }
+
+  const content = serializeEnvEntries(DEFAULT_ENV_ENTRIES);
+  fs.writeFileSync(ENV_LOCAL_PATH, content, 'utf-8');
+  return { created: true, entries: DEFAULT_ENV_ENTRIES };
+}
+
+function detectNeedsSetup(entries: EnvEntry[]): boolean {
+  const map = new Map(entries.map((e) => [e.key, e.value]));
+  return REQUIRED_SETUP_KEYS.some((key) => !(map.get(key) || '').trim());
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {
     try {
-      const { entries } = parseEnvFile(ENV_LOCAL_PATH);
-      return res.status(200).json({ entries });
+      const { created, entries } = ensureEnvLocalExists();
+      return res.status(200).json({
+        entries,
+        envLocalCreated: created,
+        needsSetup: detectNeedsSetup(entries),
+      });
     } catch (error: any) {
       return res.status(500).json({ error: error.message || 'Failed to read env file' });
     }
@@ -68,7 +103,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const content = serializeEnvEntries(entries);
       fs.writeFileSync(ENV_LOCAL_PATH, content, 'utf-8');
 
-      return res.status(200).json({ success: true });
+      return res.status(200).json({ success: true, needsSetup: detectNeedsSetup(entries) });
     } catch (error: any) {
       return res.status(500).json({ error: error.message || 'Failed to write env file' });
     }

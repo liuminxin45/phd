@@ -5,6 +5,7 @@ import {
   User,
   Calendar,
   Clock,
+  FileText,
   ArrowLeft,
   ArrowUp,
   Heart,
@@ -22,6 +23,7 @@ import { cn } from '@/lib/utils';
 
 export function PostDetailView({ post, onBack }: { post: ApiBlogPost; onBack: () => void }) {
   const readTimeMin = Math.max(1, Math.ceil((post.body || '').length / 250));
+  const wordCount = (post.body || '').replace(/\s+/g, '').length;
 
   // Scroll to top on mount
   const containerRef = useCallback((node: HTMLDivElement | null) => {
@@ -157,6 +159,10 @@ export function PostDetailView({ post, onBack }: { post: ApiBlogPost; onBack: ()
             <span className="flex items-center gap-2">
               <Clock className="h-4 w-4" />
               {readTimeMin} min read
+            </span>
+            <span className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              {wordCount.toLocaleString()} 字
             </span>
           </div>
 

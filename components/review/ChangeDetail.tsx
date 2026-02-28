@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { httpGet, httpPost } from '@/lib/httpClient';
 import {
@@ -36,6 +36,25 @@ function buildPendingLocalKey(prefix: string): string {
 
 function buildPendingCommentsStorageKey(changeNumber: number, revisionId?: string): string {
   return `review-pending-comments:${changeNumber}:${revisionId || 'current'}`;
+}
+
+function clearPendingCommentsStorageForChange(changeNumber: number): void {
+  if (typeof window === 'undefined') return;
+  const prefix = `review-pending-comments:${changeNumber}:`;
+  try {
+    const keysToDelete: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(prefix)) {
+        keysToDelete.push(key);
+      }
+    }
+    for (const key of keysToDelete) {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // ignore localStorage failures
+  }
 }
 
 function classifySubmitSignal(text: string): 'merge-conflict' | 'not-current-rebase' | null {
@@ -94,9 +113,10 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   const [showCommentHistory, setShowCommentHistory] = useState(false);
   const [relatedChanges, setRelatedChanges] = useState<GerritRelatedChange[]>([]);
   const [selectedRelatedKeys, setSelectedRelatedKeys] = useState<Set<string>>(new Set());
+  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Inline comments state (accumulated per file before submission)
-  const [pendingComments, setPendingComments] = useState<Record<string, { localKey: string; line: number; message: string; in_reply_to?: string }[]>>({});
+  const [pendingComments, setPendingComments] = useState<Record<string, { localKey: string; line: number; message: string; in_reply_to?: string; unresolved?: boolean }[]>>({});
 
   // (Reviewer add/remove UI state moved to ReviewSidebar)
 
@@ -105,9 +125,12 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     selectedRevisionId || change?.current_revision
   );
 
-  const fetchDetail = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const fetchDetail = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const res = await httpGet<{
         change: GerritChange;
@@ -141,14 +164,26 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
 
       setFiles(fileEntries);
     } catch (err: any) {
-      setError(err.message || 'Failed to load change detail');
+      if (!silent) {
+        setError(err.message || 'Failed to load change detail');
+      } else {
+        toast.error(err.message || 'Failed to refresh change detail');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [baseRevisionId, changeNumber, compareMode, selectedRevisionId]);
 
   useEffect(() => {
-    fetchDetail();
+    void fetchDetail();
+    refreshIntervalRef.current = setInterval(() => {
+      void fetchDetail({ silent: true });
+    }, 60_000);
+    return () => {
+      if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
+    };
   }, [fetchDetail]);
 
   useEffect(() => {
@@ -194,7 +229,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
         setPendingComments({});
         return;
       }
-      setPendingComments(parsed as Record<string, { localKey: string; line: number; message: string; in_reply_to?: string }[]>);
+      setPendingComments(parsed as Record<string, { localKey: string; line: number; message: string; in_reply_to?: string; unresolved?: boolean }[]>);
     } catch {
       setPendingComments({});
     }
@@ -261,7 +296,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   const ensureFileOpen = useCallback(async (rawPath: string) => {
     const resolvedPath = resolveFilePath(rawPath);
     if (!resolvedPath) {
-      toast.error(`未找到文件：${rawPath}`);
+      toast.error(`File not found: ${rawPath}`);
       return null;
     }
 
@@ -280,20 +315,84 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     if (!selectedFile) return;
     setPendingComments((prev) => ({
       ...prev,
-      [selectedFile]: [...(prev[selectedFile] || []), { localKey: buildPendingLocalKey('inline'), line, message }],
+      [selectedFile]: [...(prev[selectedFile] || []), { localKey: buildPendingLocalKey('inline'), line, message, unresolved: true }],
     }));
-    toast.success(`已添加第 ${line} 行评论（提交 Review 时一起发送）`);
+    toast.success(`Comment added on line ${line} (pending submission)`);
   }, [selectedFile]);
 
   // Reply to an existing comment (adds as pending with in_reply_to)
-  const handleReplyComment = useCallback((commentId: string, line: number | undefined, message: string) => {
+  const handleReplyComment = useCallback((commentId: string, line: number | undefined, message: string, unresolved?: boolean) => {
     if (!selectedFile) return;
     setPendingComments((prev) => ({
       ...prev,
-      [selectedFile]: [...(prev[selectedFile] || []), { localKey: buildPendingLocalKey('reply'), line: line || 0, message, in_reply_to: commentId }],
+      [selectedFile]: [...(prev[selectedFile] || []), { localKey: buildPendingLocalKey('reply'), line: line || 0, message, in_reply_to: commentId, unresolved }],
     }));
-    toast.success('已添加回复（提交 Review 时一起发送）');
+    toast.success('Reply added (pending submission)');
   }, [selectedFile]);
+
+  // Edit a pending comment/reply
+  const handleEditPendingComment = useCallback((file: string, localKey: string, newMessage: string, unresolved?: boolean) => {
+    setPendingComments((prev) => {
+      const existing = prev[file] || [];
+      const idx = existing.findIndex((c) => c.localKey === localKey);
+      if (idx === -1) return prev;
+      
+      const nextList = [...existing];
+      nextList[idx] = { ...nextList[idx], message: newMessage };
+      if (unresolved !== undefined) {
+        nextList[idx].unresolved = unresolved;
+      }
+      
+      return { ...prev, [file]: nextList };
+    });
+    toast.success('Draft updated');
+  }, []);
+
+  const handleResolveInlineComment = useCallback(async (commentId: string, line: number | undefined) => {
+    if (!selectedFile) return;
+    try {
+      await httpPost('/api/gerrit/review', {
+        changeId: changeNumber,
+        revisionId: selectedRevisionId || 'current',
+        message: 'Done',
+        comments: {
+          [selectedFile]: [
+            {
+              in_reply_to: commentId,
+              message: 'Done',
+              ...(typeof line === 'number' ? { line } : {}),
+              unresolved: false,
+            },
+          ],
+        },
+      });
+      toast.success('Comment marked as resolved');
+      
+      // Clear any pending replies for this comment since we just posted a "Done" reply
+      if (selectedFile) {
+        setPendingComments((prev) => {
+          const existing = prev[selectedFile] || [];
+          const filtered = existing.filter((c) => c.in_reply_to !== commentId);
+          if (filtered.length === existing.length) return prev;
+          const next = { ...prev };
+          if (filtered.length === 0) {
+            delete next[selectedFile];
+          } else {
+            next[selectedFile] = filtered;
+          }
+          return next;
+        });
+      }
+      
+      // Small delay to ensure Gerrit has processed the resolved status before refreshing
+      setTimeout(() => {
+        clearPendingCommentsStorageForChange(changeNumber);
+        void fetchDetail({ silent: true });
+      }, 500);
+    } catch (err: any) {
+      toast.error('Failed to resolve comment: ' + (err.message || 'Unknown error'));
+    }
+  }, [changeNumber, fetchDetail, selectedFile, selectedRevisionId]);
 
   // Add draft comment from AI issue card
   const handleAddAiDraftComment = useCallback((file: string, line: number, message: string) => {
@@ -301,7 +400,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     if (!trimmed) return;
     const resolvedFile = resolveFilePath(file);
     if (!resolvedFile) {
-      toast.error(`未找到文件：${file}`);
+      toast.error(`File not found: ${file}`);
       return;
     }
 
@@ -311,7 +410,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     const existing = pendingComments[resolvedFile] || [];
     const duplicated = existing.some((c) => c.line === line && c.message.trim() === trimmed && !c.in_reply_to);
     if (duplicated) {
-      toast.info('该 AI 建议已在待发送评论中');
+      toast.info('该 AI 建议已在草稿中');
       return;
     }
 
@@ -330,7 +429,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
       }, 220);
     });
 
-    toast.success(`已将 AI 建议加入草稿：${resolvedFile}:${line}`, {
+    toast.success(`AI 建议已添加到草稿: ${resolvedFile}:${line}`, {
       action: {
         label: '撤销',
         onClick: () => {
@@ -364,7 +463,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
       }
       return next;
     });
-    toast.success('已删除草稿评论');
+    toast.success('Draft comment deleted');
   }, []);
 
   // Search across all file diffs
@@ -389,14 +488,14 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
           // Expand this file
           setSelectedFile(file.path);
           setCurrentDiff(diff);
-          toast.success(`在 ${file.path} 中找到匹配内容`);
+          toast.success(`Found match in ${file.path}`);
           return;
         }
       } catch {
         // Skip files that fail to load
       }
     }
-    toast.error(`未在任何文件中找到 "${query}"`);
+    toast.error(`No matches found for "${query}"`);
   }, [baseRevisionId, changeNumber, compareMode, files, selectedRevisionId]);
 
   // Submit review (includes pending inline comments)
@@ -404,12 +503,13 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     setSubmittingReview(true);
     try {
       // Convert pending comments to Gerrit format
-      const commentsPayload: Record<string, { line?: number; message: string; in_reply_to?: string }[]> = {};
+      const commentsPayload: Record<string, { line?: number; message: string; in_reply_to?: string; unresolved?: boolean }[]> = {};
       for (const [file, fileComments] of Object.entries(pendingComments)) {
         commentsPayload[file] = fileComments.map((c) => {
-          const entry: { line?: number; message: string; in_reply_to?: string } = { message: c.message };
+          const entry: { line?: number; message: string; in_reply_to?: string; unresolved?: boolean } = { message: c.message };
           if (c.line) entry.line = c.line;
           if (c.in_reply_to) entry.in_reply_to = c.in_reply_to;
+          if (typeof c.unresolved === 'boolean') entry.unresolved = c.unresolved;
           return entry;
         });
       }
@@ -421,17 +521,47 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
         labels: data.labels,
         comments: Object.keys(commentsPayload).length > 0 ? commentsPayload : undefined,
       });
-      toast.success('Review 提交成功');
+      toast.success('Review submitted successfully');
       setPendingComments({});
-      fetchDetail();
+      clearPendingCommentsStorageForChange(changeNumber);
+      
+      // Small delay to ensure Gerrit has processed the comments before refreshing
+      setTimeout(() => {
+        void fetchDetail({ silent: true });
+      }, 500);
     } catch (err: any) {
-      toast.error('提交失败: ' + (err.message || 'Unknown error'));
+      toast.error('Submission failed: ' + (err.message || 'Unknown error'));
     } finally {
       setSubmittingReview(false);
     }
   }, [changeNumber, fetchDetail, pendingComments, selectedRevisionId]);
 
+  const handleTriggerInternalAgent = useCallback(async (message: string) => {
+    if (!message.trim()) return;
+    setSubmittingReview(true);
+    try {
+      await httpPost('/api/gerrit/review', {
+        changeId: changeNumber,
+        revisionId: selectedRevisionId || 'current',
+        message,
+      });
+      toast.success('内部 Agent 触发评论已发送');
+      
+      // Small delay to ensure Gerrit has processed the comment before refreshing
+      setTimeout(() => {
+        void fetchDetail({ silent: true });
+      }, 500);
+    } catch (err: any) {
+      toast.error('触发失败：' + (err.message || '未知错误'));
+    } finally {
+      setSubmittingReview(false);
+    }
+  }, [changeNumber, fetchDetail, selectedRevisionId]);
+
   const handleSubmitMerge = useCallback(async () => {
+    const confirmed = window.confirm(`确认 Merge 变更 #${changeNumber} 吗？\n\n该操作将提交当前 patch set。`);
+    if (!confirmed) return;
+
     setSubmittingMerge(true);
     setMergeError(null);
     try {
@@ -439,18 +569,18 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
         changeId: changeNumber,
         revisionId: selectedRevisionId || 'current',
       });
-      toast.success('已提交合入（Submit）');
-      fetchDetail();
+      toast.success('Change submitted (merged)');
+      void fetchDetail({ silent: true });
     } catch (err: any) {
       const message = extractApiErrorMessage(err);
       setMergeError(message);
       const signal = classifySubmitSignal(message);
       if (signal === 'merge-conflict') {
-        toast.error('合入失败：Merge Conflict（请处理冲突后重试）');
+        toast.error('Submit failed: Merge Conflict (please resolve conflicts)');
       } else if (signal === 'not-current-rebase') {
-        toast.error('合入失败：Not current，rebase 后可重试');
+        toast.error('Submit failed: Not current (please rebase)');
       } else {
-        toast.error(`合入失败：${message}`);
+        toast.error(`Submit failed: ${message}`);
       }
     } finally {
       setSubmittingMerge(false);
@@ -461,11 +591,11 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     const targets = relatedChanges.filter((c) => selectedRelatedKeys.has(`${c._change_number}:${c._revision_number}`));
     const newTargets = targets.filter((c) => c.status === 'NEW');
     if (targets.length === 0) {
-      toast.info('请先勾选 Relation chain 提交');
+      toast.info('Please select changes from Relation chain first');
       return;
     }
     if (newTargets.length === 0) {
-      toast.info('所选提交中没有可投票的 NEW 提交');
+      toast.info('No voteable NEW changes in selection');
       return;
     }
     const codeReviewLabel = change?.labels?.['Code-Review'] ? 'Code-Review' : 'Label-Code-Review';
@@ -487,22 +617,22 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     }
     setBatchVoting(0);
     if (failed.length === 0) {
-      toast.success(`批量 +${score} 成功：${success}/${newTargets.length}`);
+      toast.success(`Batch +${score} successful: ${success}/${newTargets.length}`);
     } else {
-      toast.error(`批量 +${score} 部分失败：成功 ${success}，失败 ${failed.join(', ')}`);
+      toast.error(`Batch +${score} partially failed: ${success} ok, ${failed.join(', ')} failed`);
     }
-    fetchDetail();
+    void fetchDetail({ silent: true });
   }, [change?.labels, fetchDetail, relatedChanges, selectedRelatedKeys]);
 
   const handleBatchMerge = useCallback(async () => {
     const targets = relatedChanges.filter((c) => selectedRelatedKeys.has(`${c._change_number}:${c._revision_number}`));
     const newTargets = targets.filter((c) => c.status === 'NEW');
     if (targets.length === 0) {
-      toast.info('请先勾选 Relation chain 提交');
+      toast.info('Please select changes from Relation chain first');
       return;
     }
     if (newTargets.length === 0) {
-      toast.info('所选提交中没有可合入的 NEW 提交');
+      toast.info('No submittable NEW changes in selection');
       return;
     }
     setBatchMerging(true);
@@ -513,6 +643,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
         await httpPost('/api/gerrit/submit', {
           changeId: target._change_number,
           revisionId: target._revision_number || 'current',
+          labels: {},
         });
         success += 1;
       } catch {
@@ -521,11 +652,11 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     }
     setBatchMerging(false);
     if (failed.length === 0) {
-      toast.success(`批量 Merge 成功：${success}/${newTargets.length}`);
+      toast.success(`Batch Merge successful: ${success}/${newTargets.length}`);
     } else {
-      toast.error(`批量 Merge 部分失败：成功 ${success}，失败 ${failed.join(', ')}`);
+      toast.error(`Batch Merge partially failed: ${success} ok, ${failed.join(', ')} failed`);
     }
-    fetchDetail();
+    void fetchDetail({ silent: true });
   }, [fetchDetail, relatedChanges, selectedRelatedKeys]);
 
   const jumpToCommentLocation = useCallback((file: string, line?: number, patchSet?: number) => {
@@ -564,7 +695,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
           lineEl.classList.add('ring-2', 'ring-blue-400', 'ring-offset-1');
           setTimeout(() => lineEl.classList.remove('ring-2', 'ring-blue-400', 'ring-offset-1'), 3000);
         } else {
-          toast.info(`已定位到文件 ${openedFile}，第 ${line} 行不在当前展开片段中`);
+          toast.info(`Located ${openedFile}, but line ${line} is hidden in collapsed region`);
         }
       }, 220);
     });
@@ -576,10 +707,10 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     if (!identifier) return;
     try {
       await httpPost(`/api/gerrit/reviewers?changeId=${changeNumber}`, { reviewer: identifier, state });
-      toast.success(`已添加 ${state === 'CC' ? '抄送' : '评审者'}: ${account.name || account.email || identifier}`);
-      fetchDetail();
+      toast.success(`Added ${state === 'CC' ? 'CC' : 'Reviewer'}: ${account.name || account.email || identifier}`);
+      void fetchDetail({ silent: true });
     } catch (err: any) {
-      toast.error('添加失败: ' + (err.message || 'Unknown error'));
+      toast.error('Failed to add: ' + (err.message || 'Unknown error'));
     }
   }, [changeNumber, fetchDetail]);
 
@@ -587,10 +718,10 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   const handleRemoveReviewer = useCallback(async (accountId: number) => {
     try {
       await httpPost(`/api/gerrit/reviewers?changeId=${changeNumber}`, { accountId, _method: 'DELETE' });
-      toast.success('已移除');
-      fetchDetail();
+      toast.success('Removed');
+      void fetchDetail({ silent: true });
     } catch (err: any) {
-      toast.error('移除失败: ' + (err.message || 'Unknown error'));
+      toast.error('Failed to remove: ' + (err.message || 'Unknown error'));
     }
   }, [changeNumber, fetchDetail]);
 
@@ -598,7 +729,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        <span className="ml-2 text-sm text-muted-foreground">加载变更详情...</span>
+        <span className="ml-2 text-sm text-muted-foreground">Loading change details...</span>
       </div>
     );
   }
@@ -606,8 +737,8 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   if (error || !change) {
     return (
       <div className="text-center py-20 space-y-3">
-        <p className="text-sm text-red-600">{error || '未找到变更'}</p>
-        <Button variant="outline" size="sm" onClick={onBack}>返回</Button>
+        <p className="text-sm text-red-600">{error || 'Change not found'}</p>
+        <Button variant="outline" size="sm" onClick={onBack}>Back</Button>
       </div>
     );
   }
@@ -673,48 +804,54 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     .sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || '')));
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <Card>
-        <CardContent className="p-4">
-          <ChangeHeader
-            change={change}
-            gerritUrl={gerritUrl}
-            commitMessage={selectedRevisionCommitMessage}
-            canShowMerge={canShowMerge}
-            submittingMerge={submittingMerge}
-            submittingReview={submittingReview}
-            onBack={onBack}
-            onRefresh={fetchDetail}
-            onSubmitMerge={handleSubmitMerge}
-          />
+    <div className="space-y-6">
+      {/* Top Section */}
+      <div className="space-y-4">
+        <Card className="border-none shadow-sm">
+          <CardContent className="p-5">
+            <ChangeHeader
+              change={change}
+              gerritUrl={gerritUrl}
+              commitMessage={selectedRevisionCommitMessage}
+              canShowMerge={canShowMerge}
+              submittingMerge={submittingMerge}
+              submittingReview={submittingReview}
+              onBack={onBack}
+              onRefresh={() => {
+                void fetchDetail({ silent: true });
+              }}
+              onSubmitMerge={handleSubmitMerge}
+            />
 
-          <PatchSelector
-            revisionsDesc={revisionsDesc}
-            selectedRevisionId={selectedRevisionId}
-            baseRevisionId={baseRevisionId}
-            compareMode={compareMode}
-            currentRevision={change.current_revision}
-            revisionCommentCounts={revisionCommentCounts}
-            baseRevisionCandidates={baseRevisionCandidates}
-            currentSubmitSignal={currentSubmitSignal}
-            onSelectRevision={(id) => {
-              setSelectedRevisionId(id);
-              setSelectedFile(null);
-              setCurrentDiff(null);
-            }}
-            onToggleCompare={() => {
-              setCompareMode((prev) => !prev);
-              setSelectedFile(null);
-              setCurrentDiff(null);
-            }}
-            onSelectBase={(id) => {
-              setBaseRevisionId(id);
-              setSelectedFile(null);
-              setCurrentDiff(null);
-            }}
-          />
+            <PatchSelector
+              revisionsDesc={revisionsDesc}
+              selectedRevisionId={selectedRevisionId}
+              baseRevisionId={baseRevisionId}
+              compareMode={compareMode}
+              currentRevision={change.current_revision}
+              revisionCommentCounts={revisionCommentCounts}
+              baseRevisionCandidates={baseRevisionCandidates}
+              currentSubmitSignal={currentSubmitSignal}
+              onSelectRevision={(id) => {
+                setSelectedRevisionId(id);
+                setSelectedFile(null);
+                setCurrentDiff(null);
+              }}
+              onToggleCompare={() => {
+                setCompareMode((prev) => !prev);
+                setSelectedFile(null);
+                setCurrentDiff(null);
+              }}
+              onSelectBase={(id) => {
+                setBaseRevisionId(id);
+                setSelectedFile(null);
+                setCurrentDiff(null);
+              }}
+            />
+          </CardContent>
+        </Card>
 
+        {relatedChanges.length > 0 && (
           <RelationChain
             relatedChanges={relatedChanges}
             currentChangeNumber={change._number}
@@ -737,13 +874,13 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
             onBatchVote={handleBatchVote}
             onBatchMerge={handleBatchMerge}
           />
-        </CardContent>
-      </Card>
+        )}
+      </div>
 
       {/* Two-column layout: Files + Diff on left, Review on right */}
-      <div className="flex gap-4">
+      <div className="flex flex-col lg:flex-row gap-6">
         {/* Main content */}
-        <div className="flex-1 min-w-0 space-y-4">
+        <div className="flex-1 min-w-0 space-y-6">
           <FileList
             files={files}
             onSelectFile={handleSelectFile}
@@ -755,6 +892,8 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
             fileComments={fileComments}
             onAddComment={handleAddInlineComment}
             onReplyComment={handleReplyComment}
+            onEditPendingComment={handleEditPendingComment}
+            onDoneComment={handleResolveInlineComment}
             pendingCommentsByFile={pendingComments}
             onDeletePendingComment={handleDeletePendingComment}
             onSearchFile={handleSearchFile}
@@ -764,12 +903,17 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
           />
 
           {Object.keys(pendingComments).length > 0 && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-xs text-amber-700">
-              <MessageSquare className="h-3.5 w-3.5" />
-              <span>
-                {Object.values(pendingComments).reduce((sum, arr) => sum + arr.length, 0)} 条待发送评论
-                （已显示在对应代码行下方，可直接删除）
-              </span>
+            <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 shadow-sm">
+              <MessageSquare className="h-5 w-5 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium">
+                  {Object.values(pendingComments).reduce((sum, arr) => sum + arr.length, 0)} pending comments
+                </p>
+                <p className="text-xs opacity-90">
+                  These comments are saved as drafts locally. They will be sent when you submit your review.
+                  You can review them in the file list or delete them individually.
+                </p>
+              </div>
             </div>
           )}
 
@@ -778,16 +922,16 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
               <CardContent className="p-0">
                 <button
                   onClick={() => setShowMessages(!showMessages)}
-                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
+                  className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
                 >
                   <span className="flex items-center gap-2">
                     <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                    评审历史 ({change.messages.length})
+                    Review History ({change.messages.length})
                   </span>
-                  {showMessages ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  {showMessages ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                 </button>
                 {showMessages && (
-                  <div className="border-t divide-y divide-border max-h-96 overflow-y-auto">
+                  <div className="border-t divide-y divide-border max-h-[500px] overflow-y-auto">
                     {change.messages.map((msg) => (
                       <MessageItem key={msg.id} message={msg} gerritUrl={gerritUrl} />
                     ))}
@@ -802,13 +946,13 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
               <CardContent className="p-0">
                 <button
                   onClick={() => setShowCommentHistory(!showCommentHistory)}
-                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
+                  className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
                 >
                   <span className="flex items-center gap-2">
                     <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                    评论定位 ({commentEntries.length})
+                    Comment Locator ({commentEntries.length})
                   </span>
-                  {showCommentHistory ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  {showCommentHistory ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                 </button>
                 {showCommentHistory && (
                   <div className="border-t divide-y divide-border max-h-80 overflow-y-auto">
@@ -816,15 +960,15 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
                       <button
                         key={`${c.id}-${c.path}`}
                         onClick={() => jumpToCommentLocation(c.path, c.line, c.patch_set)}
-                        className="w-full px-3 py-2 text-left hover:bg-muted/50 transition-colors"
+                        className="w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors group"
                       >
-                        <div className="flex items-center gap-2 text-[11px] mb-1">
-                          <Badge variant="outline" className="text-[10px]">PS{c.patch_set || '?'}</Badge>
-                          <span className="font-mono text-muted-foreground truncate">{c.path}</span>
-                          {typeof c.line === 'number' && <span className="text-muted-foreground">L{c.line}</span>}
+                        <div className="flex items-center gap-2 text-[11px] mb-1.5">
+                          <Badge variant="outline" className="text-[10px] bg-background">PS{c.patch_set || '?'}</Badge>
+                          <span className="font-mono text-foreground font-medium truncate max-w-[300px]" title={c.path}>{c.path}</span>
+                          {typeof c.line === 'number' && <span className="text-muted-foreground font-mono">L{c.line}</span>}
                           <span className="text-muted-foreground ml-auto">{relativeTime(c.updated)}</span>
                         </div>
-                        <p className="text-xs text-muted-foreground truncate">{c.message}</p>
+                        <p className="text-xs text-muted-foreground truncate group-hover:text-foreground transition-colors">{c.message}</p>
                       </button>
                     ))}
                   </div>
@@ -848,6 +992,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
           totalDeletions={totalDeletions}
           fileCount={files.length}
           onSubmitReview={handleSubmitReview}
+          onTriggerInternalAgent={handleTriggerInternalAgent}
           onAddDraftComment={handleAddAiDraftComment}
           onJumpToLine={jumpToDiffLine}
           onAddReviewer={handleAddReviewer}
@@ -865,24 +1010,39 @@ function MessageItem({ message, gerritUrl }: { message: GerritMessage; gerritUrl
   const author = message.author || message.real_author;
 
   return (
-    <div className={cn('px-3 py-2', isAutogenerated && 'bg-muted/30')}>
-      <div className="flex items-center gap-2 text-xs mb-1">
-        <a
-          href={`${gerritUrl}/q/owner:${encodeURIComponent(author?.email || author?.username || getAccountName(author))}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="font-medium text-foreground hover:text-primary underline-offset-2 hover:underline"
-        >
-          {getAccountName(author)}
-        </a>
-        {message._revision_number && (
-          <Badge variant="outline" className="text-[10px]">PS{message._revision_number}</Badge>
-        )}
-        <span className="text-muted-foreground ml-auto">{relativeTime(message.date)}</span>
+    <div className={cn('px-4 py-3 border-b border-border/40 last:border-0 text-sm', isAutogenerated && 'bg-muted/20')}>
+      <div className="flex items-start gap-3">
+        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
+           <span className="text-xs font-medium text-muted-foreground">
+             {getAccountName(author)?.slice(0, 2).toUpperCase()}
+           </span>
+        </div>
+        <div className="flex-1 min-w-0 space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <a
+                href={`${gerritUrl}/q/owner:${encodeURIComponent(author?.email || author?.username || getAccountName(author))}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-foreground hover:text-primary transition-colors"
+              >
+                {getAccountName(author)}
+              </a>
+              {message._revision_number && (
+                <Badge variant="secondary" className="text-[10px] h-4 px-1 text-muted-foreground bg-muted">
+                  PS{message._revision_number}
+                </Badge>
+              )}
+            </div>
+            <span className="text-xs text-muted-foreground whitespace-nowrap" title={new Date(message.date).toLocaleString()}>
+              {relativeTime(message.date)}
+            </span>
+          </div>
+          <div className={cn("text-foreground/90 whitespace-pre-wrap leading-relaxed break-words", isAutogenerated && "text-muted-foreground font-mono text-xs")}>
+            {message.message}
+          </div>
+        </div>
       </div>
-      <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">
-        {message.message}
-      </p>
     </div>
   );
 }

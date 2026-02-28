@@ -27,26 +27,53 @@ ${topBodies}
 请给出结构化的分析结果。`;
 }
 
-export function buildOutlinePrompt(analysis: string): string {
+export function buildOutlinePrompt(
+  analysis: string,
+  manualTopic?: string,
+  targetWordCount = 2600,
+  contentDepth: 'overview' | 'standard' | 'deep' = 'standard',
+): string {
+  const depthDesc = contentDepth === 'overview'
+    ? '偏入门：更强调概念解释与全局认知，减少过深实现细节。'
+    : contentDepth === 'deep'
+      ? '偏深入：包含设计权衡、实现细节、边界场景与落地建议。'
+      : '标准深度：兼顾概念解释、实践示例与工程落地。';
+
+  const topicConstraint = manualTopic?.trim()
+    ? `\n## 用户主题想法（必须吸收并严格围绕）\n\n${manualTopic.trim()}\n\n说明：以上内容可能是多个问题、关键词或零散想法。请先进行归纳，提炼出一个更聚焦、更适合作为技术博客的最终主题，再据此拟定标题和大纲。\n`
+    : '';
+
   return `基于以下对热门技术博客的分析结果，请你自主拟定一篇全新的技术博客。
 
 ## 分析结果
 
 ${analysis}
+${topicConstraint}
+
+## 写作目标约束（必须遵守）
+
+- 目标字数：${targetWordCount} 字（允许浮动 ±10%）
+- 内容深度：${depthDesc}
 
 ## 要求
 
 1. **选定一个技术话题**：根据分析出的受欢迎选题特征，选择一个当前热门且实用的技术话题（不要与具体公司项目相关，应是通用技术话题）
 2. **拟定标题**：模仿热门博客的标题风格，吸引眼球
-3. **设计详细大纲**：
+3. **若提供了用户主题想法**：
+   - 必须优先吸收并覆盖用户想表达的核心问题域
+   - 先输出你归纳后的“主题定位”（自动优化后的更合适主题）
+   - 标题与大纲必须围绕该主题定位展开，不能偏离
+4. **设计详细大纲**：
    - 给出完整的章节结构（使用 Phabricator Remarkup 的 = 标题 = 格式说明层级）
    - 每个章节的核心内容概要（2-3 句话说明要写什么）
    - 预估每个章节的大致字数
-4. **规划图片位置**：标注哪些位置需要插入图片/架构图，并说明图片应展示的内容
-5. **目标字数**：参考热门博客的平均篇幅，确定目标总字数（建议 2000-4000 字）
+5. **规划图片位置**：标注哪些位置需要插入图片/架构图，并说明图片应展示的内容
+6. **目标字数**：参考热门博客的平均篇幅，确定目标总字数（建议 2000-4000 字）
+7. **字数与深度对齐**：你给出的章节拆分和每章预估字数必须与“目标字数/内容深度”一致
 
 请严格按照以下格式输出：
 
+主题定位: [你归纳后的最终主题；若未提供用户主题想法，可写“无”]
 标题: [你拟定的博客标题]
 目标字数: [数字]
 
@@ -55,12 +82,37 @@ ${analysis}
 [详细大纲内容]`;
 }
 
-export function buildWritePrompt(outline: string): string {
+export function buildWritePrompt(
+  outline: string,
+  additionalPrompt?: string,
+  targetWordCount = 2600,
+  contentDepth: 'overview' | 'standard' | 'deep' = 'standard',
+): string {
+  const depthGuide = contentDepth === 'overview'
+    ? `\n## 内容深度要求\n\n- 以入门可理解为首要目标\n- 专有术语出现时给出简洁解释\n- 示例可读性优先，不必展开太多底层细节\n`
+    : contentDepth === 'deep'
+      ? `\n## 内容深度要求\n\n- 必须包含关键设计权衡、边界条件、常见坑与规避方案\n- 示例需体现工程实践，不仅是概念描述\n- 对核心技术点给出更深入拆解（原理/实现思路/选型依据）\n`
+      : `\n## 内容深度要求\n\n- 兼顾概念解释、实践示例与工程建议\n- 关键术语解释清楚，同时保持可落地\n`;
+
+  const requiredPrompt = additionalPrompt?.trim()
+    ? `\n## 用户附加要求（必须严格遵守）\n\n${additionalPrompt.trim()}\n\n请将上述附加要求视为硬性约束，正文必须完全符合。\n`
+    : '';
+
   return `请根据以下大纲，撰写一篇完整的技术博客正文。
 
 ## 大纲
 
 ${outline}
+${depthGuide}
+${requiredPrompt}
+
+## 关键硬性约束（必须遵守）
+
+1. **总字数约束**：全文目标 ${targetWordCount} 字，允许浮动 ±10%。
+2. **禁止输出字数标记**：严禁在文中出现“字数：300”“*字数：500*”等任何分段或全文字数统计文本。
+3. **禁止输出草稿痕迹**：严禁输出半截句、异常引号、无意义词、错乱 bullet（例如孤立的“-'”）。
+4. **示例真实性要求**：如果案例无法确认真实细节，请明确标注为“假设示例/通用示例”，不要伪造确定性事实。
+5. **只输出正文**：输出完整可发布的博客正文，不输出解释、清单、前后说明。
 
 ## 格式要求（Phabricator Remarkup）
 
@@ -91,5 +143,23 @@ ${outline}
 
 5. **字数**：请按照大纲中的目标字数撰写，内容要充实
 
-请直接输出博客正文（Remarkup 格式），不要输出任何额外说明或前言。`;
+请在内部完成自检后再输出最终正文（Remarkup 格式），不要输出任何额外说明或前言。`;
+}
+
+export function buildPolishPrompt(content: string, targetWordCount = 2600): string {
+  return `你是一位技术编辑，请对下面博客进行“只修正质量问题、不改变主题与结构层级”的润色。
+
+## 原文
+
+${content}
+
+## 润色目标（必须遵守）
+
+1. 删除任何“字数：xxx”“*字数：xxx*”等统计标记。
+2. 修复语病、错别字、异常符号、半截句、错乱列表项。
+3. 保持原有标题层级和主要段落结构，不要大幅改写章节顺序。
+4. 保持技术准确与语言流畅，避免空洞套话。
+5. 目标总字数约 ${targetWordCount}（允许 ±10%），但不要在文中显示字数。
+6. 仅输出最终可发布正文，不要输出任何说明。
+`;
 }

@@ -44,7 +44,7 @@ export default async function handler(
     const result = await client.search<ConduitSearchResult<Task>>(
       'maniphest.search',
       constraints,
-      {},
+      { projects: true },
       parseInt(limit as string),
       after as string | null,
       undefined, // queryKey

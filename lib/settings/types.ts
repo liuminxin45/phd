@@ -11,6 +11,17 @@ export interface LlmConfig {
   systemPrompt: string;
 }
 
+export interface LlmProfile {
+  id: string;
+  name: string;
+  config: LlmConfig;
+}
+
+export interface LlmProfilesConfig {
+  activeProfileId: string;
+  profiles: LlmProfile[];
+}
+
 export const DEFAULT_LLM_CONFIG: LlmConfig = {
   baseUrl: '',
   apiKey: '',
@@ -24,20 +35,22 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   systemPrompt: '你是一个公司内部效率工具助手，负责协助管理任务、项目进度、技术知识沉淀与周报复盘，以结构化、工程化、结果导向的方式提升个人与团队效率。',
 };
 
+export const DEFAULT_LLM_PROFILE: LlmProfile = {
+  id: 'default',
+  name: '默认配置',
+  config: { ...DEFAULT_LLM_CONFIG },
+};
+
+export const DEFAULT_LLM_PROFILES_CONFIG: LlmProfilesConfig = {
+  activeProfileId: DEFAULT_LLM_PROFILE.id,
+  profiles: [{ ...DEFAULT_LLM_PROFILE, config: { ...DEFAULT_LLM_CONFIG } }],
+};
+
 export interface EnvEntry {
   key: string;
   value: string;
   comment?: string;
 }
-
-export type StatusType = 'success' | 'error' | 'info';
-
-export interface StatusState {
-  message: string;
-  type: StatusType;
-}
-
-export const EMPTY_STATUS: StatusState = { message: '', type: 'info' };
 
 export const SESSION_KEYS = new Set(['PHA_SESSION', 'PHA_USER', 'DINNER_SESSION']);
 export const SECRET_KEYS = new Set([

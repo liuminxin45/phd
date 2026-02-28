@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, ArrowLeft, Trash2, Clock, Activity, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import {
   AUTO_AI_ENABLED_KEY,
   AUTO_AI_JOBS_KEY,
@@ -14,13 +15,14 @@ import {
   loadAutoAiMaxLines,
   type AutoAiJob,
 } from '@/lib/review/auto-ai';
+import { Input } from '@/components/ui/input';
 
 function statusMeta(status: AutoAiJob['status']) {
-  if (status === 'pending') return { label: '排队中', cls: 'text-amber-700 border-amber-200' };
-  if (status === 'running') return { label: '处理中', cls: 'text-blue-700 border-blue-200' };
-  if (status === 'done') return { label: '已完成', cls: 'text-green-700 border-green-200' };
-  if (status === 'skipped') return { label: '已跳过', cls: 'text-neutral-600 border-neutral-300' };
-  return { label: '失败', cls: 'text-red-700 border-red-200' };
+  if (status === 'pending') return { label: '等待中', icon: Clock, cls: 'text-amber-700 bg-amber-50 border-amber-200', iconCls: 'text-amber-600' };
+  if (status === 'running') return { label: '进行中', icon: Activity, cls: 'text-blue-700 bg-blue-50 border-blue-200', iconCls: 'text-blue-600 animate-spin' };
+  if (status === 'done') return { label: '已完成', icon: CheckCircle2, cls: 'text-green-700 bg-green-50 border-green-200', iconCls: 'text-green-600' };
+  if (status === 'skipped') return { label: '已跳过', icon: AlertTriangle, cls: 'text-neutral-600 bg-neutral-50 border-neutral-200', iconCls: 'text-neutral-500' };
+  return { label: '错误', icon: XCircle, cls: 'text-red-700 bg-red-50 border-red-200', iconCls: 'text-red-600' };
 }
 
 function formatDurationMs(ms: number): string {
@@ -30,9 +32,9 @@ function formatDurationMs(ms: number): string {
   const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
+  if (h > 0) return `${h}小时 ${m}分 ${s}秒`;
+  if (m > 0) return `${m}分 ${s}秒`;
+  return `${s}秒`;
 }
 
 function getJobDuration(job: AutoAiJob): string {
@@ -45,39 +47,61 @@ function getJobDuration(job: AutoAiJob): string {
 
 function JobList({ title, items, onOpenChange }: { title: string; items: AutoAiJob[]; onOpenChange: (changeNumber: number) => void }) {
   return (
-    <Card>
-      <CardContent className="p-0">
-        <div className="px-3 py-2 border-b text-sm font-medium flex items-center justify-between">
-          <span>{title}</span>
-          <Badge variant="secondary" className="text-[10px] font-mono">{items.length}</Badge>
+    <Card className="h-full flex flex-col overflow-hidden border-t-4 border-t-primary/20">
+      <CardHeader className="px-4 py-3 bg-muted/20 border-b border-border/40 shrink-0">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-medium">{title}</CardTitle>
+          <Badge variant="secondary" className="font-mono text-xs">{items.length}</Badge>
         </div>
+      </CardHeader>
+      <CardContent className="p-0 flex-1 overflow-y-auto max-h-[500px]">
         {items.length === 0 ? (
-          <div className="px-3 py-5 text-xs text-muted-foreground">暂无</div>
+          <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
+            <span className="text-xs">No tasks</span>
+          </div>
         ) : (
-          <div className="divide-y max-h-[44vh] overflow-y-auto">
+          <div className="divide-y divide-border/40">
             {items.map((job) => {
               const meta = statusMeta(job.status);
+              const StatusIcon = meta.icon;
               return (
-                <div key={job.key} className="px-3 py-2 text-xs space-y-1">
-                  <div className="flex items-center gap-2">
+                <div key={job.key} className="px-4 py-3 hover:bg-muted/30 transition-colors">
+                  <div className="flex items-start justify-between gap-2 mb-1">
                     <button
-                      className="font-mono text-blue-600 hover:underline"
+                      className="font-mono text-xs font-medium text-primary hover:underline flex items-center gap-1.5"
                       onClick={() => onOpenChange(job.changeNumber)}
                     >
                       #{job.changeNumber}
+                      <span className="text-muted-foreground/50 font-normal">({job.revisionId})</span>
                     </button>
-                    <Badge variant="outline" className={`text-[10px] ml-auto ${meta.cls}`}>{meta.label}</Badge>
+                    <Badge variant="outline" className={cn("text-[9px] h-5 gap-1 pl-1", meta.cls)}>
+                      <StatusIcon className={cn("h-3 w-3", meta.iconCls)} />
+                      {meta.label}
+                    </Badge>
                   </div>
-                  <div className="text-[11px] text-foreground truncate">
-                    {job.subject || '-'}
+                  
+                  <div className="text-xs text-foreground/90 truncate mb-2" title={job.subject}>
+                    {job.subject || <span className="text-muted-foreground italic">No subject</span>}
                   </div>
-                  <div className="text-[11px] text-muted-foreground flex items-center gap-3 flex-wrap">
-                    <span>{job.ownerName || '-'}</span>
-                    <span>改动：{job.totalChangedLines ?? '-'} 行</span>
-                    <span>耗时：{getJobDuration(job)}</span>
-                    <span>{new Date(job.updatedAt).toLocaleString()}</span>
+                  
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <span className="font-medium text-foreground/80">{job.ownerName || 'Unknown'}</span>
+                    </span>
+                    <span className="w-px h-2.5 bg-border/60" />
+                    <span>{job.totalChangedLines ?? '-'} lines</span>
+                    <span className="w-px h-2.5 bg-border/60" />
+                    <span>Duration: {getJobDuration(job)}</span>
+                    <span className="ml-auto text-[9px] opacity-70">
+                      {new Date(job.updatedAt).toLocaleTimeString()}
+                    </span>
                   </div>
-                  {job.error && <div className="text-[11px] text-red-600 break-all">{job.error}</div>}
+                  
+                  {job.error && (
+                    <div className="mt-2 p-2 rounded bg-red-50 text-[10px] text-red-600 font-mono break-all border border-red-100">
+                      {job.error}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -161,44 +185,97 @@ export default function ReviewAutoAiPage() {
   };
 
   return (
-    <div className="h-full overflow-auto">
-      <div className="max-w-6xl mx-auto p-6 space-y-4">
-        <Card>
-          <CardContent className="p-4 flex items-center justify-between">
+    <div className="h-full overflow-auto bg-background/50">
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => router.push('/review')} className="shrink-0">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
             <div>
-              <h1 className="text-lg font-semibold">AI 自动监控工作台</h1>
-              <p className="text-xs text-muted-foreground mt-1">查看排队中、处理中、已完成、已跳过与失败任务</p>
+              <h1 className="text-2xl font-bold text-foreground">AI 自动监控</h1>
+              <p className="text-sm text-muted-foreground">监控并管理自动评审任务</p>
             </div>
-            <div className="flex items-center gap-2 flex-wrap justify-end">
-              <label className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
-                自动处理改动行数上限
-                <input
-                  type="number"
-                  min={1}
-                  value={maxLines}
-                  onChange={(e) => updateMaxLines(e.target.value)}
-                  className="h-8 w-28 rounded border border-border bg-background px-2 text-xs text-foreground"
-                  title="超过该行数的变更将自动跳过，不执行 AI Review"
-                />
-              </label>
-              <Button variant={enabled ? 'default' : 'outline'} size="sm" onClick={toggleEnabled}>
-                自动监控 {enabled ? '开' : '关'}
-              </Button>
-              <Button variant="outline" size="sm" onClick={reload} className="gap-1.5">
-                <RefreshCw className="h-3.5 w-3.5" />
-                刷新
-              </Button>
-              <Button variant="outline" size="sm" onClick={clearFinished}>清理已完成/失败</Button>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-3">
+            <Card className="flex items-center gap-3 px-3 py-1.5 border-dashed bg-muted/30">
+              <span className="text-xs font-medium text-muted-foreground">最大行数限制</span>
+              <Input
+                type="number"
+                min={1}
+                value={maxLines}
+                onChange={(e) => updateMaxLines(e.target.value)}
+                className="h-7 w-20 text-xs bg-background text-right font-mono"
+                title="超过此行数的变更将被跳过"
+              />
+            </Card>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <JobList title="排队中" items={grouped.pending} onOpenChange={handleOpenChange} />
-          <JobList title="处理中" items={grouped.running} onOpenChange={handleOpenChange} />
-          <JobList title="已完成" items={grouped.done} onOpenChange={handleOpenChange} />
-          <JobList title="已跳过" items={grouped.skipped} onOpenChange={handleOpenChange} />
-          <JobList title="失败" items={grouped.error} onOpenChange={handleOpenChange} />
+            <Button 
+              variant={enabled ? 'default' : 'secondary'} 
+              size="sm" 
+              onClick={toggleEnabled}
+              className={cn("gap-2", !enabled && "text-muted-foreground")}
+            >
+              <Activity className={cn("h-4 w-4", enabled && "animate-pulse")} />
+              {enabled ? '监控运行中' : '监控已暂停'}
+            </Button>
+            
+            <Button variant="outline" size="sm" onClick={reload} className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              刷新
+            </Button>
+            
+            <Button variant="outline" size="sm" onClick={clearFinished} className="gap-2 text-muted-foreground hover:text-red-600 hover:border-red-200 hover:bg-red-50">
+              <Trash2 className="h-4 w-4" />
+              清除已完成
+            </Button>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="bg-card border rounded-lg p-4 flex flex-col gap-1 shadow-sm">
+            <span className="text-xs font-medium text-muted-foreground uppercase">等待中</span>
+            <span className="text-2xl font-bold text-amber-600">{grouped.pending.length}</span>
+          </div>
+          <div className="bg-card border rounded-lg p-4 flex flex-col gap-1 shadow-sm">
+            <span className="text-xs font-medium text-muted-foreground uppercase">进行中</span>
+            <span className="text-2xl font-bold text-blue-600">{grouped.running.length}</span>
+          </div>
+          <div className="bg-card border rounded-lg p-4 flex flex-col gap-1 shadow-sm">
+            <span className="text-xs font-medium text-muted-foreground uppercase">已完成</span>
+            <span className="text-2xl font-bold text-green-600">{grouped.done.length}</span>
+          </div>
+          <div className="bg-card border rounded-lg p-4 flex flex-col gap-1 shadow-sm">
+            <span className="text-xs font-medium text-muted-foreground uppercase">已跳过</span>
+            <span className="text-2xl font-bold text-muted-foreground">{grouped.skipped.length}</span>
+          </div>
+          <div className="bg-card border rounded-lg p-4 flex flex-col gap-1 shadow-sm">
+            <span className="text-xs font-medium text-muted-foreground uppercase">失败</span>
+            <span className="text-2xl font-bold text-red-600">{grouped.error.length}</span>
+          </div>
+        </div>
+
+        {/* Lists */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          {/* Column 1: Active */}
+          <div className="space-y-6">
+            <JobList title="等待中" items={grouped.pending} onOpenChange={handleOpenChange} />
+            <JobList title="进行中" items={grouped.running} onOpenChange={handleOpenChange} />
+          </div>
+          
+          {/* Column 2: Completed */}
+          <div className="space-y-6">
+            <JobList title="已完成" items={grouped.done} onOpenChange={handleOpenChange} />
+          </div>
+
+          {/* Column 3: Others */}
+          <div className="space-y-6">
+            <JobList title="已跳过" items={grouped.skipped} onOpenChange={handleOpenChange} />
+            <JobList title="失败" items={grouped.error} onOpenChange={handleOpenChange} />
+          </div>
         </div>
       </div>
     </div>

@@ -10,6 +10,7 @@ import type { GerritChange } from '@/lib/gerrit/types';
 import { LabelsSummary } from './LabelBadge';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import {
   ArrowLeft,
   ExternalLink,
@@ -19,6 +20,8 @@ import {
   User,
   Loader2,
   RefreshCw,
+  MessageSquare,
+  FileText
 } from 'lucide-react';
 
 interface ChangeHeaderProps {
@@ -45,58 +48,25 @@ export function ChangeHeader({
   onSubmitMerge,
 }: ChangeHeaderProps) {
   return (
-    <>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3 min-w-0">
-          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 mt-0.5" onClick={onBack}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold text-foreground leading-tight">
-              {change.subject}
-            </h1>
-            <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
-              <Badge variant="secondary" className={cn('text-[10px]', getStatusColor(change.status))}>
-                {getStatusLabel(change.status)}
-              </Badge>
-              <span className="flex items-center gap-1">
-                <GitBranch className="h-3 w-3" />
-                <a
-                  href={`${gerritUrl}/admin/repos/${encodeURIComponent(change.project)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-primary underline-offset-2 hover:underline"
-                >
-                  {abbreviateProject(change.project)}
-                </a>
-                {' → '}
-                {change.branch}
-              </span>
-              <span className="flex items-center gap-1">
-                <User className="h-3 w-3" />
-                <a
-                  href={`${gerritUrl}/q/owner:${encodeURIComponent(change.owner.email || change.owner.username || getAccountName(change.owner))}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-primary underline-offset-2 hover:underline"
-                >
-                  {getAccountName(change.owner)}
-                </a>
-              </span>
-              <span className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {relativeTime(change.updated)}
-              </span>
-              <span className="font-mono">#{change._number}</span>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
+    <div className="space-y-4">
+      {/* Top Navigation Bar */}
+      <div className="flex items-center justify-between">
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          className="gap-2 text-muted-foreground hover:text-foreground pl-0 -ml-2" 
+          onClick={onBack}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Dashboard
+        </Button>
+        
+        <div className="flex items-center gap-2">
           {canShowMerge && (
             <Button
               variant="default"
               size="sm"
-              className="gap-1.5 text-xs"
+              className="gap-1.5"
               onClick={onSubmitMerge}
               disabled={submittingMerge || submittingReview || change.status !== 'NEW'}
             >
@@ -105,19 +75,20 @@ export function ChangeHeader({
               ) : (
                 <GitMerge className="h-3.5 w-3.5" />
               )}
-              {submittingMerge ? '合入中...' : 'Merge'}
+              {submittingMerge ? 'Merging...' : 'Merge'}
             </Button>
           )}
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onRefresh} title="刷新">
+          
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={onRefresh} title="Refresh">
             <RefreshCw className="h-4 w-4" />
           </Button>
+          
           <a
             href={`${gerritUrl}/c/${change._number}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex"
           >
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+            <Button variant="outline" size="sm" className="gap-1.5 h-8">
               <ExternalLink className="h-3.5 w-3.5" />
               Gerrit
             </Button>
@@ -125,21 +96,78 @@ export function ChangeHeader({
         </div>
       </div>
 
-      {/* Labels */}
-      {change.labels && (
-        <div className="mt-3 pt-3 border-t border-border">
-          <LabelsSummary labels={change.labels} />
+      {/* Main Title Area */}
+      <div>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="text-2xl font-bold text-foreground leading-tight tracking-tight">
+            {change.subject}
+          </h1>
+          <Badge variant="outline" className="font-mono text-muted-foreground shrink-0 mt-1">
+            #{change._number}
+          </Badge>
         </div>
-      )}
 
-      {commitMessage && (
-        <div className="mt-3 pt-3 border-t border-border">
-          <p className="text-xs text-muted-foreground mb-1">提交说明</p>
-          <pre className="text-[11px] text-foreground/80 whitespace-pre-wrap break-words rounded border bg-muted/30 px-2 py-2 max-h-44 overflow-y-auto">
-            {commitMessage}
-          </pre>
+        {/* Metadata Row */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3 text-sm text-muted-foreground">
+          <Badge variant="secondary" className={cn('rounded-md px-2 py-0.5 font-medium', getStatusColor(change.status))}>
+            {getStatusLabel(change.status)}
+          </Badge>
+          
+          <div className="flex items-center gap-1.5">
+            <GitBranch className="h-3.5 w-3.5 text-muted-foreground/70" />
+            <a
+              href={`${gerritUrl}/admin/repos/${encodeURIComponent(change.project)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-primary transition-colors font-medium text-foreground"
+            >
+              {abbreviateProject(change.project)}
+            </a>
+            <span className="text-muted-foreground/50">/</span>
+            <span className="font-mono text-xs">{change.branch}</span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <User className="h-3.5 w-3.5 text-muted-foreground/70" />
+            <a
+              href={`${gerritUrl}/q/owner:${encodeURIComponent(change.owner.email || change.owner.username || getAccountName(change.owner))}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-foreground transition-colors"
+            >
+              {getAccountName(change.owner)}
+            </a>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5 text-muted-foreground/70" />
+            <span>{relativeTime(change.updated)}</span>
+          </div>
         </div>
-      )}
-    </>
+      </div>
+
+      {/* Labels & Commit Message Section */}
+      <div className="flex flex-col gap-4 pt-2">
+        {change.labels && Object.keys(change.labels).length > 0 && (
+          <div className="flex items-center gap-3">
+             <LabelsSummary labels={change.labels} />
+          </div>
+        )}
+
+        {commitMessage && (
+          <div className="rounded-lg border bg-muted/30 p-3">
+            <div className="flex items-center gap-2 mb-2 text-xs font-medium text-muted-foreground">
+              <FileText className="h-3.5 w-3.5" />
+              Commit Message
+            </div>
+            <pre className="text-sm text-foreground/90 whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed max-h-60 overflow-y-auto">
+              {commitMessage}
+            </pre>
+          </div>
+        )}
+      </div>
+      
+      <Separator className="mt-2" />
+    </div>
   );
 }

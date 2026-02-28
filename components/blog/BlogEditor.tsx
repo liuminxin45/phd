@@ -1,173 +1,209 @@
-import { useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   User,
   Calendar,
   ArrowLeft,
   Save,
   Send,
-  FileText,
-  Eye,
-  Pencil,
-  Bold,
-  Italic,
-  Code,
-  Link,
-  List,
-  Quote,
-  ImageIcon,
-  Plus,
   X,
   Info,
+  Tag,
+  Check,
+  Loader2,
+  Search,
 } from 'lucide-react';
-import { CATEGORIES, TAGS, getLastWeekRange } from '@/lib/blog/helpers';
+import { CATEGORIES, getLastWeekRange } from '@/lib/blog/helpers';
+import type { ApiBlogPost } from '@/lib/blog/types';
+import { httpGet, httpPost } from '@/lib/httpClient';
 import { AiBlogWriter } from './AiBlogWriter';
 import { AiReportWriter } from './AiReportWriter';
+import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { RemarkupEditor } from '@/components/ui/RemarkupEditor';
 import { cn } from '@/lib/utils';
 
-// ─── Shared toolbar items ────────────────────────────────────────────────────
+const REPORT_PROJECT_PHID = 'PHID-PROJ-5r2wcb3ptiy7lmdawmbg';
+const REPORT_PROJECT_NAME = '工作周报/日报';
 
-const TOOLBAR_ITEMS = [
-  { icon: Bold, title: '粗体' },
-  { icon: Italic, title: '斜体' },
-  { icon: Code, title: '代码' },
-  { icon: Link, title: '链接' },
-  { icon: List, title: '列表' },
-  { icon: Quote, title: '引用' },
-];
+function handlePublishErrorWithBindingGuide(rawMessage: string | undefined): boolean {
+  const msg = rawMessage || '';
+  const needBinding = msg.includes('BLOG_NOT_BOUND') || msg.includes('绑定博客') || msg.includes('未在 BLOG_PHID_MAP');
+  if (!needBinding) return false;
 
-const BLOG_TOOLBAR_ITEMS = [
-  ...TOOLBAR_ITEMS,
-  { icon: ImageIcon, title: '图片' },
-];
-
-// ─── Shared Editor Shell ─────────────────────────────────────────────────────
-
-function EditorShell({ editorMode, setEditorMode, content, setContent, toolbarItems, placeholder }: {
-  editorMode: 'edit' | 'preview';
-  setEditorMode: (m: 'edit' | 'preview') => void;
-  content: string;
-  setContent: (v: string) => void;
-  toolbarItems: { icon: any; title: string }[];
-  placeholder: string;
-}) {
-  return (
-    <Card className="overflow-hidden">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between border-b px-4 py-2 bg-muted/20">
-        <div className="flex items-center gap-1">
-          <Button
-            onClick={() => setEditorMode('edit')}
-            variant={editorMode === 'edit' ? 'default' : 'ghost'}
-            size="sm"
-            className="h-7 text-xs gap-1.5"
-          >
-            <Pencil className="h-3 w-3" />
-            编辑
-          </Button>
-          <Button
-            onClick={() => setEditorMode('preview')}
-            variant={editorMode === 'preview' ? 'default' : 'ghost'}
-            size="sm"
-            className="h-7 text-xs gap-1.5"
-          >
-            <Eye className="h-3 w-3" />
-            预览
-          </Button>
-          <div className="w-px h-4 bg-border mx-1.5" />
-          {toolbarItems.map(({ icon: Icon, title }) => (
-            <Button
-              key={title}
-              title={title}
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-            >
-              <Icon className="h-3.5 w-3.5" />
-            </Button>
-          ))}
-        </div>
-        <span className="text-xs text-muted-foreground">支持 Markdown</span>
-      </div>
-
-      {/* Editor / Preview */}
-      {editorMode === 'edit' ? (
-        <textarea
-          placeholder={placeholder}
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          className="w-full min-h-[500px] p-6 text-sm text-foreground placeholder:text-muted-foreground bg-transparent resize-y outline-none font-mono leading-relaxed"
-        />
-      ) : (
-        <div className="min-h-[500px] p-6">
-          {content ? (
-            <div className="prose prose-sm max-w-none dark:prose-invert">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {content}
-              </ReactMarkdown>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-muted-foreground min-h-[200px]">
-              <Eye className="h-8 w-8 mb-2 opacity-20" />
-              <p className="text-sm">暂无内容可预览</p>
-            </div>
-          )}
-        </div>
-      )}
-    </Card>
-  );
+  toast.error('当前账号尚未绑定博客，正在跳转到“设置 -> 环境变量”执行绑定。');
+  if (typeof window !== 'undefined') {
+    window.setTimeout(() => {
+      window.location.href = '/settings';
+    }, 500);
+  }
+  return true;
 }
 
-// ─── Status Selector ─────────────────────────────────────────────────────────
+interface BlogTagItem {
+  phid: string;
+  name: string;
+  slug?: string;
+}
 
-function StatusSelector({ status, setStatus, draftLabel, publishedLabel, draftHint, publishedHint }: {
-  status: 'draft' | 'published';
-  setStatus: (s: 'draft' | 'published') => void;
-  draftLabel: string;
-  publishedLabel: string;
-  draftHint: string;
-  publishedHint: string;
+interface ProjectSearchResult {
+  phid: string;
+  fields: {
+    name: string;
+    slug: string;
+  };
+}
+
+function BlogTagSelector({
+  selected,
+  onChange,
+  placeholder,
+}: {
+  selected: BlogTagItem[];
+  onChange: (items: BlogTagItem[]) => void;
+  placeholder?: string;
 }) {
+  const [inputValue, setInputValue] = useState('');
+  const [searchResults, setSearchResults] = useState<ProjectSearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const query = inputValue.trim();
+    if (!query) {
+      setSearchResults([]);
+      setShowDropdown(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const res = await httpGet<{ data?: ProjectSearchResult[] }>('/api/projects/search', {
+          query,
+          limit: 10,
+        });
+        const selectedPhids = new Set(selected.map((item) => item.phid));
+        const items = (res.data || []).filter((item) => !selectedPhids.has(item.phid));
+        setSearchResults(items);
+        setShowDropdown(items.length > 0);
+        setSelectedIndex(-1);
+      } catch {
+        setSearchResults([]);
+        setShowDropdown(false);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [inputValue, selected]);
+
+  const removeTag = (phid: string) => {
+    onChange(selected.filter((item) => item.phid !== phid));
+  };
+
+  const addTag = (project: ProjectSearchResult) => {
+    onChange([
+      ...selected,
+      { phid: project.phid, name: project.fields.name, slug: project.fields.slug },
+    ]);
+    setInputValue('');
+    setSearchResults([]);
+    setShowDropdown(false);
+    setSelectedIndex(-1);
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedIndex((prev) => (prev < searchResults.length - 1 ? prev + 1 : prev));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : -1));
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (selectedIndex >= 0 && searchResults[selectedIndex]) {
+        addTag(searchResults[selectedIndex]);
+      }
+      return;
+    }
+    if (e.key === 'Escape') {
+      setShowDropdown(false);
+    }
+  };
+
   return (
-    <Card>
-      <CardContent className="p-4">
-        <p className="text-sm font-medium text-foreground mb-3">
-          {draftLabel === '草稿' ? '周报状态' : '博客状态'}
-        </p>
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            onClick={() => setStatus('draft')}
-            variant={status === 'draft' ? 'secondary' : 'outline'}
-            className={cn(
-              "text-xs h-8 gap-1.5",
-              status === 'draft' && "bg-amber-100 text-amber-700 hover:bg-amber-200 border-transparent"
-            )}
-          >
-            <FileText className="h-3.5 w-3.5" />
-            {draftLabel}
-          </Button>
-          <Button
-            onClick={() => setStatus('published')}
-            variant={status === 'published' ? 'secondary' : 'outline'}
-            className={cn(
-              "text-xs h-8 gap-1.5",
-              status === 'published' && "bg-green-100 text-green-700 hover:bg-green-200 border-transparent"
-            )}
-          >
-            <Send className="h-3.5 w-3.5" />
-            {publishedLabel}
-          </Button>
+    <div className="space-y-2" ref={dropdownRef}>
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {selected.map((item) => (
+            <Badge key={item.phid} variant="outline" className="gap-1 pr-1 font-normal bg-purple-50 text-purple-700 border-purple-200">
+              <Tag className="h-3 w-3" />
+              <span>{item.name}</span>
+              <button
+                type="button"
+                onClick={() => removeTag(item.phid)}
+                className="rounded-full p-0.5 hover:bg-purple-100"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
         </div>
-        <p className="text-xs text-muted-foreground mt-2 text-center">
-          {status === 'draft' ? draftHint : publishedHint}
-        </p>
-      </CardContent>
-    </Card>
+      )}
+
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <Input
+          type="text"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder || '搜索并添加标签'}
+          className="h-8 pl-8 pr-8 text-xs"
+        />
+        {isSearching && <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+
+        {showDropdown && searchResults.length > 0 && (
+          <div className="absolute top-full left-0 right-0 mt-1 max-h-56 overflow-auto rounded-md border bg-popover p-1 shadow-md z-50">
+            {searchResults.map((item, index) => (
+              <button
+                key={item.phid}
+                type="button"
+                onClick={() => addTag(item)}
+                className={cn(
+                  'w-full rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent hover:text-accent-foreground flex items-center gap-2',
+                  index === selectedIndex && 'bg-accent text-accent-foreground',
+                )}
+              >
+                <Tag className="h-3 w-3 text-purple-600" />
+                <span className="truncate flex-1">{item.fields.name}</span>
+                <Check className="h-3 w-3 opacity-50" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -207,29 +243,95 @@ function AuthorTimeSidebar() {
 
 // ─── CreateBlogView ──────────────────────────────────────────────────────────
 
-export function CreateBlogView({ onBack }: { onBack: () => void }) {
+export function CreateBlogView({ onBack, onPublished }: { onBack: () => void; onPublished?: () => Promise<void> | void }) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [editorMode, setEditorMode] = useState<'edit' | 'preview'>('edit');
-  const [status, setStatus] = useState<'draft' | 'published'>('draft');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
-  const [tagInput, setTagInput] = useState('');
+  const [selectedProjectTags, setSelectedProjectTags] = useState<BlogTagItem[]>([]);
+  const [publishing, setPublishing] = useState(false);
+  const [draftPosts, setDraftPosts] = useState<ApiBlogPost[]>([]);
+  const [loadingDrafts, setLoadingDrafts] = useState(true);
+  const [editingDraftId, setEditingDraftId] = useState<number | null>(null);
 
-  const toggleTag = (tag: string) => {
-    setSelectedTags((prev) => {
-      const next = new Set(prev);
-      if (next.has(tag)) next.delete(tag);
-      else next.add(tag);
-      return next;
-    });
+  const fetchDrafts = useCallback(async () => {
+    setLoadingDrafts(true);
+    try {
+      const res = await httpGet<{ data?: ApiBlogPost[] }>('/api/blogs/posts', {
+        type: 'tech',
+        status: 'draft',
+        mine: 'true',
+        sort: 'newest',
+        limit: 100,
+      });
+      setDraftPosts(res.data || []);
+    } catch {
+      setDraftPosts([]);
+    } finally {
+      setLoadingDrafts(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDrafts();
+  }, [fetchDrafts]);
+
+  const applyDraftToEditor = (draft: ApiBlogPost) => {
+    setEditingDraftId(draft.id);
+    setTitle(draft.title || '');
+    setContent(draft.body || '');
+    setSelectedCategory(draft.category || null);
+    setSelectedProjectTags(
+      (draft.projectPHIDs || []).map((phid, idx) => ({
+        phid,
+        name: draft.projectTags?.[idx] || phid,
+      }))
+    );
+    toast.success(`已载入草稿 #${draft.id}，可继续编辑`);
   };
 
-  const addCustomTag = () => {
-    const trimmed = tagInput.trim();
-    if (trimmed && !selectedTags.has(trimmed)) {
-      setSelectedTags((prev) => new Set(prev).add(trimmed));
-      setTagInput('');
+  const resetEditorAsNewDraft = () => {
+    setEditingDraftId(null);
+    setTitle('');
+    setContent('');
+    setSelectedCategory(null);
+    setSelectedProjectTags([]);
+  };
+
+  const handlePublish = async (status: 'draft' | 'published') => {
+    if (!title.trim()) {
+      toast.error('请先输入博客标题');
+      return;
+    }
+    if (!content.trim()) {
+      toast.error('请先输入博客正文');
+      return;
+    }
+
+    setPublishing(true);
+    try {
+      await httpPost('/api/blogs/publish', {
+        type: 'tech',
+        title,
+        body: content,
+        status,
+        category: selectedCategory,
+        projectPHIDs: selectedProjectTags.map((item) => item.phid),
+        objectIdentifier: editingDraftId,
+      });
+      toast.success(status === 'draft' ? '博客草稿已保存' : '博客发布成功');
+      await fetchDrafts();
+      await onPublished?.();
+      if (status === 'published') {
+        resetEditorAsNewDraft();
+        onBack();
+      }
+    } catch (err: any) {
+      if (handlePublishErrorWithBindingGuide(err?.message)) {
+        return;
+      }
+      toast.error(err.message || '发布博客失败');
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -243,13 +345,13 @@ export function CreateBlogView({ onBack }: { onBack: () => void }) {
         </Button>
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <AiBlogWriter onFill={(t, c) => { setTitle(t); setContent(c); }} />
-          <Button variant="outline" className="flex-1 sm:flex-none">
+          <Button variant="outline" className="flex-1 sm:flex-none" onClick={() => handlePublish('draft')} disabled={publishing}>
             <Save className="h-4 w-4 mr-2" />
             保存草稿
           </Button>
-          <Button className="flex-1 sm:flex-none">
+          <Button className="flex-1 sm:flex-none" onClick={() => handlePublish('published')} disabled={publishing}>
             <Send className="h-4 w-4 mr-2" />
-            发布博客
+            {publishing ? '提交中...' : '发布博客'}
           </Button>
         </div>
       </div>
@@ -257,6 +359,48 @@ export function CreateBlogView({ onBack }: { onBack: () => void }) {
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Editor */}
         <div className="flex-1 min-w-0 space-y-6">
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-foreground">我的草稿</p>
+                <Button type="button" variant="outline" size="sm" onClick={resetEditorAsNewDraft}>
+                  新建空白
+                </Button>
+              </div>
+
+              {loadingDrafts ? (
+                <div className="text-xs text-muted-foreground flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  加载草稿中...
+                </div>
+              ) : draftPosts.length === 0 ? (
+                <p className="text-xs text-muted-foreground">暂无草稿，点击“保存草稿”后会出现在这里。</p>
+              ) : (
+                <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                  {draftPosts.map((draft) => (
+                    <button
+                      key={draft.id}
+                      type="button"
+                      onClick={() => applyDraftToEditor(draft)}
+                      className={cn(
+                        'w-full text-left rounded-md border px-3 py-2 transition-colors',
+                        editingDraftId === draft.id
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:bg-muted/30'
+                      )}
+                    >
+                      <div className="text-sm font-medium text-foreground truncate">{draft.title || `未命名草稿 #${draft.id}`}</div>
+                      <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
+                        <Calendar className="h-3 w-3" />
+                        更新于 {new Date((draft.dateModified || draft.dateCreated) * 1000).toLocaleString('zh-CN')}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <div className="relative">
             <input
               type="text"
@@ -266,27 +410,16 @@ export function CreateBlogView({ onBack }: { onBack: () => void }) {
               className="w-full text-3xl font-bold text-foreground placeholder:text-muted-foreground/50 bg-transparent border-none outline-none py-2"
             />
           </div>
-          <EditorShell
-            editorMode={editorMode}
-            setEditorMode={setEditorMode}
-            content={content}
-            setContent={setContent}
-            toolbarItems={BLOG_TOOLBAR_ITEMS}
+          <RemarkupEditor
+            value={content}
+            onChange={setContent}
             placeholder="在此撰写博客正文…支持 Markdown 格式"
+            minHeight="500px"
           />
         </div>
 
         {/* Sidebar */}
         <aside className="w-full lg:w-80 flex-shrink-0 space-y-6">
-          <StatusSelector
-            status={status}
-            setStatus={setStatus}
-            draftLabel="Draft"
-            publishedLabel="Published"
-            draftHint="草稿不会显示在博客首页"
-            publishedHint="发布后将出现在博客首页"
-          />
-
           {/* Category */}
           <Card>
             <CardContent className="p-4">
@@ -306,47 +439,14 @@ export function CreateBlogView({ onBack }: { onBack: () => void }) {
             </CardContent>
           </Card>
 
-          {/* Tags */}
           <Card>
             <CardContent className="p-4">
-              <p className="text-sm font-medium text-foreground mb-3">标签</p>
-              {selectedTags.size > 0 && (
-                <div className="flex flex-wrap gap-2 mb-4 p-3 bg-muted/30 rounded-md">
-                  {[...selectedTags].map((tag) => (
-                    <Badge key={tag} className="gap-1 pr-1">
-                      {tag}
-                      <button onClick={() => toggleTag(tag)} className="rounded-full hover:bg-primary-foreground/20 p-0.5">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              <div className="flex gap-2 mb-4">
-                <Input
-                  type="text"
-                  placeholder="输入新标签..."
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addCustomTag()}
-                  className="h-8 text-xs"
-                />
-                <Button onClick={addCustomTag} size="sm" variant="secondary" className="h-8 px-2">
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {TAGS.filter((t) => !selectedTags.has(t)).map((tag) => (
-                  <Badge
-                    key={tag}
-                    variant="outline"
-                    className="cursor-pointer font-normal hover:bg-muted text-muted-foreground hover:text-foreground"
-                    onClick={() => toggleTag(tag)}
-                  >
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
+              <p className="text-sm font-medium text-foreground mb-3">博客标签筛选器</p>
+              <BlogTagSelector
+                selected={selectedProjectTags}
+                onChange={setSelectedProjectTags}
+                placeholder="搜索项目标签（可多选）"
+              />
             </CardContent>
           </Card>
 
@@ -359,11 +459,46 @@ export function CreateBlogView({ onBack }: { onBack: () => void }) {
 
 // ─── CreateReportView ────────────────────────────────────────────────────────
 
-export function CreateReportView({ onBack }: { onBack: () => void }) {
+export function CreateReportView({ onBack, onPublished }: { onBack: () => void; onPublished?: () => Promise<void> | void }) {
   const [title, setTitle] = useState(getLastWeekRange);
   const [content, setContent] = useState('');
-  const [editorMode, setEditorMode] = useState<'edit' | 'preview'>('edit');
-  const [status, setStatus] = useState<'draft' | 'published'>('draft');
+  const [selectedProjectTags, setSelectedProjectTags] = useState<BlogTagItem[]>([
+    { phid: REPORT_PROJECT_PHID, name: REPORT_PROJECT_NAME },
+  ]);
+  const [publishing, setPublishing] = useState(false);
+
+  const handlePublish = async (status: 'draft' | 'published') => {
+    if (!title.trim()) {
+      toast.error('请先输入周报标题');
+      return;
+    }
+    if (!content.trim()) {
+      toast.error('请先输入周报正文');
+      return;
+    }
+
+    setPublishing(true);
+    try {
+      await httpPost('/api/blogs/publish', {
+        type: 'report',
+        title,
+        body: content,
+        status,
+        projectPHIDs: selectedProjectTags.map((item) => item.phid),
+      });
+
+      toast.success(status === 'draft' ? '周报草稿已保存' : '周报发布成功');
+      await onPublished?.();
+      onBack();
+    } catch (err: any) {
+      if (handlePublishErrorWithBindingGuide(err?.message)) {
+        return;
+      }
+      toast.error(err.message || '发布周报失败');
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   return (
     <div className="space-y-6 py-6 max-w-7xl mx-auto">
@@ -375,13 +510,13 @@ export function CreateReportView({ onBack }: { onBack: () => void }) {
         </Button>
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <AiReportWriter onFill={(t, c) => { setTitle(t); setContent(c); }} />
-          <Button variant="outline" className="flex-1 sm:flex-none">
+          <Button variant="outline" className="flex-1 sm:flex-none" onClick={() => handlePublish('draft')} disabled={publishing}>
             <Save className="h-4 w-4 mr-2" />
             保存草稿
           </Button>
-          <Button className="flex-1 sm:flex-none">
+          <Button className="flex-1 sm:flex-none" onClick={() => handlePublish('published')} disabled={publishing}>
             <Send className="h-4 w-4 mr-2" />
-            发布周报
+            {publishing ? '提交中...' : '发布博客'}
           </Button>
         </div>
       </div>
@@ -398,28 +533,28 @@ export function CreateReportView({ onBack }: { onBack: () => void }) {
               className="w-full text-3xl font-bold text-foreground placeholder:text-muted-foreground/50 bg-transparent border-none outline-none py-2"
             />
           </div>
-          <EditorShell
-            editorMode={editorMode}
-            setEditorMode={setEditorMode}
-            content={content}
-            setContent={setContent}
-            toolbarItems={TOOLBAR_ITEMS}
+          <RemarkupEditor
+            value={content}
+            onChange={setContent}
             placeholder="在此撰写周报正文…支持 Markdown 格式"
+            minHeight="500px"
           />
         </div>
 
         {/* Sidebar */}
         <aside className="w-full lg:w-80 flex-shrink-0 space-y-6">
-          <StatusSelector
-            status={status}
-            setStatus={setStatus}
-            draftLabel="草稿"
-            publishedLabel="发布"
-            draftHint="草稿不会显示在周报列表"
-            publishedHint="发布后将出现在周报列表"
-          />
-
           <AuthorTimeSidebar />
+
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-sm font-medium text-foreground mb-3">博客标签筛选器</p>
+              <BlogTagSelector
+                selected={selectedProjectTags}
+                onChange={setSelectedProjectTags}
+                placeholder="默认已选“工作周报/日报”，可继续添加"
+              />
+            </CardContent>
+          </Card>
 
           {/* Week range info */}
           <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-4">

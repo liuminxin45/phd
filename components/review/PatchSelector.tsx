@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { AlertTriangle, Info, ArrowLeftRight } from 'lucide-react';
 
 interface PatchSelectorProps {
   revisionsDesc: [string, GerritRevision][];
@@ -38,70 +39,89 @@ export function PatchSelector({
 }: PatchSelectorProps) {
   return (
     <>
-      <div className="mt-3 pt-3 border-t border-border flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground">Patch</span>
-        <Select
-          value={selectedRevisionId}
-          onValueChange={onSelectRevision}
-        >
-          <SelectTrigger className="h-8 w-[210px] text-xs">
-            <SelectValue placeholder="选择 Patch Set" />
-          </SelectTrigger>
-          <SelectContent>
-            {revisionsDesc.map(([id, rev]) => (
-              <SelectItem key={id} value={id}>
-                PS{rev._number}
-                {id === currentRevision ? ' (Current)' : ''}
-                {' · '}
-                {revisionCommentCounts[id] || 0} 评论
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="mt-4 pt-4 border-t border-border flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground">Patchset</span>
+          <Select
+            value={selectedRevisionId}
+            onValueChange={onSelectRevision}
+          >
+            <SelectTrigger className="h-8 w-[240px] text-xs font-mono bg-background">
+              <SelectValue placeholder="Select Patch Set" />
+            </SelectTrigger>
+            <SelectContent>
+              {revisionsDesc.map(([id, rev]) => (
+                <SelectItem key={id} value={id} className="text-xs">
+                  <span className="font-mono font-medium">PS{rev._number}</span>
+                  {id === currentRevision && <span className="ml-2 text-muted-foreground">(Current)</span>}
+                  {revisionCommentCounts[id] > 0 && (
+                    <span className="ml-auto pl-2 text-muted-foreground">
+                      {revisionCommentCounts[id]} comments
+                    </span>
+                  )}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         <Button
-          variant={compareMode ? 'default' : 'outline'}
+          variant={compareMode ? 'secondary' : 'ghost'}
           size="sm"
-          className="h-8 text-xs"
+          className={cn("h-8 text-xs gap-1.5", compareMode && "bg-primary/10 text-primary hover:bg-primary/20")}
           onClick={onToggleCompare}
         >
-          {compareMode ? '对比中' : '对比 Patch'}
+          <ArrowLeftRight className="h-3.5 w-3.5" />
+          {compareMode ? 'Compare Mode' : 'Compare'}
         </Button>
 
         {compareMode && (
-          <>
-            <span className="text-xs text-muted-foreground">Base</span>
+          <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-200">
+            <span className="text-xs text-muted-foreground">vs Base</span>
             <Select
               value={baseRevisionId || 'parent'}
               onValueChange={(value) => onSelectBase(value === 'parent' ? undefined : value)}
             >
-              <SelectTrigger className="h-8 w-[210px] text-xs">
-                <SelectValue placeholder="选择 Base Patch" />
+              <SelectTrigger className="h-8 w-[200px] text-xs font-mono bg-background">
+                <SelectValue placeholder="Select Base" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="parent">Parent Commit</SelectItem>
+                <SelectItem value="parent" className="text-xs">Parent Commit</SelectItem>
                 {baseRevisionCandidates.map(([id, rev]) => (
-                  <SelectItem key={id} value={id}>
-                    PS{rev._number}
+                  <SelectItem key={id} value={id} className="text-xs">
+                    <span className="font-mono">PS{rev._number}</span>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </>
+          </div>
         )}
       </div>
 
       {currentSubmitSignal && (
-        <div className="mt-3 pt-3 border-t border-border">
+        <div className="mt-4">
           <div className={cn(
-            'rounded-md border px-3 py-2 text-xs',
+            'rounded-md border px-3 py-2.5 text-xs flex items-start gap-2',
             currentSubmitSignal === 'merge-conflict'
               ? 'border-red-200 bg-red-50 text-red-700'
               : 'border-amber-200 bg-amber-50 text-amber-700'
           )}>
-            {currentSubmitSignal === 'merge-conflict'
-              ? '检测到 Gerrit Merge Conflict：当前提交无法直接合入，请先处理冲突。'
-              : '检测到 Gerrit Not current + rebase possible：建议先 rebase 到最新目标分支后再合入。'}
+            {currentSubmitSignal === 'merge-conflict' ? (
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            ) : (
+              <Info className="h-4 w-4 shrink-0 mt-0.5" />
+            )}
+            <div className="leading-relaxed">
+              {currentSubmitSignal === 'merge-conflict' ? (
+                <>
+                  <strong>Merge Conflict Detected:</strong> This change cannot be merged automatically. Please resolve conflicts locally and upload a new patch set.
+                </>
+              ) : (
+                <>
+                  <strong>Not Current (Rebase Possible):</strong> The target branch has moved forward. You may need to rebase this change before merging.
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}

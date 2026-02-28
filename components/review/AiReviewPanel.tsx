@@ -11,8 +11,9 @@ import type {
 import {
   ISSUE_CATEGORY_META,
   RISK_LEVEL_META,
+  CHANGE_TYPE_META,
 } from '@/lib/gerrit/ai-types';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -28,6 +29,7 @@ import {
   RefreshCw,
   Plus,
 } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 
 // ─── Feedback persistence (localStorage) ────────────────────────────────────
 
@@ -58,7 +60,7 @@ function highlightSnippet(snippet: string, issueTitle: string): React.ReactNode 
 
   return parts.map((part, idx) => (
     keywordRegex.test(part)
-      ? <mark key={`m-${idx}`} className="bg-amber-200/70 px-0.5 rounded">{part}</mark>
+      ? <mark key={`m-${idx}`} className="bg-amber-200/70 px-0.5 rounded text-amber-900">{part}</mark>
       : <span key={`t-${idx}`}>{part}</span>
   ));
 }
@@ -179,7 +181,7 @@ export function AiReviewPanel({
       }
       setExpandedCategories(autoExpand);
     } catch (err: any) {
-      setError(err.message || 'AI 分析失败');
+      setError(err.message || 'AI Analysis Failed');
     } finally {
       setLoading(false);
     }
@@ -216,16 +218,10 @@ export function AiReviewPanel({
   // ── Not yet triggered ─────────────────────────────────────────────────────
   if (!isOpen && !result && !loading && !error) {
     return (
-      <Card className="border-dashed border-slate-300/60">
-        <CardContent className="p-3">
-          <button
-            onClick={runReview}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-muted/50"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>AI 辅助分析</span>
-          </button>
+      <Card className="border-dashed border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer" onClick={runReview}>
+        <CardContent className="p-3 flex items-center justify-center gap-2 text-sm font-medium text-primary">
+          <Sparkles className="h-4 w-4" />
+          <span>开始 AI 智能评审</span>
         </CardContent>
       </Card>
     );
@@ -234,15 +230,13 @@ export function AiReviewPanel({
   // ── Loading state ─────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <Card className="border-slate-200">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-            <span>AI 正在分析变更...</span>
+      <Card>
+        <CardContent className="p-6 text-center space-y-3">
+          <div className="flex justify-center">
+             <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
-          <p className="mt-2 text-[11px] text-muted-foreground/60">
-            正在读取 diff 并生成结构化分析，通常需要 10-30 秒
-          </p>
+          <p className="text-sm font-medium">正在分析变更...</p>
+          <p className="text-xs text-muted-foreground">正在读取 Diff 并生成结构化分析报告。</p>
         </CardContent>
       </Card>
     );
@@ -251,14 +245,14 @@ export function AiReviewPanel({
   // ── Error state ───────────────────────────────────────────────────────────
   if (error) {
     return (
-      <Card className="border-red-200/60">
-        <CardContent className="p-3 space-y-2">
-          <div className="flex items-center gap-2 text-xs text-red-600">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            <span>AI 分析失败</span>
+      <Card className="border-red-200 bg-red-50">
+        <CardContent className="p-4 space-y-2">
+          <div className="flex items-center gap-2 text-sm font-medium text-red-700">
+            <AlertTriangle className="h-4 w-4" />
+            <span>分析失败</span>
           </div>
-          <p className="text-[11px] text-muted-foreground">{error}</p>
-          <Button variant="outline" size="sm" className="text-xs h-7" onClick={runReview}>
+          <p className="text-xs text-red-600/80">{error}</p>
+          <Button variant="outline" size="sm" className="h-7 text-xs bg-white border-red-200 text-red-700 hover:bg-red-100" onClick={runReview}>
             重试
           </Button>
         </CardContent>
@@ -282,156 +276,136 @@ export function AiReviewPanel({
   const riskMeta = RISK_LEVEL_META[result.overview.riskLevel];
 
   return (
-    <div className="space-y-3">
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <Card className="border-slate-200/80">
-        <CardContent className="p-0">
-          <div className="w-full flex items-center justify-between px-3 py-2 hover:bg-muted/30 transition-colors">
-            <button
-              onClick={() => setIsOpen(!isOpen)}
-              className="flex items-center gap-2 text-left"
-              type="button"
-            >
-              <Sparkles className="h-3.5 w-3.5 text-blue-500" />
-              <span className="text-xs font-medium text-foreground">AI 分析</span>
-              <span className={cn('h-2 w-2 rounded-full', riskMeta.dotColor)} title={riskMeta.label} />
-            </button>
-            <div className="flex items-center gap-1.5">
-              {result.issues.length > 0 && (
-                <Badge variant="secondary" className="text-[10px] font-mono">
-                  {visibleIssues.length}/{result.issues.length}
+    <Card className={cn("overflow-hidden", riskMeta.borderColor)}>
+      <CardHeader className="px-4 py-3 bg-muted/20 border-b border-border/40">
+        <div className="flex items-center justify-between">
+           <button
+             onClick={() => setIsOpen(!isOpen)}
+             className="flex items-center gap-2 font-medium text-sm"
+           >
+             <Sparkles className="h-4 w-4 text-primary" />
+             AI 智能分析
+             {result.issues.length > 0 && (
+                <Badge variant="secondary" className="ml-1 text-[10px] h-5 px-1.5">
+                  {visibleIssues.length} 个问题
                 </Badge>
-              )}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={runReview}
-                title="重新分析"
-              >
-                <RefreshCw className="h-3 w-3" />
-              </Button>
-              <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="inline-flex items-center"
-                type="button"
-                title={isOpen ? '收起' : '展开'}
-              >
-                {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
-              </button>
-            </div>
-          </div>
+             )}
+           </button>
+           <div className="flex items-center gap-1">
+             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={runReview} title="重新分析">
+               <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
+             </Button>
+             <button
+               onClick={() => setIsOpen(!isOpen)}
+               className="p-1 hover:bg-muted rounded text-muted-foreground"
+             >
+               {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+             </button>
+           </div>
+        </div>
+      </CardHeader>
 
-          {isOpen && (
-            <div className="border-t border-border">
-              {/* ── 1️⃣ Overview Section ──────────────────────────────────── */}
-              <div className="px-3 py-3 space-y-2.5">
-                {/* Risk badge */}
-                <div className="flex items-center gap-2">
-                  <span className={cn(
-                    'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium',
-                    riskMeta.bgColor, riskMeta.textColor
-                  )}>
+      {isOpen && (
+        <div className="bg-card">
+          {/* ── 1️⃣ Overview Section ──────────────────────────────────── */}
+          <div className="px-4 py-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                 <Badge variant="outline" className={cn("gap-1.5 pr-2.5", riskMeta.bgColor, riskMeta.textColor, riskMeta.borderColor)}>
                     <span className={cn('h-1.5 w-1.5 rounded-full', riskMeta.dotColor)} />
                     {riskMeta.label}
-                  </span>
-                  {result.overview.changeTypes.map((t) => (
-                    <Badge key={t} variant="outline" className="text-[10px] text-muted-foreground">
-                      {t}
-                    </Badge>
-                  ))}
-                </div>
-
-                {/* Summary */}
-                <p className="text-xs text-foreground/80 leading-relaxed">
-                  {result.overview.summary}
-                </p>
-
-                {/* Focus points */}
-                {result.overview.focusPoints.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-[11px] font-medium text-muted-foreground">建议关注：</p>
-                    {result.overview.focusPoints.map((point, i) => (
-                      <div key={i} className="flex items-start gap-1.5 text-xs text-foreground/70">
-                        <span className="text-blue-400 mt-0.5 shrink-0">•</span>
-                        <span>{point}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* ── 2️⃣ Issue Groups (collapsed by default) ──────────────── */}
-              {sortedCategories.length > 0 && (
-                <div className="border-t border-border">
-                  {sortedCategories.map((category) => {
-                    const issues = groupedIssues.get(category)!;
-                    const meta = ISSUE_CATEGORY_META[category];
-                    const isExpanded = expandedCategories.has(category);
-                    const highCount = issues.filter((i) => i.severity === 'high').length;
-
-                    return (
-                      <div key={category} className="border-b border-border last:border-b-0">
-                        <button
-                          onClick={() => toggleCategory(category)}
-                          className="w-full flex items-center justify-between px-3 py-2 hover:bg-muted/30 transition-colors"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs">{meta.icon}</span>
-                            <span className={cn('text-xs font-medium', meta.color)}>{meta.label}</span>
-                            <Badge variant="secondary" className="text-[10px] font-mono">
-                              {issues.length}
-                            </Badge>
-                            {highCount > 0 && (
-                              <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-                            )}
-                          </div>
-                          {isExpanded ? (
-                            <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                          ) : (
-                            <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                          )}
-                        </button>
-
-                        {isExpanded && (
-                          <div className="px-3 pb-2 space-y-1.5">
-                            {issues.map((issue) => (
-                              <IssueItem
-                                key={issue.id}
-                                issue={issue}
-                                feedback={feedbackMap[issue.id]}
-                                onFeedback={handleFeedback}
-                                onJumpToLine={onJumpToLine}
-                                onAddDraftComment={onAddDraftComment}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* No issues */}
-              {visibleIssues.length === 0 && (
-                <div className="px-3 py-4 text-center text-xs text-muted-foreground border-t border-border">
-                  ✨ AI 未发现明显问题
-                </div>
-              )}
-
-              {/* Timestamp & runtime model */}
-              <div className="px-3 py-1.5 text-[10px] text-muted-foreground/50 border-t border-border flex items-center justify-between gap-2">
-                <span>生成于 {new Date(result.generatedAt).toLocaleTimeString()}</span>
-                <span className="truncate" title={result.usedModel ? `本次实际使用模型：${result.usedModel}` : '本次实际使用模型：未提供'}>
-                  本次模型：{result.usedModel || '未提供'}
-                </span>
+                 </Badge>
+                 <span className="text-xs text-muted-foreground">
+                   {result.overview.changeTypes.map(t => CHANGE_TYPE_META[t] || t).join(', ')}
+                 </span>
               </div>
             </div>
+
+            <p className="text-xs text-foreground/90 leading-relaxed">
+              {result.overview.summary}
+            </p>
+
+            {result.overview.focusPoints.length > 0 && (
+              <div className="space-y-1.5 bg-muted/30 p-2 rounded text-xs">
+                <p className="font-medium text-muted-foreground">关键关注点:</p>
+                <ul className="space-y-1">
+                  {result.overview.focusPoints.map((point, i) => (
+                    <li key={i} className="flex items-start gap-2 text-foreground/80">
+                      <span className="text-primary mt-0.5">•</span>
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
+          {/* ── 2️⃣ Issue Groups ────────────────────────────────────── */}
+          {sortedCategories.length > 0 ? (
+            <div className="divide-y divide-border/40">
+              {sortedCategories.map((category) => {
+                const issues = groupedIssues.get(category)!;
+                const meta = ISSUE_CATEGORY_META[category];
+                const isExpanded = expandedCategories.has(category);
+                const highCount = issues.filter((i) => i.severity === 'high').length;
+
+                return (
+                  <div key={category}>
+                    <button
+                      onClick={() => toggleCategory(category)}
+                      className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">{meta.icon}</span>
+                        <span className={cn('text-xs font-medium', meta.color)}>{meta.label}</span>
+                        <span className="text-xs text-muted-foreground">({issues.length})</span>
+                        {highCount > 0 && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-red-500" title={`${highCount} 个高风险问题`} />
+                        )}
+                      </div>
+                      {isExpanded ? (
+                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
+                    </button>
+
+                    {isExpanded && (
+                      <div className="px-4 pb-3 space-y-2">
+                        {issues.map((issue) => (
+                          <IssueItem
+                            key={issue.id}
+                            issue={issue}
+                            feedback={feedbackMap[issue.id]}
+                            onFeedback={handleFeedback}
+                            onJumpToLine={onJumpToLine}
+                            onAddDraftComment={onAddDraftComment}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+             <div className="px-4 py-6 text-center text-xs text-muted-foreground">
+                <span className="block text-xl mb-1">✨</span>
+                未发现主要问题
+             </div>
           )}
-        </CardContent>
-      </Card>
-    </div>
+          
+          <Separator />
+
+          <div className="px-3 py-2 text-[10px] text-muted-foreground flex justify-between bg-muted/10">
+            <span>模型: {result.usedModel || 'Unknown'}</span>
+            <span>{new Date(result.generatedAt).toLocaleTimeString()}</span>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -461,110 +435,118 @@ function IssueItem({
 
   return (
     <div className={cn(
-      'rounded-md border px-2.5 py-2 text-xs transition-opacity',
-      isDismissed ? 'opacity-40 border-border' : 'border-border/60 bg-slate-50/50'
+      'rounded-lg border px-3 py-2.5 text-xs transition-all bg-card',
+      isDismissed ? 'opacity-50 border-border bg-muted/20' : 'border-border/60 hover:border-border hover:shadow-sm'
     )}>
       {/* Title row */}
-      <div className="flex items-start justify-between gap-2">
-        <button
-          onClick={() => setShowDetail(!showDetail)}
-          className="flex items-start gap-1.5 text-left min-w-0 flex-1"
-        >
-          <span className={cn('h-1.5 w-1.5 rounded-full mt-1.5 shrink-0', severityDot.dotColor)} />
-          <span className="text-foreground/80 leading-relaxed">{issue.title}</span>
-        </button>
-
-        {issue.verification && (
-          <Badge
-            variant="outline"
-            className={cn(
-              'text-[10px] mr-1',
-              issue.verification.status === 'confirmed' && 'text-green-600 border-green-200',
-              issue.verification.status === 'uncertain' && 'text-amber-600 border-amber-200',
-              issue.verification.status === 'rejected' && 'text-red-600 border-red-200'
-            )}
+      <div className="flex items-start gap-2">
+        <span className={cn('h-1.5 w-1.5 rounded-full mt-1.5 shrink-0', severityDot.dotColor)} title={issue.severity} />
+        
+        <div className="flex-1 min-w-0">
+          <div 
+             className="flex items-start justify-between gap-2 cursor-pointer"
+             onClick={() => setShowDetail(!showDetail)}
           >
-            {issue.verification.status === 'confirmed' ? '复核通过' : issue.verification.status === 'uncertain' ? '待确认' : '复核驳回'}
-          </Badge>
-        )}
-
-        {/* Jump to line */}
-        {issue.file && issue.line && onJumpToLine && (
-          <button
-            onClick={() => onJumpToLine(issue.file!, issue.line!)}
-            className="shrink-0 text-[10px] text-blue-500 hover:text-blue-700 flex items-center gap-0.5 mt-0.5"
-            title={`${issue.file}:${issue.line}`}
-          >
-            <ExternalLink className="h-2.5 w-2.5" />
-            <span>L{issue.line}</span>
-          </button>
-        )}
+             <span className="font-medium text-foreground/90 leading-snug">{issue.title}</span>
+             {issue.verification && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    'text-[9px] px-1 h-4 ml-1 shrink-0',
+                    issue.verification.status === 'confirmed' && 'text-green-600 border-green-200 bg-green-50',
+                    issue.verification.status === 'uncertain' && 'text-amber-600 border-amber-200 bg-amber-50',
+                    issue.verification.status === 'rejected' && 'text-red-600 border-red-200 bg-red-50'
+                  )}
+                >
+                  {issue.verification.status === 'confirmed' ? '已确认' : issue.verification.status === 'uncertain' ? '存疑' : '已驳回'}
+                </Badge>
+              )}
+          </div>
+          
+          {/* File location */}
+          {issue.file && (
+             <div className="flex items-center gap-1.5 mt-1">
+                <span className="text-[10px] text-muted-foreground/70 font-mono truncate max-w-[180px]" title={issue.file}>
+                   {issue.file}
+                </span>
+                {issue.line && onJumpToLine && (
+                   <button
+                     onClick={(e) => { e.stopPropagation(); onJumpToLine(issue.file!, issue.line!); }}
+                     className="text-[10px] text-primary hover:underline font-mono"
+                   >
+                     :L{issue.line}
+                   </button>
+                )}
+             </div>
+          )}
+        </div>
       </div>
 
       {/* Expanded detail */}
       {showDetail && (
-        <div className="mt-2 pt-2 border-t border-border/40 space-y-1.5">
+        <div className="mt-2 pt-2 border-t border-border/40 space-y-2">
           <p className="text-muted-foreground leading-relaxed">{issue.description}</p>
-          {issue.evidence?.snippet && (
-            <div className="rounded border border-amber-200 bg-amber-50/70 px-2 py-1.5">
-              <p className="text-[10px] text-amber-700 mb-0.5">证据片段</p>
-              <p className="text-[11px] text-foreground/80 font-mono break-all">{highlightedEvidence}</p>
-            </div>
-          )}
-          {issue.verification?.reason && (
-            <p className="text-[10px] text-muted-foreground/80">复核说明：{issue.verification.reason}</p>
-          )}
+          
           {issue.suggestion && (
-            <div className="bg-blue-50/50 border border-blue-100 rounded px-2 py-1.5">
-              <p className="text-[11px] text-blue-700">💡 {issue.suggestion}</p>
+            <div className="bg-blue-50/50 border border-blue-100 rounded p-2">
+              <p className="text-[10px] font-medium text-blue-700 mb-0.5">建议修复</p>
+              <p className="text-xs text-blue-900">{issue.suggestion}</p>
             </div>
           )}
-          {issue.file && (
-            <p className="text-[10px] text-muted-foreground/60 font-mono truncate">
-              {issue.file}{issue.line ? `:${issue.line}` : ''}
-            </p>
+
+          {issue.evidence?.snippet && (
+            <div className="rounded border bg-muted/30 p-2">
+              <p className="text-[10px] text-muted-foreground mb-1 font-medium">相关代码</p>
+              <pre className="text-[10px] text-foreground/80 font-mono break-all whitespace-pre-wrap">{highlightedEvidence}</pre>
+            </div>
           )}
+          
+          {issue.verification?.reason && (
+            <p className="text-[10px] text-muted-foreground italic">复核说明: {issue.verification.reason}</p>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center gap-1 pt-1">
+            <FeedbackButton
+              active={feedback === 'helpful'}
+              onClick={() => onFeedback(issue, 'helpful')}
+              icon={<ThumbsUp className="h-3 w-3" />}
+              activeColor="text-green-600 bg-green-50"
+              title="有用"
+            />
+            <FeedbackButton
+              active={feedback === 'false-positive'}
+              onClick={() => onFeedback(issue, 'false-positive')}
+              icon={<ThumbsDown className="h-3 w-3" />}
+              activeColor="text-red-500 bg-red-50"
+              title="误报"
+            />
+            <FeedbackButton
+              active={feedback === 'dismissed'}
+              onClick={() => onFeedback(issue, 'dismissed')}
+              icon={<X className="h-3 w-3" />}
+              activeColor="text-neutral-500 bg-neutral-100"
+              title="忽略"
+            />
+            
+            {issue.file && issue.line && onAddDraftComment && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-auto h-6 text-[10px] gap-1 px-2"
+                onClick={() => onAddDraftComment(
+                  issue.file as string,
+                  issue.line as number,
+                  `[AI 建议] ${issue.title}\n\n${issue.suggestion || issue.description}`
+                )}
+              >
+                <Plus className="h-3 w-3" />
+                引用评论
+              </Button>
+            )}
+          </div>
         </div>
       )}
-
-      {/* Feedback buttons */}
-      <div className="flex items-center gap-1 mt-1.5">
-        <FeedbackButton
-          active={feedback === 'helpful'}
-          onClick={() => onFeedback(issue, 'helpful')}
-          icon={<ThumbsUp className="h-2.5 w-2.5" />}
-          activeColor="text-green-600"
-          title="有帮助"
-        />
-        <FeedbackButton
-          active={feedback === 'false-positive'}
-          onClick={() => onFeedback(issue, 'false-positive')}
-          icon={<ThumbsDown className="h-2.5 w-2.5" />}
-          activeColor="text-red-500"
-          title="误报"
-        />
-        <FeedbackButton
-          active={feedback === 'dismissed'}
-          onClick={() => onFeedback(issue, 'dismissed')}
-          icon={<X className="h-2.5 w-2.5" />}
-          activeColor="text-neutral-500"
-          title="忽略"
-        />
-        {issue.file && issue.line && onAddDraftComment && (
-          <button
-            onClick={() => onAddDraftComment(
-              issue.file as string,
-              issue.line as number,
-              `${issue.title}\n${issue.suggestion || issue.description}`
-            )}
-            className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/50"
-            title="加入待提交评论"
-          >
-            <Plus className="h-2.5 w-2.5" />
-            加入草稿
-          </button>
-        )}
-      </div>
     </div>
   );
 }
@@ -589,10 +571,10 @@ function FeedbackButton({
       onClick={onClick}
       title={title}
       className={cn(
-        'p-1 rounded transition-colors',
+        'p-1.5 rounded transition-colors',
         active
           ? activeColor
-          : 'text-muted-foreground/40 hover:text-muted-foreground'
+          : 'text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted'
       )}
     >
       {icon}

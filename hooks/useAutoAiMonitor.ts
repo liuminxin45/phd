@@ -26,9 +26,8 @@ function isQuotaLimitedError(message: string): boolean {
     text.includes('quota') ||
     text.includes('rate limit') ||
     text.includes('too many requests') ||
-    text.includes('超限') ||
-    text.includes('已达上限') ||
-    text.includes('限制')
+    text.includes('limit') ||
+    text.includes('exceeded')
   );
 }
 
@@ -43,14 +42,13 @@ export interface AutoAiMonitorState {
 
 export function useAutoAiMonitor(dashboard: DashboardResponse | null): AutoAiMonitorState {
   const [riskMap, setRiskMap] = useState<Record<number, AiRiskSummary>>({});
-  const [autoAiEnabled, setAutoAiEnabled] = useState(true);
+  const [autoAiEnabled, setAutoAiEnabled] = useState<boolean>(() => loadAutoAiEnabled());
   const [autoAiMaxLines, setAutoAiMaxLines] = useState(DEFAULT_AUTO_AI_MAX_LINES);
   const [autoAiPauseUntil, setAutoAiPauseUntil] = useState<number | null>(null);
   const [autoAiJobs, setAutoAiJobs] = useState<Record<string, AutoAiJob>>({});
 
   // ── Load persisted state on mount ──────────────────────────────────────────
   useEffect(() => {
-    setAutoAiEnabled(loadAutoAiEnabled());
     setAutoAiMaxLines(loadAutoAiMaxLines());
     setAutoAiPauseUntil(loadAutoAiPauseUntil());
     setAutoAiJobs(loadAutoAiJobs());
@@ -125,7 +123,7 @@ export function useAutoAiMonitor(dashboard: DashboardResponse | null): AutoAiMon
       if (isQuotaLimitedError(message)) {
         const pauseUntil = Date.now() + AUTO_AI_RETRY_COOLDOWN_MS;
         const resumeAt = new Date(pauseUntil).toLocaleTimeString();
-        const pauseReason = `触发限额，队列暂停至 ${resumeAt} 后自动重试`;
+        const pauseReason = `配额耗尽。暂停至 ${resumeAt}`;
         setAutoAiPauseUntil(pauseUntil);
         setAutoAiJobs((prev) => {
           const next = { ...prev };
@@ -166,7 +164,15 @@ export function useAutoAiMonitor(dashboard: DashboardResponse | null): AutoAiMon
   useEffect(() => {
     if (!dashboard || !autoAiEnabled) return;
 
-    const relatedSections = new Set(['待我评审', '我发起的', '抄送我的']);
+    const relatedSections = new Set([
+      'Your Turn',
+      'Incoming Reviews',
+      'Outgoing Reviews',
+      'CC\'ed On',
+      '待我评审',
+      '我发起的',
+      '抄送我的',
+    ]);
     const candidates = dashboard.sections
       .filter((s) => relatedSections.has(s.title))
       .flatMap((s) => s.changes)
@@ -185,7 +191,7 @@ export function useAutoAiMonitor(dashboard: DashboardResponse | null): AutoAiMon
         const shouldSkip = totalChangedLines > autoAiMaxLines;
         const nextStatus: AutoAiJob['status'] = shouldSkip ? 'skipped' : 'pending';
         const skipReason = shouldSkip
-          ? `自动跳过：变更行数 ${totalChangedLines} 超过上限 ${autoAiMaxLines}`
+          ? `已跳过: 变更行数 ${totalChangedLines} 超过限制 ${autoAiMaxLines}`
           : undefined;
         if (!existing) {
           changed = true;

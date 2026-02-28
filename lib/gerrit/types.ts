@@ -111,8 +111,8 @@ export interface GerritRelatedChange {
   _revision_number: number;
   _current_revision_number?: number;
   change_id?: string;
-  commit?: string;
-  subject: string;
+  commit?: string | { subject: string; commit: string; [key: string]: any };
+  subject?: string;
   status: 'NEW' | 'MERGED' | 'ABANDONED' | 'DRAFT';
   project?: string;
   branch?: string;
@@ -157,5 +157,5 @@ export interface ReviewInput {
   revisionId: string;
   message?: string;
   labels?: Record<string, number>;
-  comments?: Record<string, { line?: number; message: string; unresolved?: boolean }[]>;
+  comments?: Record<string, { line?: number; message: string; in_reply_to?: string; unresolved?: boolean }[]>;
 }

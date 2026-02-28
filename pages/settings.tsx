@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
 import { Settings, Bot, Server, Route } from 'lucide-react';
 import type { TabId } from '@/lib/settings/types';
 import { LlmTab } from '@/components/settings/LlmTab';
@@ -12,7 +13,16 @@ const TABS: { id: TabId; label: string; icon: typeof Bot }[] = [
 ];
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabId>('llm');
+
+  useEffect(() => {
+    if (!router.isReady) return;
+    const rawTab = Array.isArray(router.query.tab) ? router.query.tab[0] : router.query.tab;
+    if (rawTab === 'llm' || rawTab === 'env' || rawTab === 'roadmap') {
+      setActiveTab(rawTab);
+    }
+  }, [router.isReady, router.query.tab]);
 
   return (
     <div className="h-full overflow-auto">

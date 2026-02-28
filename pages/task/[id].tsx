@@ -1,9 +1,10 @@
 import { useRouter } from 'next/router';
 import { useState, useEffect } from 'react';
-import { Loader2, ArrowLeft } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Task } from '@/lib/api';
 import { httpClient } from '@/lib/httpClient';
 import { TaskDetailDialog } from '@/components/task/TaskDetailDialog';
+import AppLayout from '@/components/layout/AppLayout';
 
 export default function TaskPage() {
   const router = useRouter();
@@ -38,49 +39,45 @@ export default function TaskPage() {
   };
 
   const handleBack = () => {
-    router.back();
+    router.push('/');
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-          <p className="text-sm text-neutral-600">加载任务中...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !task) {
-    return (
-      <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-lg text-red-600 mb-4">{error || '任务未找到'}</p>
-          <button
-            onClick={handleBack}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-          >
-            返回
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <>
-      <TaskDetailDialog
-        task={task}
-        open={isDialogOpen}
-        onOpenChange={(open) => {
-          setIsDialogOpen(open);
-          if (!open) {
-            handleBack();
-          }
-        }}
-        onTaskUpdate={handleTaskUpdate}
-      />
-    </>
+    <AppLayout>
+      <div className="flex h-full items-center justify-center bg-muted/10">
+        {loading && (
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="h-8 w-8 animate-spin text-primary/80" />
+            <p className="text-sm text-muted-foreground">加载任务中...</p>
+          </div>
+        )}
+
+        {!loading && error && (
+          <div className="text-center">
+            <p className="text-lg text-destructive mb-4">{error || '任务未找到'}</p>
+            <button
+              onClick={handleBack}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+            >
+              返回首页
+            </button>
+          </div>
+        )}
+
+        {!loading && task && (
+          <TaskDetailDialog
+            task={task}
+            open={isDialogOpen}
+            onOpenChange={(open) => {
+              setIsDialogOpen(open);
+              if (!open) {
+                handleBack();
+              }
+            }}
+            onTaskUpdate={handleTaskUpdate}
+          />
+        )}
+      </div>
+    </AppLayout>
   );
 }

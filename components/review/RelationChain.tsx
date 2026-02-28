@@ -4,7 +4,8 @@ import { getStatusColor, getStatusLabel } from '@/lib/gerrit/helpers';
 import type { GerritRelatedChange } from '@/lib/gerrit/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, Loader2 } from 'lucide-react';
+import { ExternalLink, Loader2, GitCommit, ArrowRight, Layers } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 function normalizeCommitSha(value: unknown): string | null {
   if (typeof value === 'string' && value.trim()) return value.trim();
@@ -13,6 +14,18 @@ function normalizeCommitSha(value: unknown): string | null {
     if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
   }
   return null;
+}
+
+function getRelatedChangeSubject(rc: GerritRelatedChange): string {
+  if (rc.subject) return rc.subject;
+  if (rc.commit && typeof rc.commit === 'object') {
+    if ('subject' in rc.commit) return (rc.commit as any).subject;
+    if ('message' in rc.commit) {
+      const msg = (rc.commit as any).message || '';
+      return msg.split('\n')[0].substring(0, 80);
+    }
+  }
+  return `#${rc._change_number}`;
 }
 
 interface RelationChainProps {
@@ -55,111 +68,160 @@ export function RelationChain({
   const relatedAllChecked = relatedSelectableTotal > 0 && relatedSelectedTotal === relatedSelectableTotal;
   const relatedSomeChecked = relatedSelectedTotal > 0 && relatedSelectedTotal < relatedSelectableTotal;
 
+  const navigateToChange = (changeNumber: number) => {
+    if (changeNumber === currentChangeNumber) return;
+    router.push({ pathname: '/review', query: { change: String(changeNumber) } }, undefined, { shallow: true }).catch(() => {});
+  };
+
   return (
-    <div className="mt-3 pt-3 border-t border-border space-y-2">
-      <div className="flex items-center justify-between">
-        <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-          <input
-            type="checkbox"
-            className="h-3.5 w-3.5"
-            checked={relatedAllChecked}
-            ref={(el) => {
-              if (el) el.indeterminate = relatedSomeChecked;
-            }}
-            onChange={(e) => {
-              if (e.target.checked) onSelectAll();
-              else onDeselectAll();
-            }}
-          />
-          Relation chain ({relatedSelectedTotal}/{relatedChanges.length})
-        </label>
-        <div className="flex items-center gap-1.5">
-          {canVotePlusOne && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 px-2 text-[11px]"
-              disabled={batchVoting !== 0 || batchMerging}
-              onClick={() => onBatchVote(1)}
-            >
-              {batchVoting === 1 ? <Loader2 className="h-3 w-3 animate-spin" /> : '批量 +1'}
-            </Button>
-          )}
-          {canVotePlusTwo && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 px-2 text-[11px]"
-              disabled={batchVoting !== 0 || batchMerging}
-              onClick={() => onBatchVote(2)}
-            >
-              {batchVoting === 2 ? <Loader2 className="h-3 w-3 animate-spin" /> : '批量 +2'}
-            </Button>
-          )}
-          {canVotePlusTwo && (
-            <Button
-              size="sm"
-              className="h-7 px-2 text-[11px]"
-              disabled={batchVoting !== 0 || batchMerging}
-              onClick={onBatchMerge}
-            >
-              {batchMerging ? <Loader2 className="h-3 w-3 animate-spin" /> : '批量 Merge'}
-            </Button>
-          )}
+    <Card className="mt-4 border-l-4 border-l-purple-500/20">
+      <CardHeader className="px-4 py-3 bg-muted/20 border-b border-border/40">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Layers className="h-4 w-4 text-purple-500" />
+            <CardTitle className="text-sm font-medium">Relation Chain</CardTitle>
+            <Badge variant="secondary" className="text-[10px] h-5 bg-purple-50 text-purple-700">
+              {relatedSelectedTotal}/{relatedChanges.length}
+            </Badge>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {canVotePlusOne && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-[10px] gap-1"
+                disabled={batchVoting !== 0 || batchMerging}
+                onClick={() => onBatchVote(1)}
+              >
+                {batchVoting === 1 ? <Loader2 className="h-3 w-3 animate-spin" /> : <span>Batch +1</span>}
+              </Button>
+            )}
+            {canVotePlusTwo && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-[10px] gap-1"
+                disabled={batchVoting !== 0 || batchMerging}
+                onClick={() => onBatchVote(2)}
+              >
+                {batchVoting === 2 ? <Loader2 className="h-3 w-3 animate-spin" /> : <span>Batch +2</span>}
+              </Button>
+            )}
+            {canVotePlusTwo && (
+              <Button
+                size="sm"
+                className="h-7 px-2 text-[10px] gap-1 bg-purple-600 hover:bg-purple-700 text-white"
+                disabled={batchVoting !== 0 || batchMerging}
+                onClick={onBatchMerge}
+              >
+                {batchMerging ? <Loader2 className="h-3 w-3 animate-spin" /> : <span>Batch Merge</span>}
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
-      <div className="space-y-1">
-        {relatedChanges.map((rc) => {
-          const isCurrent = rc._change_number === currentChangeNumber;
-          const key = `${rc._change_number}:${rc._revision_number}`;
-          const checked = selectedRelatedKeys.has(key);
-          const commitSha = normalizeCommitSha((rc as any).commit);
-          return (
-            <div key={`${rc._change_number}-${rc._revision_number}`} className="flex items-center justify-between rounded border px-2 py-1.5 text-[11px]">
-              <div className="min-w-0 flex items-start gap-2">
+      </CardHeader>
+      
+      <CardContent className="p-0">
+        {/* Select all toggle */}
+        <div className="px-4 py-2 border-b border-border/40 flex items-center bg-muted/10">
+          <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5 rounded border-border text-purple-600 focus:ring-purple-500"
+              checked={relatedAllChecked}
+              ref={(el) => {
+                if (el) el.indeterminate = relatedSomeChecked;
+              }}
+              onChange={(e) => {
+                if (e.target.checked) onSelectAll();
+                else onDeselectAll();
+              }}
+            />
+            Select All
+          </label>
+        </div>
+
+        <div className="divide-y divide-border/40">
+          {relatedChanges.map((rc) => {
+            const isCurrent = rc._change_number === currentChangeNumber;
+            const key = `${rc._change_number}:${rc._revision_number}`;
+            const checked = selectedRelatedKeys.has(key);
+            const commitSha = normalizeCommitSha((rc as any).commit);
+            const subject = getRelatedChangeSubject(rc);
+            
+            return (
+              <div 
+                key={`${rc._change_number}-${rc._revision_number}`} 
+                className={cn(
+                  "flex items-start gap-3 px-4 py-3 text-sm transition-colors",
+                  isCurrent ? "bg-purple-50/30" : "hover:bg-muted/30"
+                )}
+              >
                 <input
                   type="checkbox"
-                  className="h-3.5 w-3.5 mt-0.5"
+                  className="h-4 w-4 mt-0.5 rounded border-border text-purple-600 focus:ring-purple-500"
                   checked={checked}
                   onChange={() => onToggleKey(key)}
                 />
-                <div className="min-w-0">
-                <div className="font-medium text-foreground truncate">
-                  {rc.subject || `#${rc._change_number}`}
-                </div>
-                {commitSha && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      router.push({ pathname: '/review', query: { change: String(rc._change_number) } }, undefined, { shallow: true }).catch(() => {});
-                    }}
-                    className="font-mono text-[10px] text-blue-600 hover:text-blue-700 underline-offset-2 hover:underline"
-                    title={`在本项目中打开 #${rc._change_number}（${commitSha}）`}
-                  >
-                    {commitSha.slice(0, 12)}
-                  </button>
-                )}
-                <div className="text-muted-foreground truncate">
-                  #{rc._change_number} · PS{rc._revision_number}
-                  {isCurrent ? ' (Current)' : ''}
-                </div>
+                
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <button 
+                          onClick={() => navigateToChange(rc._change_number)}
+                          className={cn(
+                            "font-medium truncate text-left hover:underline underline-offset-2 flex-1", 
+                            isCurrent ? "text-purple-700 cursor-default no-underline" : "text-foreground hover:text-primary"
+                          )}
+                          disabled={isCurrent}
+                          title={subject}
+                        >
+                          {subject}
+                        </button>
+                        {isCurrent && (
+                          <Badge variant="outline" className="text-[9px] h-4 px-1 text-purple-600 border-purple-200 bg-purple-50 shrink-0">Current</Badge>
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-1 font-mono">
+                          <GitCommit className="h-3 w-3" />
+                          <span className="text-foreground/80">#{rc._change_number}</span>
+                          <span className="text-muted-foreground/50">·</span>
+                          <span>PS{rc._revision_number}</span>
+                        </div>
+                        
+                        {commitSha && (
+                          <span className="font-mono flex items-center gap-0.5 text-muted-foreground/70" title={`SHA: ${commitSha}`}>
+                            {commitSha.slice(0, 7)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <Badge variant="secondary" className={cn('text-[10px] h-5', getStatusColor(rc.status))}>
+                        {getStatusLabel(rc.status)}
+                      </Badge>
+                      <a
+                        href={`${gerritUrl}/c/${rc._change_number}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                        title="Open in Gerrit"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0 ml-2">
-                <Badge variant="outline" className={cn('text-[10px]', getStatusColor(rc.status))}>{getStatusLabel(rc.status)}</Badge>
-                <a
-                  href={`${gerritUrl}/c/${rc._change_number}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </a>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

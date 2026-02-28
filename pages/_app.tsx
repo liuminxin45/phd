@@ -3,11 +3,15 @@ import '@/styles/globals.css';
 import AppLayout from '@/components/layout/AppLayout';
 import { UserProvider } from '@/contexts/UserContext';
 import { PinnedPanelProvider } from '@/contexts/PinnedPanelContext';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
 import { ToastWrapper } from '@/components/ui/toast-wrapper';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { useRouter } from 'next/router';
 
 export default function App({ Component, pageProps }: AppProps) {
+  const router = useRouter();
+  const checkedEnvBootstrapRef = useRef(false);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -58,6 +62,29 @@ export default function App({ Component, pageProps }: AppProps) {
       document.removeEventListener('click', onDocumentClickCapture, true);
     };
   }, []);
+
+  useEffect(() => {
+    if (!router.isReady || checkedEnvBootstrapRef.current) return;
+    checkedEnvBootstrapRef.current = true;
+
+    void fetch('/api/settings/env')
+      .then(async (res) => {
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data as { envLocalCreated?: boolean };
+      })
+      .then((data) => {
+        if (!data?.envLocalCreated) return;
+
+        toast.info('检测到缺失 .env.local，已自动创建。请前往“设置 -> 环境变量”填写并保存。');
+        const currentTab = Array.isArray(router.query.tab) ? router.query.tab[0] : router.query.tab;
+        if (router.pathname === '/settings' && currentTab === 'env') return;
+        void router.replace({ pathname: '/settings', query: { tab: 'env' } });
+      })
+      .catch(() => {
+        // ignore env bootstrap check failures
+      });
+  }, [router]);
 
   return (
     <UserProvider>

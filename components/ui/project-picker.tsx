@@ -18,6 +18,7 @@ interface ProjectPickerProps {
   maxSelections?: number;
   dropdownZIndex?: number;
   className?: string;
+  triggerClassName?: string;
 }
 
 // Mock project data (In a real app, this might come from an API or props)
@@ -31,7 +32,7 @@ const mockProjects: Project[] = [
   { id: '7', name: '日志服务', color: 'pink' },
 ];
 
-export function ProjectPicker({ selected, onAdd, onRemove, maxSelections, dropdownZIndex = 50, className }: ProjectPickerProps) {
+export function ProjectPicker({ selected, onAdd, onRemove, maxSelections, dropdownZIndex = 50, className, triggerClassName }: ProjectPickerProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
 
@@ -95,7 +96,10 @@ export function ProjectPicker({ selected, onAdd, onRemove, maxSelections, dropdo
           <Popover.Trigger asChild>
             <button
               type="button"
-              className="inline-flex items-center gap-1 rounded-md border border-dashed border-input px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:border-accent-foreground/50 hover:text-accent-foreground hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className={cn(
+                "inline-flex items-center gap-1 rounded-md border border-dashed border-input px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:border-accent-foreground/50 hover:text-accent-foreground hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                triggerClassName
+              )}
             >
               <Plus className="h-3 w-3" />
               添加项目

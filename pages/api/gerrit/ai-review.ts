@@ -20,12 +20,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const llmConfig = readLlmConfig();
   if (!llmConfig.baseUrl || !llmConfig.apiKey || !llmConfig.model) {
-    return res.status(400).json({ error: '请先在设置中配置 LLM 连接信息' });
+    return res.status(400).json({ error: '未配置 LLM 设置 (请在设置中配置)' });
   }
 
   const { changeNumber, revisionId, baseRevisionId, feedbackEntries } = req.body;
   if (!changeNumber) {
-    return res.status(400).json({ error: 'Missing changeNumber' });
+    return res.status(400).json({ error: '缺少 changeNumber 参数' });
   }
 
   try {
@@ -42,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const change = await gerritClient.get(`/changes/${changeNumber}/detail?${optionQuery}`);
 
     if (!change.current_revision) {
-      return res.status(400).json({ error: 'Change has no current revision' });
+      return res.status(400).json({ error: '变更没有当前版本' });
     }
 
     const targetRevision = revisionId || change.current_revision;
@@ -74,7 +74,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           url: llmUrl,
           apiKey: llmConfig.apiKey,
           model: llmConfig.model,
-          systemPrompt: '你是精准的代码评审分层分析助手。只返回 JSON。所有自然语言输出必须为简体中文。',
+          systemPrompt: 'You are a precision code review triage assistant. Return JSON only. All natural language output must be in Simplified Chinese.',
           userPrompt: buildFileTriagePrompt({
             subject: change.subject,
             project: change.project,
@@ -195,7 +195,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           url: llmUrl,
           apiKey: llmConfig.apiKey,
           model: llmConfig.model,
-          systemPrompt: '你是严谨的代码评审复核员。仅根据给出的 diff 证据做判断，并且只返回 JSON。所有自然语言输出必须为简体中文。',
+          systemPrompt: 'You are a rigorous code review verifier. Judge only based on the provided diff evidence and return JSON only. All natural language output must be in Simplified Chinese.',
           userPrompt: buildIssueVerificationPrompt({
             subject: change.subject,
             diffText,

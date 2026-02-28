@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Award } from 'lucide-react';
+import { X, Award, Sparkles, Check } from 'lucide-react';
 import { 
   Select,
   SelectContent,
@@ -7,7 +7,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface TaskScoringDialogProps {
   isOpen: boolean;
@@ -51,7 +59,6 @@ const WORK_SCORES = [
   '10分：过程记录详尽,超额期完成',
   '-10分：重大质量事故'
 ];
-const COMPLETE_RATES = ['10%', '20%', '30%', '40%', '50%', '60%', '70%', '80%', '90%', '100%'];
 
 // Helper function to extract档位 number from work class string
 const extractWorkClassValue = (displayText: string): string => {
@@ -67,17 +74,6 @@ const extractWorkScoreValue = (displayText: string): string => {
   return match ? match[1] : displayText;
 };
 
-// Helper function to convert percentage to decimal
-const extractCompleteRateValue = (displayText: string): string => {
-  // Convert "50%" to "0.5"
-  const match = displayText.match(/^(\d+)%$/);
-  if (match) {
-    const percentage = parseInt(match[1], 10);
-    return (percentage / 100).toString();
-  }
-  return displayText;
-};
-
 // Reverse conversion: find display text from stored value
 const findWorkClassDisplay = (value: string): string => {
   if (!value) return '';
@@ -89,17 +85,6 @@ const findWorkScoreDisplay = (value: string): string => {
   if (!value) return '';
   // Find the option that starts with this number
   return WORK_SCORES.find(score => score.startsWith(value + '分')) || '';
-};
-
-const findCompleteRateDisplay = (value: string): string => {
-  if (!value) return '';
-  // Convert decimal to percentage (e.g., "0.5" -> "50%")
-  const decimal = parseFloat(value);
-  if (!isNaN(decimal)) {
-    const percentage = Math.round(decimal * 100);
-    return `${percentage}%`;
-  }
-  return '';
 };
 
 // Helper function to map workload (estimated-days) to work class
@@ -132,7 +117,6 @@ const mapWorkloadToWorkClass = (workload: string): string => {
 export function TaskScoringDialog({ isOpen, onClose, onConfirm, currentValues, autoMappedWorkClass, isScored }: TaskScoringDialogProps) {
   const [workClass, setWorkClass] = useState(currentValues?.workClass || '');
   const [workScore, setWorkScore] = useState(currentValues?.workScore || '');
-  const [completeRate, setCompleteRate] = useState(currentValues?.completeRate || '');
   const [recommendedWorkClass, setRecommendedWorkClass] = useState('');
 
   useEffect(() => {
@@ -141,13 +125,11 @@ export function TaskScoringDialog({ isOpen, onClose, onConfirm, currentValues, a
         // Already-scored tasks: show actual saved values
         setWorkClass(findWorkClassDisplay(currentValues?.workClass || '') || '');
         setWorkScore(findWorkScoreDisplay(currentValues?.workScore || '') || '');
-        setCompleteRate('100%');
         setRecommendedWorkClass('');
       } else {
         // First-time scoring: do NOT preselect; show recommendation
         setWorkClass('');
         setWorkScore('');
-        setCompleteRate('100%');
         // Map workload to work class档位
         const mappedLevel = autoMappedWorkClass ? mapWorkloadToWorkClass(autoMappedWorkClass) : '';
         const displayText = mappedLevel ? findWorkClassDisplay(mappedLevel) : '';
@@ -155,8 +137,6 @@ export function TaskScoringDialog({ isOpen, onClose, onConfirm, currentValues, a
       }
     }
   }, [isOpen, isScored, autoMappedWorkClass, currentValues]);
-
-  if (!isOpen) return null;
 
   const handleConfirm = () => {
     if (!workClass || !workScore) {
@@ -174,108 +154,155 @@ export function TaskScoringDialog({ isOpen, onClose, onConfirm, currentValues, a
     });
   };
 
-  const isValid = workClass && workScore;
-
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10300] pointer-events-auto" onClick={onClose}>
-      <div 
-        className="bg-white rounded-lg shadow-xl w-[600px] max-h-[80vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent 
+        className="max-w-lg p-0 border-border/40 shadow-2xl overflow-hidden z-[10300] bg-card gap-0"
+        onEscapeKeyDown={(event) => {
+          event.stopPropagation();
+        }}
+        onPointerDownOutside={(event) => {
+          event.stopPropagation();
+        }}
       >
-        <div className="p-6">
+        <DialogHeader className="sr-only">
+          <DialogTitle>任务评分</DialogTitle>
+        </DialogHeader>
+        
+        <div className="p-6 md:p-8 space-y-8">
           {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-              <Award className="h-5 w-5 text-amber-600" />
-              <h2 className="text-lg font-semibold text-neutral-900">任务打分</h2>
+          <div className="flex items-start justify-between">
+            <div className="flex gap-4">
+              <div className="p-3 bg-amber-500/10 rounded-xl text-amber-600 dark:text-amber-500 flex-shrink-0">
+                <Award className="h-6 w-6" />
+              </div>
+              <div className="space-y-1">
+                <h2 className="text-xl font-semibold tracking-tight">任务评分</h2>
+                <p className="text-sm text-muted-foreground">对任务的复杂度与完成质量进行评估</p>
+              </div>
             </div>
-            <button
+            {/* Close button is handled by DialogContent's default X or we can keep this custom one if we hide the default */}
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={onClose}
-              className="text-neutral-400 hover:text-neutral-600"
+              className="text-muted-foreground/50 hover:text-foreground -mr-2 -mt-2 rounded-full"
             >
               <X className="h-5 w-5" />
-            </button>
+            </Button>
           </div>
 
-          {/* Content */}
           <div className="space-y-6">
-            {/* Recommendation */}
+            {/* Recommendation Card */}
             {recommendedWorkClass && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1">
-                    <div className="text-xs font-semibold text-blue-900 mb-2">推荐</div>
-                    <div className="text-sm text-neutral-700">
-                      <span className="font-medium">{recommendedWorkClass}</span>
-                      <span className="text-neutral-500 mx-2">·</span>
-                      <span className="font-medium">7分：按期标准完成</span>
+              <div className="bg-primary/5 border border-primary/10 rounded-xl p-4 relative overflow-hidden group">
+                <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-50" />
+                <div className="relative z-10 flex items-center justify-between gap-4">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+                      <Sparkles className="h-3.5 w-3.5" />
+                      AI 智能推荐
+                    </div>
+                    <div className="text-sm text-foreground/90">
+                      基于工时估算，建议定级 <span className="font-semibold text-primary">{recommendedWorkClass.split('，')[0]}</span>
                     </div>
                   </div>
-                  <button
+                  <Button
+                    size="sm"
+                    variant="secondary"
                     onClick={() => {
                       setWorkClass(recommendedWorkClass);
                       setWorkScore('7分：按期标准完成');
                       toast.success('已采用推荐评分');
                     }}
-                    className="flex-shrink-0 px-3 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                    className="h-8 text-xs font-medium bg-background/80 hover:bg-background shadow-sm border-transparent hover:border-primary/20 transition-all"
                   >
-                    采用推荐
-                  </button>
+                    一键采纳
+                  </Button>
                 </div>
               </div>
             )}
 
-            {/* 任务分类 */}
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-neutral-900">任务分类</label>
-              <Select
-                value={extractWorkClassValue(workClass)}
-                onValueChange={(value) => {
-                  const displayText = findWorkClassDisplay(value);
-                  setWorkClass(displayText);
-                }}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="请选择任务分类" />
-                </SelectTrigger>
-                <SelectContent className="max-h-[300px]">
-                  {WORK_CLASSES.map(cls => (
-                    <SelectItem key={extractWorkClassValue(cls)} value={extractWorkClassValue(cls)}>
-                      {cls}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <div className="space-y-5">
+              {/* Work Class Selection */}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider ml-1">任务复杂度定级</label>
+                <Select
+                  value={extractWorkClassValue(workClass)}
+                  onValueChange={(value) => {
+                    const displayText = findWorkClassDisplay(value);
+                    setWorkClass(displayText);
+                  }}
+                >
+                  <SelectTrigger className="w-full h-11 bg-muted/30 hover:bg-muted/50 border-transparent hover:border-border/50 focus:ring-1 focus:ring-primary/20 rounded-lg transition-all">
+                    <SelectValue placeholder="选择任务分类..." />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[300px] p-1 z-[10310]">
+                    {WORK_CLASSES.map(cls => (
+                      <SelectItem 
+                        key={extractWorkClassValue(cls)} 
+                        value={extractWorkClassValue(cls)} 
+                        textValue={`${extractWorkClassValue(cls)}档 ${cls.split('，')[1] ? `- ${cls.split('，')[1]}` : ''}`}
+                        className="py-2.5 px-3 rounded-md focus:bg-muted/50 cursor-pointer"
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium text-sm">{extractWorkClassValue(cls)}档</span>
+                          <span className="text-xs text-muted-foreground line-clamp-1 opacity-70">{cls.split('，')[1] || cls}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            {/* 工作质量评分 */}
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-neutral-900">工作质量评分</label>
-              <Select
-                value={extractWorkScoreValue(workScore)}
-                onValueChange={(value) => {
-                  const displayText = findWorkScoreDisplay(value);
-                  setWorkScore(displayText);
-                }}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="请选择工作质量评分" />
-                </SelectTrigger>
-                <SelectContent>
-                  {WORK_SCORES.map(score => (
-                    <SelectItem key={extractWorkScoreValue(score)} value={extractWorkScoreValue(score)}>
-                      {score}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* Work Score Selection */}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider ml-1">完成质量评分</label>
+                <Select
+                  value={extractWorkScoreValue(workScore)}
+                  onValueChange={(value) => {
+                    const displayText = findWorkScoreDisplay(value);
+                    setWorkScore(displayText);
+                  }}
+                >
+                  <SelectTrigger className="w-full h-11 bg-muted/30 hover:bg-muted/50 border-transparent hover:border-border/50 focus:ring-1 focus:ring-primary/20 rounded-lg transition-all">
+                    <SelectValue placeholder="选择质量评分..." />
+                  </SelectTrigger>
+                  <SelectContent className="p-1 z-[10310]">
+                    {WORK_SCORES.map(score => (
+                      <SelectItem 
+                        key={extractWorkScoreValue(score)} 
+                        value={extractWorkScoreValue(score)} 
+                        textValue={score}
+                        className="py-2.5 px-3 rounded-md focus:bg-muted/50 cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={cn(
+                            "font-medium text-sm w-12 text-right",
+                            score.startsWith('-') ? "text-destructive" : "text-foreground"
+                          )}>
+                            {extractWorkScoreValue(score)}分
+                          </span>
+                          <span className="text-xs text-muted-foreground">{score.split('：')[1]}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-
           </div>
 
           {/* Footer */}
-          <div className="flex gap-3 pt-2">
-            <button
+          <div className="flex items-center gap-3 pt-2">
+            <Button
+              variant="ghost"
+              onClick={onClose}
+              className="flex-1 h-11 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-lg"
+            >
+              取消
+            </Button>
+            <Button
               onClick={() => {
                 if (!workClass || !workScore) {
                   toast.error('请完整填写任务分类和工作质量评分');
@@ -284,21 +311,19 @@ export function TaskScoringDialog({ isOpen, onClose, onConfirm, currentValues, a
                 handleConfirm();
                 const actualWorkClass = extractWorkClassValue(workClass);
                 const actualWorkScore = extractWorkScoreValue(workScore);
-                toast.success(`任务打分已保存，总分: ${Number(actualWorkClass) + Number(actualWorkScore)}分`);
+                toast.success(`评分已保存`, {
+                  description: `总分: ${Number(actualWorkClass) + Number(actualWorkScore)}分`
+                });
               }}
-              className="flex-1 px-4 py-2 bg-neutral-900 text-white text-sm rounded hover:bg-neutral-800 transition-colors"
+              className="flex-[2] h-11 rounded-lg bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 text-primary-foreground font-medium transition-all hover:scale-[1.02] active:scale-[0.98]"
+              disabled={!workClass || !workScore}
             >
-              保存评分
-            </button>
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-neutral-600 text-sm hover:bg-neutral-100 rounded transition-colors"
-            >
-              取消
-            </button>
+              <Check className="w-4 h-4 mr-2" />
+              确认评分
+            </Button>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

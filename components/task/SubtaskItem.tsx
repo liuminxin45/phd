@@ -1,4 +1,4 @@
-import { ChevronRight, Plus, X } from 'lucide-react';
+import { ChevronRight, Plus, X, CornerDownRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
@@ -29,24 +29,23 @@ export function SubtaskItem({
   const hasActualChildren = task.children && task.children.length > 0;
   const hasUnloadedChildren = task.hasChildren === true && (!task.children || task.children.length === 0);
   const showExpandButton = hasActualChildren || hasUnloadedChildren;
-  const indent = level * 20;
+  const indent = level * 24;
   
   return (
-    <div>
+    <div className="group/item">
       <div 
         className={cn(
-          "flex items-center gap-2 text-sm group rounded px-2 py-1.5 my-0.5 transition-colors hover:bg-muted/50",
-          task.completed && "opacity-60"
+          "flex items-start gap-2 text-sm rounded-md px-2 py-1.5 transition-all duration-200",
+          "hover:bg-muted/60",
+          task.completed && "opacity-60 grayscale-[0.5]"
         )}
         style={{ paddingLeft: `${indent + 8}px` }}
       >
         {/* Expand/Collapse Button */}
-        <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
-          {showExpandButton && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-4 w-4 p-0 hover:bg-muted"
+        <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center mt-0.5">
+          {showExpandButton ? (
+            <button
+              className="h-5 w-5 flex items-center justify-center rounded-sm hover:bg-muted/80 text-muted-foreground/50 hover:text-foreground transition-colors"
               onClick={(e) => {
                 e.stopPropagation();
                 onExpand(task.id);
@@ -54,17 +53,19 @@ export function SubtaskItem({
             >
               <ChevronRight
                 className={cn(
-                  "h-3 w-3 text-muted-foreground transition-transform duration-200",
+                  "h-3.5 w-3.5 transition-transform duration-200",
                   task.expanded && "rotate-90"
                 )}
               />
-            </Button>
+            </button>
+          ) : (
+             level > 0 && <CornerDownRight className="h-3 w-3 text-border ml-1" />
           )}
         </div>
         
-        {/* Checkbox - using generic div wrapper to capture click event properly if Checkbox swallows it */}
+        {/* Checkbox */}
         <div 
-          className="flex-shrink-0 pt-0.5"
+          className="flex-shrink-0 pt-0.5 cursor-pointer"
           onClick={(e) => {
             e.stopPropagation();
             onToggle(task.id, e);
@@ -73,7 +74,10 @@ export function SubtaskItem({
            <Checkbox 
              checked={task.completed} 
              onCheckedChange={() => {}} // Handled by onClick wrapper to pass event
-             className="data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+             className={cn(
+               "h-4 w-4 transition-all duration-200 border-muted-foreground/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary",
+               task.completed && "opacity-80"
+             )}
            />
         </div>
         
@@ -86,34 +90,34 @@ export function SubtaskItem({
             }
           }}
           className={cn(
-            "flex-1 min-w-0 text-left text-sm cursor-pointer hover:underline underline-offset-2 break-words",
-            task.completed ? "text-muted-foreground line-through" : "text-foreground"
+            "flex-1 min-w-0 text-left text-sm cursor-pointer hover:text-primary transition-colors leading-6 select-text",
+            task.completed ? "text-muted-foreground line-through decoration-border" : "text-foreground/90 font-medium"
           )}
         >
           {task.title}
         </button>
         
         {/* Action Buttons */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-0.5 opacity-0 group-hover/item:opacity-100 transition-opacity duration-200 pl-2">
           {/* Add Sub-subtask Button */}
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 p-0 hover:bg-muted"
+            className="h-6 w-6 rounded hover:bg-background hover:shadow-sm hover:text-primary"
             onClick={(e) => {
               e.stopPropagation();
               onAddChild(task.id);
             }}
             title="添加子任务"
           >
-            <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+            <Plus className="h-3.5 w-3.5" />
           </Button>
           
           {/* Delete Button */}
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive"
+            className="h-6 w-6 rounded hover:bg-destructive/10 hover:text-destructive"
             onClick={(e) => {
               e.stopPropagation();
               onDelete(task.id);
@@ -127,7 +131,7 @@ export function SubtaskItem({
       
       {/* Render Children */}
       {hasActualChildren && task.expanded && (
-        <div className="mt-0.5 space-y-0.5 animate-in slide-in-from-top-1 fade-in">
+        <div className="animate-in slide-in-from-top-1 fade-in duration-200">
           {task.children.map((child) => (
             <SubtaskItem
               key={child.id}

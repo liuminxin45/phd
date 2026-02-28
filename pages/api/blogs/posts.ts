@@ -19,6 +19,7 @@ interface PhamePost {
     authorPHID: string;
     blogPHID: string;
     body: string;
+    subtitle?: string;
     datePublished: number;
     dateCreated: number;
     dateModified: number;
@@ -71,6 +72,8 @@ export default async function handler(
     const queryKey = (req.query.queryKey as string) || 'all';
     const sort = (req.query.sort as string) || 'newest'; // newest | oldest | tokenCount | recommended
     const featured = req.query.featured === 'true'; // 90-day popular posts
+    const status = (req.query.status as string) || 'published'; // published | draft
+    const mineOnly = req.query.mine === 'true';
     const isRecommended = sort === 'recommended';
 
     // Build project constraints
@@ -87,8 +90,19 @@ export default async function handler(
 
     const constraints: Record<string, any> = { projects };
 
+    if (mineOnly) {
+      try {
+        const whoami = await client.call<{ phid?: string }>('user.whoami', {});
+        if (whoami?.phid) {
+          constraints.authorPHIDs = [whoami.phid];
+        }
+      } catch {
+        // keep broad constraints if whoami failed
+      }
+    }
+
     // For featured/recommended mode, restrict to last 90 days
-    if (featured || isRecommended) {
+    if ((featured || isRecommended) && status !== 'draft') {
       const nowEpoch = Math.floor(Date.now() / 1000);
       const ninetyDaysAgo = nowEpoch - 90 * 24 * 60 * 60;
       constraints.publishedStart = ninetyDaysAgo;
@@ -172,8 +186,14 @@ export default async function handler(
       }
     }
 
+    // Filter by status using publication timestamp to avoid visibility type mismatch across deployments.
+    const filteredData = result.data.filter((post) => {
+      const isDraft = !post.fields.datePublished || post.fields.datePublished <= 0;
+      return status === 'draft' ? isDraft : !isDraft;
+    });
+
     // Transform posts
-    const posts = result.data.map((post) => {
+    const posts = filteredData.map((post) => {
       const author = usersMap.get(post.fields.authorPHID);
       const body = post.fields.body || '';
       // Estimate read time: ~200 words/min for Chinese, ~250 chars/min
@@ -191,6 +211,7 @@ export default async function handler(
         title: post.fields.title,
         slug: post.fields.slug,
         body,
+        category: post.fields.subtitle || '',
         summary: body.replace(/[=#*\[\]{}|>~`]/g, '').slice(0, 200),
         authorPHID: post.fields.authorPHID,
         authorName: author?.realName || author?.userName || 'Unknown',

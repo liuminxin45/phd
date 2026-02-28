@@ -13,7 +13,7 @@ export function parseGerritDate(dateStr: string): Date {
 }
 
 /**
- * Relative time string: "5 分钟前", "2 小时前", "3 天前"
+ * Relative time string: "5 mins ago", "2 hours ago", "3 days ago"
  */
 export function relativeTime(dateStr: string): string {
   const date = parseGerritDate(dateStr);
@@ -21,16 +21,16 @@ export function relativeTime(dateStr: string): string {
   const diffMs = now - date.getTime();
   const diffSec = Math.floor(diffMs / 1000);
 
-  if (diffSec < 60) return '刚刚';
+  if (diffSec < 60) return 'Just now';
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin} 分钟前`;
+  if (diffMin < 60) return `${diffMin}m ago`;
   const diffHour = Math.floor(diffMin / 60);
-  if (diffHour < 24) return `${diffHour} 小时前`;
+  if (diffHour < 24) return `${diffHour}h ago`;
   const diffDay = Math.floor(diffHour / 24);
-  if (diffDay < 30) return `${diffDay} 天前`;
+  if (diffDay < 30) return `${diffDay}d ago`;
   const diffMonth = Math.floor(diffDay / 30);
-  if (diffMonth < 12) return `${diffMonth} 个月前`;
-  return `${Math.floor(diffMonth / 12)} 年前`;
+  if (diffMonth < 12) return `${diffMonth}mo ago`;
+  return `${Math.floor(diffMonth / 12)}y ago`;
 }
 
 /**
@@ -88,12 +88,12 @@ export function getLabelScoreText(score: number): string {
 
 export function getFileStatusLabel(status?: string): string {
   switch (status) {
-    case 'A': return '新增';
-    case 'D': return '删除';
-    case 'R': return '重命名';
-    case 'C': return '复制';
-    case 'W': return '重写';
-    default: return '修改';
+    case 'A': return 'Added';
+    case 'D': return 'Deleted';
+    case 'R': return 'Renamed';
+    case 'C': return 'Copied';
+    case 'W': return 'Rewritten';
+    default: return 'Modified';
   }
 }
 
@@ -110,10 +110,10 @@ export function getFileStatusColor(status?: string): string {
 
 export function getStatusColor(status: string): string {
   switch (status) {
-    case 'NEW': return 'bg-blue-100 text-blue-800';
-    case 'MERGED': return 'bg-purple-100 text-purple-800';
-    case 'ABANDONED': return 'bg-neutral-100 text-neutral-600';
-    default: return 'bg-neutral-100 text-neutral-600';
+    case 'NEW': return 'bg-blue-100 text-blue-800 border-blue-200';
+    case 'MERGED': return 'bg-purple-100 text-purple-800 border-purple-200';
+    case 'ABANDONED': return 'bg-neutral-100 text-neutral-600 border-neutral-200';
+    default: return 'bg-neutral-100 text-neutral-600 border-neutral-200';
   }
 }
 

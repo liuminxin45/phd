@@ -18,31 +18,31 @@ interface VerificationPromptIssue {
  * System prompt for the AI code reviewer role.
  */
 export function buildReviewSystemPrompt(teamRules?: AiTeamRules): string {
-  let base = `你是一位资深代码评审专家。你的任务是对 Gerrit 代码变更进行结构化分析，帮助评审者快速理解变更并发现潜在问题。
+  let base = `You are a senior code review expert. Your task is to perform a structured analysis of Gerrit code changes to help reviewers quickly understand the changes and identify potential issues.
 
-核心原则：
-- 只报告有实际价值的发现，不要凑数
-- 严重问题优先，风格问题最后
-- 每条建议必须具体、可操作
-- 引用具体文件和行号
-- 如果变更质量良好，直接说明，不要强行找问题
+Core Principles:
+- Report only valuable findings; do not pad the results.
+- Prioritize high-severity issues; style issues come last.
+- Every suggestion must be specific and actionable.
+- Cite specific files and line numbers.
+- If the change quality is good, state it directly; do not force finding issues.
 
-输出格式要求：你必须返回严格的 JSON，不要包含任何 markdown 代码块标记或其他文本。
+Output Format Requirements: You must return strict JSON. Do not include markdown code block markers or other text.
 
-语言要求（强制）：
-- 所有自然语言字段必须使用简体中文
-- 禁止输出英文句子（代码标识符、文件路径、枚举值除外）`;
+Language Requirements (Mandatory):
+- All natural language fields must be in Simplified Chinese (简体中文).
+- Use clear and professional technical Chinese.`;
 
   if (teamRules?.customInstructions) {
-    base += `\n\n团队自定义规则：\n${teamRules.customInstructions}`;
+    base += `\n\nTeam Custom Rules:\n${teamRules.customInstructions}`;
   }
 
   if (teamRules?.focusAreas && teamRules.focusAreas.length > 0) {
-    base += `\n\n重点关注领域：${teamRules.focusAreas.join('、')}`;
+    base += `\n\nKey Focus Areas: ${teamRules.focusAreas.join(', ')}`;
   }
 
   if (teamRules?.ignorePatterns && teamRules.ignorePatterns.length > 0) {
-    base += `\n\n忽略以下文件模式：${teamRules.ignorePatterns.join('、')}`;
+    base += `\n\nIgnore the following file patterns: ${teamRules.ignorePatterns.join(', ')}`;
   }
 
   return base;
@@ -64,78 +64,78 @@ export function buildReviewPrompt(params: {
   feedbackContext?: FeedbackPromptContext;
 }): string {
   const truncationNote = params.truncated
-    ? `\n注意：由于变更较大，仅展示了 ${params.fileCount}/${params.totalFiles} 个文件的 diff。请基于可见内容进行分析。`
+    ? `\nNote: Due to large size, only diffs for ${params.fileCount}/${params.totalFiles} files are shown. Analyze based on visible content.`
     : '';
 
   const triageNote = params.triageHints && params.triageHints.length > 0
-    ? `\n优先关注文件（来自快速分层分析）：${params.triageHints.join('、')}`
+    ? `\nPriority Files (from triage): ${params.triageHints.join(', ')}`
     : '';
 
   const feedbackNote = params.feedbackContext && params.feedbackContext.entries.length > 0
-    ? `\n近期评审者反馈偏好（用于减少误报）：\n${params.feedbackContext.entries
+    ? `\nRecent Reviewer Feedback Preferences (to reduce false positives):\n${params.feedbackContext.entries
       .slice(0, 20)
       .map((entry) => {
         const location = entry.file ? `${entry.file}${entry.line ? `:${entry.line}` : ''}` : 'unknown';
-        const title = entry.title || '未命名问题';
+        const title = entry.title || 'Untitled Issue';
         return `- [${entry.value}] ${title} @ ${location}`;
       })
       .join('\n')}`
     : '';
 
-  return `请分析以下 Gerrit 代码变更并返回结构化 JSON。
+  return `Please analyze the following Gerrit code change and return structured JSON.
 
-## 变更信息
-- 标题: ${params.subject}
-- 项目: ${params.project}
-- 分支: ${params.branch}
-${params.commitMessage ? `- 提交信息: ${params.commitMessage}` : ''}
+## Change Information
+- Subject: ${params.subject}
+- Project: ${params.project}
+- Branch: ${params.branch}
+${params.commitMessage ? `- Commit Message: ${params.commitMessage}` : ''}
 ${truncationNote}
 ${triageNote}
 ${feedbackNote}
 
-## Diff 内容
-行号格式说明：
-- " 旧行号:新行号 | 内容" = 未变更的上下文行
-- "-旧行号 | 内容" = 删除的行
-- "+新行号 | 内容" = 新增的行
+## Diff Content
+Line number format:
+- " OldLine:NewLine | Content" = Unchanged context
+- "-OldLine | Content" = Deleted line
+- "+NewLine | Content" = Added line
 
 ${params.diffText}
 
-## 要求的 JSON 结构
+## Required JSON Structure
 
 {
   "overview": {
     "riskLevel": "low" | "medium" | "high",
     "changeTypes": ["refactor" | "new-feature" | "bugfix" | "config" | "test" | "docs" | "dependency" | "mixed"],
-    "summary": "一句话概述本次变更的核心内容",
-    "focusPoints": ["建议关注点1", "建议关注点2", "建议关注点3"]
+    "summary": "One-sentence summary of the core change (in Chinese)",
+    "focusPoints": ["Focus Point 1 (in Chinese)", "Focus Point 2 (in Chinese)", "Focus Point 3 (in Chinese)"]
   },
   "issues": [
     {
       "category": "bug" | "performance" | "maintainability" | "style",
       "severity": "low" | "medium" | "high",
-      "title": "问题简述",
-      "description": "详细说明",
-      "file": "文件路径",
-      "line": 行号(新文件的行号),
-      "suggestion": "修改建议（可选）",
+      "title": "Issue Summary (in Chinese)",
+      "description": "Detailed explanation (in Chinese)",
+      "file": "File path",
+      "line": LineNumber(of the new file),
+      "suggestion": "Suggested fix (optional, in Chinese)",
       "evidence": {
-        "file": "证据文件路径(必填)",
-        "line": 证据行号(可选),
-        "snippet": "来自diff的证据片段(必填，20~200字符)"
+        "file": "Evidence file path (required)",
+        "line": Evidence line number (optional),
+        "snippet": "Snippet from diff (required, 20-200 chars)"
       }
     }
   ]
 }
 
-规则：
-- issues 数组按 severity 降序排列（high → medium → low）
-- each issue 的 line 必须是 diff 中实际存在的新文件行号（+号后的数字）
-- evidence.snippet 必须来自当前 diff 的真实内容，不得编造
-- focusPoints 最多 3 条
-- 如果没有问题，issues 返回空数组
-- riskLevel 判断标准：high=有明确 bug 或安全问题，medium=有性能或逻辑风险，low=仅风格或无问题
-- 所有可读文本字段（summary/focusPoints/title/description/suggestion/evidence.snippet）必须是简体中文`;
+Rules:
+- issues array sorted by severity descending (high -> medium -> low)
+- The 'line' for each issue must be a valid new file line number from the diff (number after +)
+- evidence.snippet must be actual content from the diff, do not fabricate
+- focusPoints max 3 items
+- If no issues, return empty issues array
+- riskLevel criteria: high = definite bug or security issue, medium = performance or logic risk, low = style only or clean
+- All readable text fields must be in Simplified Chinese`;
 }
 
 /**
@@ -147,26 +147,26 @@ export function buildFileTriagePrompt(params: {
   branch: string;
   filesSummary: string;
 }): string {
-  return `你是代码评审助手。请先做“快速分层分析”，只根据文件列表找出最值得深度分析的文件。
+  return `You are a code review assistant. Perform a "quick triage" to identify files most worthy of deep analysis based on the file list.
 
-变更标题: ${params.subject}
-项目: ${params.project}
-分支: ${params.branch}
+Change Subject: ${params.subject}
+Project: ${params.project}
+Branch: ${params.branch}
 
-文件列表:
+File List:
 ${params.filesSummary}
 
-返回严格 JSON（不要 markdown 标记）：
+Return strict JSON (no markdown):
 {
   "highRiskFiles": ["file1", "file2"],
-  "reasons": ["原因1", "原因2"]
+  "reasons": ["Reason 1 (in Chinese)", "Reason 2 (in Chinese)"]
 }
 
-规则：
-- highRiskFiles 最多 8 个
-- 优先选择核心业务逻辑、认证授权、并发状态、数据持久化、API协议相关文件
-- reasons 最多 3 条，简短即可
-- reasons 必须使用简体中文`;
+Rules:
+- highRiskFiles max 8 files
+- Prioritize core business logic, auth, concurrency, persistence, and API protocols
+- reasons max 3 items, concise (in Chinese)
+- reasons must be in Simplified Chinese`;
 }
 
 /**
@@ -177,11 +177,11 @@ export function buildIssueVerificationPrompt(params: {
   diffText: string;
   issues: VerificationPromptIssue[];
 }): string {
-  return `请对以下高严重度问题做复核，判断是否被 diff 证据支持。
+  return `Please verify the following high-severity issues against the diff evidence.
 
-变更标题: ${params.subject}
+Change Subject: ${params.subject}
 
-待复核问题:
+Issues to Verify:
 ${params.issues
   .map(({ index, issue }) => `#${index}
 - title: ${issue.title}
@@ -195,22 +195,22 @@ ${params.issues
 Diff:
 ${params.diffText}
 
-返回严格 JSON（不要 markdown 标记）：
+Return strict JSON (no markdown):
 {
   "results": [
     {
       "index": 0,
       "status": "confirmed" | "rejected" | "uncertain",
-      "reason": "复核原因（20字以内）"
+      "reason": "Verification reason (under 20 words, in Chinese)"
     }
   ]
 }
 
-规则：
-- 只有证据明确支持才标记 confirmed
-- 若证据不足，优先 uncertain
-- 不得返回不存在的 index
-- reason 必须使用简体中文`;
+Rules:
+- Mark confirmed only if clear evidence exists
+- If evidence is insufficient, prefer uncertain
+- Do not return non-existent indices
+- reason must be in Simplified Chinese`;
 }
 
 /**
@@ -223,23 +223,23 @@ export function buildRiskAssessmentPrompt(params: {
   deletions: number;
   filesSummary: string;
 }): string {
-  return `快速评估以下代码变更的风险等级。
+  return `Quickly assess the risk level of the following code change.
 
-变更: ${params.subject}
-项目: ${params.project}
-规模: +${params.insertions}/-${params.deletions}
+Change: ${params.subject}
+Project: ${params.project}
+Size: +${params.insertions}/-${params.deletions}
 
-文件列表:
+File List:
 ${params.filesSummary}
 
-返回严格 JSON（不要 markdown 标记）：
+Return strict JSON (no markdown):
 {
   "riskLevel": "low" | "medium" | "high",
-  "briefReason": "一句话原因（15字以内）"
+  "briefReason": "One sentence reason (under 15 words, in Chinese)"
 }
 
-判断标准：
-- high: 涉及安全、认证、数据库迁移、核心业务逻辑、大规模重构(>500行)
-- medium: 涉及 API 接口变更、状态管理、并发逻辑、中等规模改动
-- low: 文档、配置、测试、小规模修改、纯重命名`;
+Criteria:
+- high: Security, auth, DB migration, core logic, massive refactor (>500 lines)
+- medium: API changes, state management, concurrency, medium size
+- low: Docs, config, tests, small fixes, renames`;
 }

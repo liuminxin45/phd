@@ -11,7 +11,7 @@ interface AccountSearchProps {
   onCancel: () => void;
 }
 
-export function AccountSearch({ placeholder = '输入姓名或邮箱搜索...', onSelect, onCancel }: AccountSearchProps) {
+export function AccountSearch({ placeholder = 'Search name or email...', onSelect, onCancel }: AccountSearchProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GerritAccount[]>([]);
   const [loading, setLoading] = useState(false);
@@ -92,7 +92,7 @@ export function AccountSearch({ placeholder = '输入姓名或邮箱搜索...', 
           onClick={onCancel}
           className="px-2 py-1 text-[11px] rounded border border-border text-muted-foreground hover:bg-muted"
         >
-          取消
+          Cancel
         </button>
       </div>
 
@@ -122,7 +122,7 @@ export function AccountSearch({ placeholder = '输入姓名或邮箱搜索...', 
 
       {focused && query.length >= 2 && !loading && results.length === 0 && (
         <div className="absolute z-50 mt-1 w-full bg-popover border rounded-md shadow-lg px-3 py-2 text-xs text-muted-foreground">
-          未找到匹配用户
+          No users found
         </div>
       )}
     </div>

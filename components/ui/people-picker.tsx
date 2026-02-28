@@ -22,6 +22,7 @@ interface PeoplePickerProps {
   placeholder?: string;
   className?: string;
   popoverZIndex?: number;
+  triggerClassName?: string;
 }
 
 interface UserSearchResult {
@@ -41,6 +42,7 @@ export function PeoplePicker({
   placeholder = '搜索人员...',
   className = '',
   popoverZIndex = 10200,
+  triggerClassName,
 }: PeoplePickerProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -153,7 +155,7 @@ export function PeoplePicker({
             <Button
               variant="outline"
               size="sm"
-              className="h-7 border-dashed gap-1 text-muted-foreground hover:text-foreground px-2"
+              className={cn("h-7 border-dashed gap-1 text-muted-foreground hover:text-foreground px-2", triggerClassName)}
             >
               <Plus className="h-3.5 w-3.5" />
               添加

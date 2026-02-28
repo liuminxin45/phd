@@ -4,6 +4,7 @@ export interface ApiBlogPost {
   title: string;
   slug: string;
   body: string;
+  category?: string;
   summary: string;
   authorPHID: string;
   authorName: string;

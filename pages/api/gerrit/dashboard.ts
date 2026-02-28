@@ -12,10 +12,11 @@ const QUERY_OPTIONS = [
 ];
 
 const DASHBOARD_SECTIONS: { title: string; query: string }[] = [
-  { title: '待我评审', query: 'reviewer:self status:open -owner:self -is:wip' },
-  { title: '我发起的', query: 'owner:self status:open' },
-  { title: '抄送我的', query: 'cc:self status:open -owner:self -reviewer:self' },
-  { title: '最近合入', query: 'owner:self status:merged limit:15' },
+  { title: 'Your Turn', query: 'attention:self status:open -owner:self -is:wip' },
+  { title: 'Outgoing Reviews', query: 'owner:self status:open' },
+  { title: 'Incoming Reviews', query: 'reviewer:self status:open -owner:self -is:wip' },
+  { title: 'CC\'ed On', query: 'cc:self status:open -owner:self -reviewer:self' },
+  { title: 'Recently Closed', query: '(owner:self OR reviewer:self OR cc:self) status:closed limit:25' },
 ];
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

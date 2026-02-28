@@ -17,6 +17,7 @@ interface DatePickerProps {
   onChange: (date: Date | undefined) => void;
   placeholder?: string;
   className?: string;
+  triggerClassName?: string;
 }
 
 export function DatePicker({
@@ -24,28 +25,31 @@ export function DatePicker({
   onChange,
   placeholder = '选择日期',
   className = '',
+  triggerClassName = '',
 }: DatePickerProps) {
   const [isOpen, setIsOpen] = React.useState(false);
 
   return (
-    <div className="inline-flex items-center gap-1">
+    <div className={cn("flex items-center gap-1", className)}>
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
             size="sm"
             className={cn(
-              "h-8 px-2 text-xs font-normal justify-start text-left",
+              "h-8 px-2 text-xs font-normal justify-start text-left flex-1 min-w-0",
               !value && "text-muted-foreground",
-              className
+              triggerClassName
             )}
           >
-            <CalendarIcon className="mr-2 h-3.5 w-3.5 opacity-50" />
-            {value ? (
-              format(value, 'yyyy/MM/dd', { locale: zhCN })
-            ) : (
-              <span>{placeholder}</span>
-            )}
+            <CalendarIcon className="mr-2 h-3.5 w-3.5 opacity-50 shrink-0" />
+            <span className="truncate">
+              {value ? (
+                format(value, 'yyyy/MM/dd', { locale: zhCN })
+              ) : (
+                placeholder
+              )}
+            </span>
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0 z-[10200]" align="start">
@@ -80,7 +84,7 @@ export function DatePicker({
          <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground"
+            className="h-8 w-8 shrink-0 rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground"
             onClick={(e) => {
               e.stopPropagation();
               onChange(undefined);

@@ -2,21 +2,36 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { getLabelScoreColor } from '@/lib/gerrit/helpers';
 import { Button } from '@/components/ui/button';
-import { Loader2, Send } from 'lucide-react';
+import { Loader2, Send, MessageSquare } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
+import { toast } from 'sonner';
 
 interface ReviewPanelProps {
   onSubmit: (data: { message: string; labels: Record<string, number> }) => Promise<void>;
+  onTriggerInternalAgent?: (message: string) => Promise<void>;
   availableLabels?: string[];
   submitting?: boolean;
 }
 
 const SCORE_OPTIONS = [-2, -1, 0, 1, 2];
-
 const HIDDEN_LABELS = ['Unit-Test', 'Lint', 'Label-Unit-Test', 'Label-Lint'];
+const INTERNAL_AGENT_TRIGGER_KEY = 'review-internal-agent-trigger-message';
+const DEFAULT_INTERNAL_AGENT_TRIGGER = '@AI2   ';
 
-export function ReviewPanel({ onSubmit, availableLabels = ['Code-Review'], submitting }: ReviewPanelProps) {
+export function ReviewPanel({ onSubmit, onTriggerInternalAgent, availableLabels = ['Code-Review'], submitting }: ReviewPanelProps) {
   const [message, setMessage] = useState('');
   const [scores, setScores] = useState<Record<string, number>>({});
+  const [agentTriggerMessage, setAgentTriggerMessage] = useState<string>(() => {
+    if (typeof window === 'undefined') return DEFAULT_INTERNAL_AGENT_TRIGGER;
+    try {
+      const saved = localStorage.getItem(INTERNAL_AGENT_TRIGGER_KEY);
+      return saved ?? DEFAULT_INTERNAL_AGENT_TRIGGER;
+    } catch {
+      return DEFAULT_INTERNAL_AGENT_TRIGGER;
+    }
+  });
 
   const visibleLabels = availableLabels.filter((l) => !HIDDEN_LABELS.includes(l));
 
@@ -27,6 +42,30 @@ export function ReviewPanel({ onSubmit, availableLabels = ['Code-Review'], submi
     setScores({});
   };
 
+  const handleAgentTriggerChange = (value: string) => {
+    setAgentTriggerMessage(value);
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(INTERNAL_AGENT_TRIGGER_KEY, value);
+    } catch {
+      // ignore localStorage errors
+    }
+  };
+
+  const handleTriggerInternalAgent = async () => {
+    if (!agentTriggerMessage.trim()) return;
+    try {
+      toast.info('正在发送内部 Agent 触发评论...');
+      if (onTriggerInternalAgent) {
+        await onTriggerInternalAgent(agentTriggerMessage);
+        return;
+      }
+      await onSubmit({ message: agentTriggerMessage, labels: {} });
+    } catch (err: any) {
+      toast.error(err?.message || '触发失败');
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
@@ -35,78 +74,108 @@ export function ReviewPanel({ onSubmit, availableLabels = ['Code-Review'], submi
   };
 
   return (
-    <div className="border rounded-lg bg-card overflow-hidden">
-      <div className="px-3 py-2 bg-muted/50 border-b">
-        <span className="text-sm font-medium text-foreground">提交评审</span>
-      </div>
-      <div className="p-3 space-y-3">
+    <Card className="border-l-4 border-l-primary/20">
+      <CardHeader className="px-4 py-3 border-b border-border/40">
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <MessageSquare className="h-4 w-4" />
+          Submit Review
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-4 space-y-4">
         {/* Comment textarea */}
-        <textarea
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="写下你的评审意见..."
-          className="w-full min-h-[80px] p-2.5 rounded-md border border-border bg-background text-sm resize-y focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
-          disabled={submitting}
-        />
+        <div className="space-y-2">
+          <Textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Write your review comment..."
+            className="min-h-[100px] text-sm resize-y"
+            disabled={submitting}
+          />
+          <p className="text-[10px] text-muted-foreground text-right">
+            Cmd/Ctrl + Enter to submit
+          </p>
+        </div>
 
         {/* Label scores */}
-        {visibleLabels.map((label) => (
-          <div key={label} className="flex items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground w-24 shrink-0">
-              {label === 'Code-Review' ? 'Code-Review' : label === 'Verified' ? 'Verified' : label}
-            </span>
-            <div className="flex items-center gap-1">
-              {SCORE_OPTIONS.map((score) => {
-                const isSelected = scores[label] === score;
-                const colorClass = isSelected ? getLabelScoreColor(score) : '';
-                return (
-                  <button
-                    key={score}
-                    onClick={() => {
-                      setScores((prev) => {
-                        const next = { ...prev };
-                        if (prev[label] === score) {
-                          delete next[label];
-                        } else {
-                          next[label] = score;
-                        }
-                        return next;
-                      });
-                    }}
-                    className={cn(
-                      'h-7 w-9 rounded text-xs font-medium border transition-all',
-                      isSelected
-                        ? colorClass
-                        : 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground'
-                    )}
-                    disabled={submitting}
-                  >
-                    {score > 0 ? `+${score}` : score}
-                  </button>
-                );
-              })}
+        <div className="space-y-3">
+          {visibleLabels.map((label) => (
+            <div key={label} className="space-y-1.5">
+              <span className="text-xs font-medium text-muted-foreground block">
+                {label === 'Code-Review' ? 'Code-Review' : label === 'Verified' ? 'Verified' : label}
+              </span>
+              <div className="flex items-center gap-1 w-full">
+                {SCORE_OPTIONS.map((score) => {
+                  const isSelected = scores[label] === score;
+                  const colorClass = isSelected ? getLabelScoreColor(score) : '';
+                  return (
+                    <button
+                      key={score}
+                      onClick={() => {
+                        setScores((prev) => {
+                          const next = { ...prev };
+                          if (prev[label] === score) {
+                            delete next[label];
+                          } else {
+                            next[label] = score;
+                          }
+                          return next;
+                        });
+                      }}
+                      className={cn(
+                        'flex-1 h-8 rounded text-xs font-medium border transition-all',
+                        isSelected
+                          ? cn(colorClass, 'shadow-sm ring-1 ring-black/5')
+                          : 'border-border text-muted-foreground bg-muted/20 hover:bg-muted hover:text-foreground'
+                      )}
+                      disabled={submitting}
+                      title={score > 0 ? `+${score}` : `${score}`}
+                    >
+                      {score > 0 ? `+${score}` : score}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
 
         {/* Submit button */}
-        <div className="flex justify-end">
+        <div className="pt-2">
           <Button
             onClick={handleSubmit}
             disabled={submitting || (!message.trim() && Object.keys(scores).length === 0)}
-            size="sm"
-            className="gap-1.5"
+            className="w-full gap-2"
           >
             {submitting ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <Send className="h-3.5 w-3.5" />
+              <Send className="h-4 w-4" />
             )}
-            {submitting ? '提交中...' : '提交 Review'}
+            {submitting ? 'Submitting...' : 'Submit Review'}
           </Button>
         </div>
-      </div>
-    </div>
+
+        <div className="pt-2 border-t border-border/40 space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">内部 Agent 触发</p>
+          <Input
+            value={agentTriggerMessage}
+            onChange={(e) => handleAgentTriggerChange(e.target.value)}
+            placeholder="例如：@AI2"
+            className="h-8 text-xs"
+            disabled={submitting}
+          />
+          <p className="text-[10px] text-muted-foreground">点击按钮会发送一条评论以触发公司内部评审 Agent</p>
+          <Button
+            variant="outline"
+            className="w-full h-8 text-xs"
+            onClick={handleTriggerInternalAgent}
+            disabled={submitting || !agentTriggerMessage.trim()}
+          >
+            触发内部 Agent 评审
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

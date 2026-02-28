@@ -142,6 +142,36 @@ export default function BlogsPage() {
     setLoadingMoreReport(false);
   }, [reportCursor, loadingMoreReport, fetchPosts]);
 
+  const refreshPostsAfterPublish = useCallback(async (type: 'tech' | 'report') => {
+    if (type === 'tech') {
+      setLoadingTech(true);
+      setLoadingFeatured(true);
+      try {
+        const [techRes, featuredRes] = await Promise.all([
+          fetchPosts({ type: 'tech', sort: sortOrder }),
+          fetchPosts({ type: 'tech', featured: 'true', limit: 3 }),
+        ]);
+        setTechPosts(techRes.data);
+        setNewestTechPosts(techRes.data);
+        setTechCursor(techRes.cursor.after);
+        setFeaturedPosts(featuredRes.data);
+      } finally {
+        setLoadingTech(false);
+        setLoadingFeatured(false);
+      }
+      return;
+    }
+
+    setLoadingReport(true);
+    try {
+      const reportRes = await fetchPosts({ type: 'report' });
+      setReportPosts(reportRes.data);
+      setReportCursor(reportRes.cursor.after);
+    } finally {
+      setLoadingReport(false);
+    }
+  }, [fetchPosts, sortOrder]);
+
   // Derive BlogPost[] for the tech blog view
   const techBlogPosts: BlogPost[] = techPosts.map(apiPostToBlogPost);
   const featuredBlogPosts: BlogPost[] = featuredPosts.map((p) => ({ ...apiPostToBlogPost(p), featured: true }));
@@ -287,12 +317,18 @@ export default function BlogsPage() {
 
       {/* ── View: Create Report ────────────────────────────────────────── */}
       {currentView === 'create-report' && (
-        <CreateReportView onBack={() => setCurrentView('report')} />
+        <CreateReportView
+          onBack={() => setCurrentView('report')}
+          onPublished={() => refreshPostsAfterPublish('report')}
+        />
       )}
 
       {/* ── View: Create Blog ──────────────────────────────────────────── */}
       {currentView === 'create' && (
-        <CreateBlogView onBack={() => setCurrentView('tech')} />
+        <CreateBlogView
+          onBack={() => setCurrentView('tech')}
+          onPublished={() => refreshPostsAfterPublish('tech')}
+        />
       )}
 
       {/* ── View: Tech Blog ──────────────────────────────────────────── */}

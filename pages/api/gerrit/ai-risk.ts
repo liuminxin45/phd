@@ -15,14 +15,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const llmConfig = readLlmConfig();
   if (!llmConfig.baseUrl || !llmConfig.apiKey || !llmConfig.model) {
-    return res.status(400).json({ error: 'LLM not configured' });
+    return res.status(400).json({ error: '未配置 LLM (请在设置中配置)' });
   }
 
   const { changes } = req.body as {
     changes: { _number: number; subject: string; project: string; insertions: number; deletions: number }[];
   };
   if (!Array.isArray(changes) || changes.length === 0) {
-    return res.status(400).json({ error: 'Missing changes array' });
+    return res.status(400).json({ error: '缺少 changes 数组参数' });
   }
 
   // Limit to 20 changes per call
@@ -33,19 +33,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       `${i + 1}. [#${c._number}] ${c.subject} (${c.project}, +${c.insertions || 0}/-${c.deletions || 0})`
     ).join('\n');
 
-    const userPrompt = `对以下 ${batch.length} 个代码变更进行快速风险评估。仅基于标题、项目和改动规模判断。
+    const userPrompt = `Quickly assess the risk level of the following ${batch.length} code changes. Base your judgment solely on title, project, and size.
 
 ${changesList}
 
-返回严格 JSON 数组（不要 markdown 标记）：
+Return strict JSON array (no markdown):
 [
-  { "n": change编号, "r": "low"|"medium"|"high", "reason": "一句话原因(15字以内)" }
+  { "n": changeNumber, "r": "low"|"medium"|"high", "reason": "One sentence reason (under 15 words, in Chinese)" }
 ]
 
-判断标准：
-- high: 涉及安全/认证/数据库/核心业务逻辑/大规模重构(>500行)
-- medium: API接口变更/状态管理/并发逻辑/中等规模
-- low: 文档/配置/测试/小修改/纯重命名`;
+Criteria:
+- high: Security, auth, DB, core logic, massive refactor (>500 lines)
+- medium: API changes, state management, concurrency, medium size
+- low: Docs, config, tests, small fixes, renames
+
+Language Requirements:
+- The 'reason' field must be in Simplified Chinese.`;
 
     let parsed: { n: number; r: string; reason: string }[];
     try {

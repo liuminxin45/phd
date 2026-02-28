@@ -17,9 +17,10 @@ interface TaskStatusBadgeProps {
   taskId: number;
   currentStatus: string;
   onStatusChange?: (newStatus: string) => void;
+  className?: string;
 }
 
-export function TaskStatusBadge({ taskId, currentStatus, onStatusChange }: TaskStatusBadgeProps) {
+export function TaskStatusBadge({ taskId, currentStatus, onStatusChange, className }: TaskStatusBadgeProps) {
   const [isUpdating, setIsUpdating] = useState(false);
 
   const handleStatusClick = async (newStatus: string) => {
@@ -58,7 +59,8 @@ export function TaskStatusBadge({ taskId, currentStatus, onStatusChange }: TaskS
           className={cn(
             "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
             colorClass,
-            isUpdating && "opacity-50 cursor-not-allowed"
+            isUpdating && "opacity-50 cursor-not-allowed",
+            className
           )}
         >
           {isUpdating && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}

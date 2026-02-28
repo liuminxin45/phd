@@ -189,47 +189,52 @@ export function Timeline({
   };
 
   return (
-    <div className={cn("space-y-4", className)}>
+    <div className={cn("space-y-6", className)}>
       {/* Title Section */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold flex items-center gap-2 text-foreground">
-          <MessageSquare className="h-4 w-4 text-muted-foreground" />
+      <div className="flex items-center justify-between pb-2 border-b border-border/30">
+        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+          <MessageSquare className="h-4 w-4" />
           {title}
         </h3>
-        <span className="text-xs text-muted-foreground">
-          {visibleItems.length} 条{title.includes('评论') ? '评论' : '动态'}
+        <span className="text-xs text-muted-foreground/60">
+          {visibleItems.length} 条
         </span>
       </div>
 
       {/* Timeline Container */}
-      <div className="bg-muted/30 border border-border rounded-lg p-4 shadow-sm">
+      <div className="space-y-8 relative">
+        {/* Vertical Line */}
+        {visibleItems.length > 0 && (
+          <div className="absolute left-4 top-0 bottom-0 w-px bg-border/40 z-0" />
+        )}
+
         {/* Items List */}
-        <div className="max-h-[400px] overflow-y-auto overflow-x-hidden pr-2 space-y-4">
+        <div className="space-y-8">
         {visibleItems.length === 0 ? (
           <div className="text-center py-10">
-            <MessageSquare className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+            <MessageSquare className="h-10 w-10 text-muted-foreground/20 mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground/50">{emptyMessage}</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-6">
             {visibleItems.map((item) => (
               <div
                 key={item.id}
-                className="group relative flex gap-3"
+                className="group relative flex gap-4 z-10"
               >
-                <Avatar className="h-8 w-8 shrink-0 border">
+                <Avatar className="h-8 w-8 shrink-0 border border-border bg-background ring-4 ring-background">
                   <AvatarImage src={item.authorImage || undefined} alt={item.author} />
-                  <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                  <AvatarFallback className="bg-primary/5 text-primary text-xs font-medium">
                     {item.author.charAt(0)}
                   </AvatarFallback>
                 </Avatar>
                 
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 pt-1">
                    {/* Header: Author + Meta + Actions */}
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-foreground">{item.author}</span>
-                      <span className="text-xs text-muted-foreground">{item.timestamp}</span>
+                      <span className="text-sm font-semibold text-foreground/90">{item.author}</span>
+                      <span className="text-xs text-muted-foreground/50 font-normal">{item.timestamp}</span>
                     </div>
                     
                     {showActions && (onEdit || onDelete) && (
@@ -238,7 +243,7 @@ export function Timeline({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                            className="h-6 w-6 text-muted-foreground hover:text-foreground rounded-full"
                             onClick={() => handleEditClick(item)}
                             title="编辑"
                           >
@@ -249,7 +254,7 @@ export function Timeline({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                            className="h-6 w-6 text-muted-foreground hover:text-destructive rounded-full"
                             onClick={() => handleDelete(item)}
                             disabled={isDeleting === item.id}
                             title="删除"
@@ -267,14 +272,21 @@ export function Timeline({
                   
                   {/* Content or Edit Form */}
                   {editingItemId === item.id ? (
-                    <div className="space-y-2">
+                    <div className="space-y-3 animate-in fade-in zoom-in-95">
                       <RemarkupEditor
                         value={editedText}
                         onChange={setEditedText}
-                        minHeight="80px"
+                        minHeight="100px"
                         autoFocus
                       />
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleCancelEdit}
+                        >
+                          取消
+                        </Button>
                         <Button
                           size="sm"
                           onClick={() => handleSaveEdit(item)}
@@ -287,26 +299,19 @@ export function Timeline({
                             </>
                           ) : (
                             <>
-                              <Check className="mr-2 h-3 w-3" />
                               保存
                             </>
                           )}
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleCancelEdit}
-                        >
-                          取消
-                        </Button>
                       </div>
                     </div>
                   ) : (
-                    <RemarkupRenderer
-                      content={item.content}
-                      compact
-                      className="text-sm text-foreground/90 leading-relaxed bg-background border border-border/50 rounded-md p-3 shadow-sm"
-                    />
+                    <div className="text-sm text-foreground/80 leading-relaxed bg-muted/10 rounded-lg p-3 -ml-3 transition-colors group-hover:bg-muted/30">
+                       <RemarkupRenderer
+                        content={item.content}
+                        compact
+                      />
+                    </div>
                   )}
                 </div>
               </div>
@@ -317,27 +322,35 @@ export function Timeline({
 
         {/* Add New Input */}
         {showAddInput && onAdd && (
-          <div className="mt-4 pt-4 border-t border-border space-y-3">
-            <RemarkupEditor
-              value={newContent}
-              onChange={setNewContent}
-              placeholder={addPlaceholder}
-              minHeight="80px"
-            />
-            <div className="flex justify-end">
-              <Button
-                size="sm"
-                onClick={handleAdd}
-                disabled={!newContent.trim() || isAdding}
-                className="gap-2"
-              >
-                {isAdding ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Send className="h-3.5 w-3.5" />
-                )}
-                {isAdding ? '发布中...' : '发布'}
-              </Button>
+          <div className="pt-2 z-10 relative">
+            <div className="flex gap-4">
+              <div className="h-8 w-8 rounded-full bg-muted/20 border border-dashed border-border flex items-center justify-center shrink-0">
+                <div className="h-2 w-2 rounded-full bg-muted-foreground/30" />
+              </div>
+              <div className="flex-1 space-y-3">
+                <RemarkupEditor
+                  value={newContent}
+                  onChange={setNewContent}
+                  placeholder={addPlaceholder}
+                  minHeight="100px"
+                  className="shadow-sm border-muted-foreground/20 focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-all"
+                />
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    onClick={handleAdd}
+                    disabled={!newContent.trim() || isAdding}
+                    className="gap-2 px-4"
+                  >
+                    {isAdding ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Send className="h-3.5 w-3.5" />
+                    )}
+                    {isAdding ? '发布中...' : '发布评论'}
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         )}

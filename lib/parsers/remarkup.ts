@@ -186,6 +186,15 @@ export function remarkupToHtml(raw: string): string {
       continue;
     }
 
+    // ── Headings fallback: "= Title" / "== Subtitle" (without trailing '='), commonly seen in exported remarkup
+    const headingStartOnlyMatch = line.match(/^(={1,6})\s+(.+?)\s*$/);
+    if (headingStartOnlyMatch) {
+      flushAll();
+      const level = Math.min(headingStartOnlyMatch[1].length, 6);
+      out.push(`<h${level}>${headingStartOnlyMatch[2]}</h${level}>`);
+      continue;
+    }
+
     // ── Markdown-style headings: ## h2, ### h3, #### h4 etc. (single # reserved for ordered list)
     const mdHeadingMatch = line.match(/^(#{2,6})\s*(.+?)\s*$/);
     if (mdHeadingMatch) {
@@ -243,11 +252,14 @@ export function remarkupToHtml(raw: string): string {
     }
     if (inTable) flushTable();
 
-    // ── Unordered list: - item or * item (with optional leading indent for nesting)
-    const ulMatch = line.match(/^(\s*)([-*])\s+(.*)/);
+    // ── Unordered list: - item / * item / -- nested item (with optional leading indent)
+    const ulMatch = line.match(/^(\s*)(\*|-+)\s+(.*)/);
     if (ulMatch) {
       flushQuote(); flushTable();
-      pushListItem('ul', ulMatch[1].length, ulMatch[3]);
+      const marker = ulMatch[2];
+      const hyphenExtraDepth = marker.startsWith('-') ? Math.max(0, marker.length - 1) : 0;
+      const effectiveIndent = ulMatch[1].length + hyphenExtraDepth * 2;
+      pushListItem('ul', effectiveIndent, ulMatch[3]);
       continue;
     }
 

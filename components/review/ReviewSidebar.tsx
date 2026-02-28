@@ -9,8 +9,11 @@ import { AiReviewPanel } from './AiReviewPanel';
 import { AiRulesPanel } from './AiRulesPanel';
 import { ReviewPanel } from './ReviewPanel';
 import { AccountSearch } from './AccountSearch';
-import { Card, CardContent } from '@/components/ui/card';
-import { User, UserPlus, Plus, X } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { User, UserPlus, Plus, X, Users, Info } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface ReviewSidebarProps {
   change: GerritChange;
@@ -25,6 +28,7 @@ interface ReviewSidebarProps {
   totalDeletions: number;
   fileCount: number;
   onSubmitReview: (data: { message: string; labels: Record<string, number> }) => Promise<void>;
+  onTriggerInternalAgent: (message: string) => Promise<void>;
   onAddDraftComment: (file: string, line: number, message: string) => void;
   onJumpToLine: (file: string, line: number) => void;
   onAddReviewer: (account: { _account_id: number; email?: string; name?: string }, state: 'REVIEWER' | 'CC') => void;
@@ -44,6 +48,7 @@ export function ReviewSidebar({
   totalDeletions,
   fileCount,
   onSubmitReview,
+  onTriggerInternalAgent,
   onAddDraftComment,
   onJumpToLine,
   onAddReviewer,
@@ -53,7 +58,8 @@ export function ReviewSidebar({
   const [addingCC, setAddingCC] = useState(false);
 
   return (
-    <div className="w-80 shrink-0 hidden lg:block space-y-4">
+    <div className="w-80 shrink-0 hidden lg:block space-y-6">
+      {/* AI Analysis */}
       <AiReviewPanel
         changeNumber={changeNumber}
         revisionId={selectedRevisionId}
@@ -62,105 +68,177 @@ export function ReviewSidebar({
         onJumpToLine={onJumpToLine}
       />
 
+      {/* Review Actions */}
       <ReviewPanel
         onSubmit={onSubmitReview}
+        onTriggerInternalAgent={onTriggerInternalAgent}
         availableLabels={availableLabels}
         submitting={submittingReview}
       />
 
-      {/* Reviewers info with add/remove */}
+      {/* People (Reviewers & CC) */}
       <Card>
-        <CardContent className="p-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-muted-foreground">评审者</p>
-            <button onClick={() => setAddingReviewer(!addingReviewer)} className="text-muted-foreground hover:text-primary" title="添加评审者">
-              <UserPlus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          {addingReviewer && (
-            <AccountSearch
-              placeholder="搜索评审者姓名或邮箱..."
-              onSelect={(account) => { onAddReviewer(account, 'REVIEWER'); setAddingReviewer(false); }}
-              onCancel={() => setAddingReviewer(false)}
-            />
-          )}
-          {change.reviewers?.REVIEWER?.map((r) => (
-            <div key={r._account_id} className="flex items-center justify-between group text-xs text-foreground">
-              <div className="flex items-center gap-2">
-                <User className="h-3 w-3 text-muted-foreground" />
-                <a
-                  href={`${gerritUrl}/q/owner:${encodeURIComponent(r.email || r.username || getAccountName(r))}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-primary underline-offset-2 hover:underline"
-                >
-                  {getAccountName(r)}
-                </a>
-              </div>
-              <button onClick={() => onRemoveReviewer(r._account_id)} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-500 transition-opacity" title="移除">
-                <X className="h-3 w-3" />
-              </button>
+        <CardHeader className="px-4 py-3 border-b border-border/40">
+           <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            People
+           </CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 space-y-5">
+          {/* Reviewers */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Reviewers</span>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-5 w-5 text-muted-foreground hover:text-primary" 
+                onClick={() => setAddingReviewer(!addingReviewer)}
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+              </Button>
             </div>
-          ))}
+            
+            {addingReviewer && (
+              <div className="mb-2">
+                <AccountSearch
+                  placeholder="Search name or email..."
+                  onSelect={(account) => { onAddReviewer(account, 'REVIEWER'); setAddingReviewer(false); }}
+                  onCancel={() => setAddingReviewer(false)}
+                />
+              </div>
+            )}
+            
+            <div className="space-y-1">
+              {change.reviewers?.REVIEWER?.map((r) => (
+                <div key={r._account_id} className="flex items-center justify-between group text-sm">
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <a
+                      href={`${gerritUrl}/q/owner:${encodeURIComponent(r.email || r.username || getAccountName(r))}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="truncate hover:text-primary transition-colors"
+                      title={getAccountName(r)}
+                    >
+                      {getAccountName(r)}
+                    </a>
+                  </div>
+                  <button 
+                    onClick={() => onRemoveReviewer(r._account_id)} 
+                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-500 transition-opacity p-0.5"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+              {(!change.reviewers?.REVIEWER || change.reviewers.REVIEWER.length === 0) && (
+                <p className="text-xs text-muted-foreground italic pl-1">No reviewers</p>
+              )}
+            </div>
+          </div>
 
-          <div className="flex items-center justify-between mt-3">
-            <p className="text-xs font-medium text-muted-foreground">抄送</p>
-            <button onClick={() => setAddingCC(!addingCC)} className="text-muted-foreground hover:text-primary" title="添加抄送">
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          {addingCC && (
-            <AccountSearch
-              placeholder="搜索抄送人姓名或邮箱..."
-              onSelect={(account) => { onAddReviewer(account, 'CC'); setAddingCC(false); }}
-              onCancel={() => setAddingCC(false)}
-            />
-          )}
-          {change.reviewers?.CC?.map((r) => (
-            <div key={r._account_id} className="flex items-center justify-between group text-xs text-foreground/70">
-              <div className="flex items-center gap-2">
-                <User className="h-3 w-3 text-muted-foreground" />
-                <a
-                  href={`${gerritUrl}/q/owner:${encodeURIComponent(r.email || r.username || getAccountName(r))}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-primary underline-offset-2 hover:underline"
-                >
-                  {getAccountName(r)}
-                </a>
-              </div>
-              <button onClick={() => onRemoveReviewer(r._account_id)} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-500 transition-opacity" title="移除">
-                <X className="h-3 w-3" />
-              </button>
+          <Separator />
+
+          {/* CC */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">CC</span>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-5 w-5 text-muted-foreground hover:text-primary" 
+                onClick={() => setAddingCC(!addingCC)}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
             </div>
-          ))}
+
+            {addingCC && (
+              <div className="mb-2">
+                <AccountSearch
+                  placeholder="Search name or email..."
+                  onSelect={(account) => { onAddReviewer(account, 'CC'); setAddingCC(false); }}
+                  onCancel={() => setAddingCC(false)}
+                />
+              </div>
+            )}
+
+            <div className="space-y-1">
+              {change.reviewers?.CC?.map((r) => (
+                <div key={r._account_id} className="flex items-center justify-between group text-sm text-muted-foreground/80">
+                   <div className="flex items-center gap-2 overflow-hidden">
+                    <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <a
+                      href={`${gerritUrl}/q/owner:${encodeURIComponent(r.email || r.username || getAccountName(r))}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="truncate hover:text-primary transition-colors"
+                      title={getAccountName(r)}
+                    >
+                      {getAccountName(r)}
+                    </a>
+                  </div>
+                  <button 
+                    onClick={() => onRemoveReviewer(r._account_id)} 
+                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-500 transition-opacity p-0.5"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+              {(!change.reviewers?.CC || change.reviewers.CC.length === 0) && (
+                <p className="text-xs text-muted-foreground italic pl-1">No CCs</p>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Change metadata */}
+      {/* Change Info */}
       <Card>
-        <CardContent className="p-3 space-y-2 text-xs">
-          <p className="font-medium text-muted-foreground">变更信息</p>
-          <div className="flex justify-between"><span className="text-muted-foreground">Change-Id</span><span className="font-mono truncate ml-2">{change.change_id?.slice(0, 12)}...</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">创建时间</span><span>{formatGerritDate(change.created)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">更新时间</span><span>{formatGerritDate(change.updated)}</span></div>
-          {change.topic && <div className="flex justify-between"><span className="text-muted-foreground">Topic</span><span className="truncate ml-2">{change.topic}</span></div>}
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Diff</span>
-            <span>
-              <span className="text-green-600">+{totalInsertions}</span>
-              {' / '}
-              <span className="text-red-500">-{totalDeletions}</span>
-              {' · '}
-              {fileCount} files
+        <CardHeader className="px-4 py-3 border-b border-border/40">
+           <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Info className="h-4 w-4" />
+            Metadata
+           </CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 space-y-3 text-xs">
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Change-Id</span>
+            <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded truncate max-w-[140px]" title={change.change_id}>
+              {change.change_id?.slice(0, 12)}...
             </span>
           </div>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Created</span>
+            <span>{formatGerritDate(change.created)}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Updated</span>
+            <span>{formatGerritDate(change.updated)}</span>
+          </div>
+          {change.topic && (
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Topic</span>
+              <Badge variant="outline" className="text-[10px] h-5 font-normal">{change.topic}</Badge>
+            </div>
+          )}
+          <Separator className="my-2" />
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Diff</span>
+            <div className="flex items-center gap-2">
+              <span className="text-emerald-600 font-medium">+{totalInsertions}</span>
+              <span className="text-rose-500 font-medium">-{totalDeletions}</span>
+              <span className="text-muted-foreground">in {fileCount} files</span>
+            </div>
+          </div>
           {change.submittable !== undefined && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">可合入</span>
-              <span className={change.submittable ? 'text-green-600' : 'text-muted-foreground'}>
-                {change.submittable ? '是' : '否'}
-              </span>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Submittable</span>
+              <Badge variant={change.submittable ? "outline" : "secondary"} className={cn("text-[10px] h-5", change.submittable ? "text-green-600 border-green-200 bg-green-50" : "text-muted-foreground")}>
+                {change.submittable ? 'Yes' : 'No'}
+              </Badge>
             </div>
           )}
         </CardContent>

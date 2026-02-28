@@ -106,17 +106,17 @@ export function getTaskStatusColor(statusValue: string): string {
   switch (statusValue) {
     case TASK_STATUS.RESOLVED:
     case TASK_STATUS.EXCLUDED:
-      return 'text-green-700 bg-green-100';
+      return 'text-green-700 bg-green-100 dark:text-green-400 dark:bg-green-900/30';
     case TASK_STATUS.OPEN:
     case TASK_STATUS.WONTFIX:
-      return 'text-blue-700 bg-blue-100';
+      return 'text-blue-700 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30';
     case TASK_STATUS.NOT_BEGIN:
-      return 'text-neutral-700 bg-neutral-100';
+      return 'text-neutral-700 bg-neutral-100 dark:text-neutral-400 dark:bg-neutral-800/50';
     case TASK_STATUS.SPITE:
-      return 'text-orange-700 bg-orange-100';
+      return 'text-orange-700 bg-orange-100 dark:text-orange-400 dark:bg-orange-900/30';
     case TASK_STATUS.INVALID:
-      return 'text-red-700 bg-red-100';
+      return 'text-red-700 bg-red-100 dark:text-red-400 dark:bg-red-900/30';
     default:
-      return 'text-neutral-700 bg-neutral-100';
+      return 'text-neutral-700 bg-neutral-100 dark:text-neutral-400 dark:bg-neutral-800/50';
   }
 }

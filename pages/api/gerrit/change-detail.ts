@@ -28,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       : null;
 
     // Also fetch with other options in parallel
-    const [comments, files, related] = await Promise.all([
+    const [comments, files, relatedRes] = await Promise.all([
       client.get(`/changes/${changeId}/comments`).catch(() => ({})),
       // Get files for selected revision (optionally compared with a base patch set)
       filesPath
@@ -39,11 +39,44 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         : Promise.resolve({ changes: [] }),
     ]);
 
+    const related = relatedRes?.changes || [];
+
+    // Ensure related changes have subjects
+    // Some Gerrit versions/configs might not return full commit info in 'related'
+    const missingSubjectIds = related
+      .filter((rc: any) => !rc.subject && (!rc.commit || typeof rc.commit !== 'object' || !rc.commit.subject))
+      .map((rc: any) => rc._change_number)
+      .filter((id: any) => !!id);
+
+    if (missingSubjectIds.length > 0) {
+      // Chunk queries to avoid URL length limits
+      const CHUNK_SIZE = 20;
+      for (let i = 0; i < missingSubjectIds.length; i += CHUNK_SIZE) {
+        const chunk = missingSubjectIds.slice(i, i + CHUNK_SIZE);
+        const query = chunk.map((id: number) => `change:${id}`).join(' OR ');
+        try {
+          const infos = await client.queryChanges(query, []);
+          const infoMap = new Map(infos.map((info: any) => [info._number, info]));
+          
+          for (const rc of related) {
+            if (missingSubjectIds.includes(rc._change_number)) {
+              const info = infoMap.get(rc._change_number);
+              if (info && info.subject) {
+                rc.subject = info.subject;
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to backfill related subjects:', err);
+        }
+      }
+    }
+
     res.status(200).json({
       change,
       comments,
       files,
-      related: related?.changes || [],
+      related,
     });
   } catch (error: any) {
     console.error('Gerrit change detail error:', error);
