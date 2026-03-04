@@ -3,6 +3,8 @@ import { cn } from '@/lib/utils';
 import {
   formatGerritDate,
   getAccountName,
+  getLabelScoreColor,
+  getLabelScoreText,
 } from '@/lib/gerrit/helpers';
 import type { GerritChange } from '@/lib/gerrit/types';
 import { AiReviewPanel } from './AiReviewPanel';
@@ -56,6 +58,13 @@ export function ReviewSidebar({
 }: ReviewSidebarProps) {
   const [addingReviewer, setAddingReviewer] = useState(false);
   const [addingCC, setAddingCC] = useState(false);
+  const codeReviewLabel = change.labels?.['Code-Review'] || change.labels?.['Label-Code-Review'];
+  const reviewerScoreMap = new Map<number, number>();
+
+  for (const approval of codeReviewLabel?.all || []) {
+    if (!approval?._account_id || typeof approval.value !== 'number') continue;
+    reviewerScoreMap.set(approval._account_id, approval.value);
+  }
 
   return (
     <div className="w-80 shrink-0 hidden lg:block space-y-6">
@@ -123,6 +132,18 @@ export function ReviewSidebar({
                     >
                       {getAccountName(r)}
                     </a>
+                    {reviewerScoreMap.has(r._account_id) && (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'h-5 px-1.5 text-[10px] font-semibold',
+                          getLabelScoreColor(reviewerScoreMap.get(r._account_id) as number)
+                        )}
+                        title="Code-Review score"
+                      >
+                        {getLabelScoreText(reviewerScoreMap.get(r._account_id) as number)}
+                      </Badge>
+                    )}
                   </div>
                   <button 
                     onClick={() => onRemoveReviewer(r._account_id)} 

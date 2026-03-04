@@ -15,6 +15,7 @@ import {
   Plus,
   ClipboardList,
   Loader2,
+  ThumbsUp,
 } from 'lucide-react';
 
 import type { ApiBlogPost, BlogPost, PostsResponse } from '@/lib/blog/types';
@@ -30,13 +31,13 @@ import { ReportView } from '@/components/blog/ReportView';
 import { PostDetailView } from '@/components/blog/PostDetailView';
 import { CreateBlogView, CreateReportView } from '@/components/blog/BlogEditor';
 import { FeaturedCard, PostListItem } from '@/components/blog/PostCards';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { AutoLikeDialog } from '@/components/blog/AutoLikeDialog';
 import { cn } from '@/lib/utils';
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
+import { useAutoLike } from '@/hooks/useAutoLike';
 
 export default function BlogsPage() {
   const [currentView, setCurrentView] = useState<'landing' | 'tech' | 'report' | 'create' | 'create-report' | 'post-detail'>('landing');
@@ -219,6 +220,28 @@ export default function BlogsPage() {
   };
 
   const hasActiveFilters = selectedCategory || selectedTags.size > 0 || (sortOrder !== 'newest' && sortOrder !== 'recommended');
+  const refreshTechPosts = useCallback(async () => {
+    await refreshPostsAfterPublish('tech');
+  }, [refreshPostsAfterPublish]);
+
+  const {
+    autoLikeEnabled,
+    setAutoLikeEnabled,
+    autoLikeIntervalMinutes,
+    autoLikeRecords,
+    autoLikeStats,
+    showAutoLikeRecords,
+    setShowAutoLikeRecords,
+    autoLikeRunning,
+    autoLikeDialogOpen,
+    setAutoLikeDialogOpen,
+    runAutoLike,
+    clearAutoLikeRecords,
+    onIntervalInput,
+  } = useAutoLike({
+    fetchPosts,
+    refreshTechPosts,
+  });
 
   return (
     <div className="p-6 space-y-6 bg-background min-h-full">
@@ -255,6 +278,16 @@ export default function BlogsPage() {
             </nav>
           </div>
           <div className="flex items-center gap-3">
+            {(currentView === 'tech' || currentView === 'create') && (
+              <Button
+                onClick={() => setAutoLikeDialogOpen(true)}
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+              >
+                <ThumbsUp className="h-3.5 w-3.5" /> 随机点赞
+              </Button>
+            )}
             {(currentView === 'tech' || currentView === 'create') && (
               <Button
                 onClick={() => setCurrentView(currentView === 'create' ? 'tech' : 'create')}
@@ -296,6 +329,22 @@ export default function BlogsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <AutoLikeDialog
+        open={autoLikeDialogOpen}
+        onOpenChange={setAutoLikeDialogOpen}
+        autoLikeEnabled={autoLikeEnabled}
+        onAutoLikeEnabledChange={setAutoLikeEnabled}
+        autoLikeIntervalMinutes={autoLikeIntervalMinutes}
+        onAutoLikeIntervalChange={onIntervalInput}
+        autoLikeRunning={autoLikeRunning}
+        onRunNow={runAutoLike}
+        autoLikeStats={autoLikeStats}
+        autoLikeRecords={autoLikeRecords}
+        showAutoLikeRecords={showAutoLikeRecords}
+        onToggleRecords={() => setShowAutoLikeRecords((v) => !v)}
+        onClearRecords={clearAutoLikeRecords}
+      />
 
       {/* ── View: Landing ────────────────────────────────────────────── */}
       {currentView === 'landing' && (
@@ -591,4 +640,3 @@ export default function BlogsPage() {
     </div>
   );
 }
-

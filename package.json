@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start -p 9641",
     "lint": "next lint",
+    "smoke:auto-like": "npx ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\",\\\"moduleResolution\\\":\\\"node\\\"}\" scripts/smoke-auto-like.ts",
     "refresh-session": "npx ts-node --esm scripts/refresh-session.ts",
     "verify-refactor": "node scripts/verify-refactor.js"
   },
