@@ -12,6 +12,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { getRuntimeEnv } from '@/lib/settings/runtime-env';
 
 export const GERRIT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
 
@@ -128,9 +129,9 @@ export async function refreshGerritSession(): Promise<GerritCookieJar> {
 
   isRefreshing = true;
   refreshPromise = (async () => {
-    const gerritUrl = process.env.GERRIT_URL;
-    const username = process.env.LOGIN_USER;
-    const password = process.env.LOGIN_PASS;
+    const gerritUrl = getRuntimeEnv('GERRIT_URL');
+    const username = getRuntimeEnv('LOGIN_USER');
+    const password = getRuntimeEnv('LOGIN_PASS');
 
     if (!gerritUrl) throw new Error('GERRIT_URL is not configured');
     if (!username || !password) throw new Error('LOGIN_USER / LOGIN_PASS are not configured');
@@ -452,7 +453,7 @@ function persistSession(cookies: GerritCookieJar) {
 export function loadGerritSession(): GerritCookieJar | null {
   if (cachedSession?.JSESSIONID) return cachedSession;
 
-  const envSession = process.env.GERRIT_SESSION;
+  const envSession = getRuntimeEnv('GERRIT_SESSION');
   if (envSession) {
     const [jsessionid, gerritAccount, xsrfToken] = envSession.split('|');
     if (jsessionid) {

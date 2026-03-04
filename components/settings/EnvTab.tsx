@@ -80,12 +80,16 @@ export function EnvTab() {
 
   const loadEntries = useCallback(async () => {
     try {
-      const data = await httpGet<{ entries: EnvEntry[]; envLocalCreated?: boolean; needsSetup?: boolean }>('/api/settings/env');
+      const data = await httpGet<{ entries: EnvEntry[]; envLocalCreated?: boolean; needsSetup?: boolean; warnings?: string[] }>('/api/settings/env');
       setEntries(normalizeEnvEntries(data.entries || []));
       if (data.envLocalCreated) {
         toast.info('检测到缺失 .env.local，已自动创建模板。请先填写必填项并点击保存。');
       } else if (data.needsSetup) {
         toast.info('当前环境变量尚未配置完整，请补全必填项后保存。');
+      }
+      const loadWarning = data.warnings?.[0];
+      if (loadWarning) {
+        toast.info(`部分自动刷新未完成：${loadWarning}`);
       }
       await loadBlogBindingStatus();
     } catch {
@@ -108,7 +112,14 @@ export function EnvTab() {
     try {
       const normalizedEntries = normalizeEnvEntries(entries);
       setEntries(normalizedEntries);
-      await httpPost('/api/settings/env', { entries: normalizedEntries });
+      const result = await httpPost<{ entries?: EnvEntry[]; warnings?: string[] }>('/api/settings/env', { entries: normalizedEntries });
+      if (result.entries) {
+        setEntries(normalizeEnvEntries(result.entries));
+      }
+      const saveWarning = result.warnings?.[0];
+      if (saveWarning) {
+        toast.info(`部分自动刷新未完成：${saveWarning}`);
+      }
       toast.success('环境变量已保存');
     } catch (err: any) {
       toast.error(err.message || '保存失败');

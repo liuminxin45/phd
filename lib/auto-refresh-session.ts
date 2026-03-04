@@ -5,6 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { getRuntimeEnv } from '@/lib/settings/runtime-env';
 import {
   CookieJar,
   parseCookies,
@@ -29,9 +30,9 @@ export async function refreshPhabricatorSession(): Promise<{ phusr: string; phsi
 
   isRefreshing = true;
   refreshPromise = (async () => {
-    const host = process.env.PHA_HOST;
-    const username = process.env.LOGIN_USER;
-    const password = process.env.LOGIN_PASS;
+    const host = getRuntimeEnv('PHA_HOST');
+    const username = getRuntimeEnv('LOGIN_USER');
+    const password = getRuntimeEnv('LOGIN_PASS');
 
     if (!host || !username || !password) {
       throw new Error('Missing PHA_HOST, LOGIN_USER, or LOGIN_PASS environment variables');

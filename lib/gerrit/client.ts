@@ -8,6 +8,7 @@ import {
   GERRIT_UA,
   type GerritCookieJar,
 } from './session';
+import { getRuntimeEnv } from '@/lib/settings/runtime-env';
 
 export class GerritClient {
   private baseUrl: string;
@@ -158,7 +159,7 @@ export class GerritClient {
  *   LOGIN_PASS   — TP-Link CAS password
  */
 export async function createGerritClient(): Promise<GerritClient> {
-  const url = process.env.GERRIT_URL;
+  const url = getRuntimeEnv('GERRIT_URL');
   if (!url) throw new Error('GERRIT_URL is not configured');
 
   const cookies = await ensureGerritSession();

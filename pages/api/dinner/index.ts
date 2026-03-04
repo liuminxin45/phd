@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import {
   DINNER_BASE_URL,
   makeHeaders,
@@ -10,7 +11,8 @@ import {
 } from '@/lib/dinner/client';
 import type { ParsedDinnerData, DinnerUserData } from '@/lib/dinner/types';
 
-const CACHE_DIR = path.join(process.cwd(), 'data', 'dinner-cache');
+const CACHE_DIR = process.env.PHABDASH_DINNER_CACHE_DIR?.trim()
+  || path.join(os.tmpdir(), 'phabricator-dashboard', 'dinner-cache');
 
 // --- Cache ---
 

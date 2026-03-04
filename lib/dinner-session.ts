@@ -5,6 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { getRuntimeEnv } from '@/lib/settings/runtime-env';
 
 export interface DinnerCookieJar {
   SESSION?: string;
@@ -53,8 +54,8 @@ export async function refreshDinnerSession(): Promise<DinnerCookieJar> {
 
   isRefreshing = true;
   refreshPromise = (async () => {
-    const username = process.env.LOGIN_USER;
-    const password = process.env.LOGIN_PASS;
+    const username = getRuntimeEnv('LOGIN_USER');
+    const password = getRuntimeEnv('LOGIN_PASS');
 
     if (!username || !password) {
       throw new Error('Missing LOGIN_USER or LOGIN_PASS environment variables');
