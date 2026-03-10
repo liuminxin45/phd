@@ -31,6 +31,7 @@ import {
   ChevronDown,
   ChevronRight,
   FileText,
+  RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -86,6 +87,78 @@ function extractApiErrorMessage(err: any): string {
   return tail || raw;
 }
 
+interface ChangeDetailResponse {
+  change: GerritChange;
+  comments: Record<string, GerritCommentInfo[]>;
+  files: Record<string, GerritFileInfo>;
+  related: GerritRelatedChange[];
+}
+
+function buildFileEntries(filesMap: Record<string, GerritFileInfo>): FileEntry[] {
+  return Object.entries(filesMap || {})
+    .filter(([path]) => path !== '/COMMIT_MSG')
+    .map(([path, info]) => ({
+      path,
+      status: info.status || 'M',
+      linesInserted: info.lines_inserted || 0,
+      linesDeleted: info.lines_deleted || 0,
+      binary: info.binary || false,
+    }))
+    .sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function buildDetailSnapshotSignature(detail: ChangeDetailResponse): string {
+  const fileSignature = Object.entries(detail.files || {})
+    .map(([path, info]) => [
+      path,
+      info.status || 'M',
+      info.lines_inserted || 0,
+      info.lines_deleted || 0,
+      info.binary ? 1 : 0,
+    ].join(':'))
+    .sort()
+    .join('|');
+
+  const commentSignature = Object.entries(detail.comments || {})
+    .map(([path, list]) => {
+      const lastUpdated = (list || [])
+        .map((comment) => String(comment.updated || comment.id || ''))
+        .sort()
+        .at(-1) || '';
+      return `${path}:${list?.length || 0}:${lastUpdated}`;
+    })
+    .sort()
+    .join('|');
+
+  const relatedSignature = (detail.related || [])
+    .map((item) => `${item._change_number}:${item._revision_number}:${item.status}:${item.change_id || ''}`)
+    .sort()
+    .join('|');
+
+  const messageSignature = (detail.change.messages || [])
+    .map((message) => `${message.id}:${message.date}:${message.tag || ''}`)
+    .join('|');
+
+  const currentRevisionId = detail.change.current_revision;
+  const currentRevisionCommit =
+    currentRevisionId && detail.change.revisions?.[currentRevisionId]
+      ? detail.change.revisions[currentRevisionId].commit?.message
+      : undefined;
+
+  return JSON.stringify({
+    id: detail.change.id,
+    number: detail.change._number,
+    status: detail.change.status,
+    updated: detail.change.updated,
+    currentRevision: currentRevisionId,
+    selectedRevisionCommit: currentRevisionCommit,
+    messages: messageSignature,
+    files: fileSignature,
+    comments: commentSignature,
+    related: relatedSignature,
+  });
+}
+
 interface ChangeDetailProps {
   changeNumber: number;
   gerritUrl: string;
@@ -118,7 +191,10 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   const [showReviewDialog, setShowReviewDialog] = useState(false);
   const [relatedChanges, setRelatedChanges] = useState<GerritRelatedChange[]>([]);
   const [selectedRelatedKeys, setSelectedRelatedKeys] = useState<Set<string>>(new Set());
+  const [hasPendingUpdate, setHasPendingUpdate] = useState(false);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingDetailRef = useRef<ChangeDetailResponse | null>(null);
+  const detailSignatureRef = useRef<string | null>(null);
 
   // Inline comments state (accumulated per file before submission)
   const [pendingComments, setPendingComments] = useState<Record<string, { localKey: string; line: number; message: string; in_reply_to?: string; unresolved?: boolean }[]>>({});
@@ -128,19 +204,25 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     selectedRevisionId || change?.current_revision
   );
 
-  const fetchDetail = useCallback(async (options?: { silent?: boolean }) => {
+  const applyDetailResponse = useCallback((res: ChangeDetailResponse) => {
+    setChange(res.change);
+    setComments(res.comments || {});
+    setRelatedChanges(res.related || []);
+    setFiles(buildFileEntries(res.files || {}));
+    detailSignatureRef.current = buildDetailSnapshotSignature(res);
+    pendingDetailRef.current = null;
+    setHasPendingUpdate(false);
+  }, []);
+
+  const fetchDetail = useCallback(async (options?: { silent?: boolean; backgroundCheck?: boolean }) => {
     const silent = options?.silent ?? false;
+    const backgroundCheck = options?.backgroundCheck ?? false;
     if (!silent) {
       setLoading(true);
       setError(null);
     }
     try {
-      const res = await httpGet<{
-        change: GerritChange;
-        comments: Record<string, GerritCommentInfo[]>;
-        files: Record<string, GerritFileInfo>;
-        related: GerritRelatedChange[];
-      }>(
+      const res = await httpGet<ChangeDetailResponse>(
         '/api/gerrit/change-detail',
         {
           id: changeNumber,
@@ -148,28 +230,21 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
           base: compareMode ? baseRevisionId : undefined,
         }
       );
+      const nextSignature = buildDetailSnapshotSignature(res);
 
-      setChange(res.change);
-      setComments(res.comments || {});
-      setRelatedChanges(res.related || []);
+      if (backgroundCheck) {
+        if (detailSignatureRef.current && nextSignature !== detailSignatureRef.current) {
+          pendingDetailRef.current = res;
+          setHasPendingUpdate(true);
+        }
+        return;
+      }
 
-      // Convert files map to array
-      const fileEntries: FileEntry[] = Object.entries(res.files || {})
-        .filter(([path]) => path !== '/COMMIT_MSG')
-        .map(([path, info]) => ({
-          path,
-          status: info.status || 'M',
-          linesInserted: info.lines_inserted || 0,
-          linesDeleted: info.lines_deleted || 0,
-          binary: info.binary || false,
-        }))
-        .sort((a, b) => a.path.localeCompare(b.path));
-
-      setFiles(fileEntries);
+      applyDetailResponse(res);
     } catch (err: any) {
       if (!silent) {
         setError(err.message || 'Failed to load change detail');
-      } else {
+      } else if (!backgroundCheck) {
         toast.error(err.message || 'Failed to refresh change detail');
       }
     } finally {
@@ -177,12 +252,15 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
         setLoading(false);
       }
     }
-  }, [baseRevisionId, changeNumber, compareMode, selectedRevisionId]);
+  }, [applyDetailResponse, baseRevisionId, changeNumber, compareMode, selectedRevisionId]);
 
   useEffect(() => {
+    pendingDetailRef.current = null;
+    detailSignatureRef.current = null;
+    setHasPendingUpdate(false);
     void fetchDetail();
     refreshIntervalRef.current = setInterval(() => {
-      void fetchDetail({ silent: true });
+      void fetchDetail({ silent: true, backgroundCheck: true });
     }, 60_000);
     return () => {
       if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
@@ -728,6 +806,16 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     }
   }, [changeNumber, fetchDetail]);
 
+  const handleApplyPendingUpdate = useCallback(async () => {
+    if (pendingDetailRef.current) {
+      applyDetailResponse(pendingDetailRef.current);
+      toast.success('已刷新到最新提交详情');
+      return;
+    }
+    await fetchDetail({ silent: true });
+    toast.success('已刷新到最新提交详情');
+  }, [applyDetailResponse, fetchDetail]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -838,12 +926,12 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
                 <Separator className="my-5" />
 
                 {selectedRevisionCommitMessage && (
-                  <div className="mb-4 min-w-0 rounded-2xl border border-border/50 bg-muted/[0.018] px-4 py-3.5">
+                  <div className="mb-4 min-w-0 rounded-2xl border border-border/50 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.78))] px-4 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
                     <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
                       <FileText className="h-3.5 w-3.5" />
                       Commit Message
                     </div>
-                    <pre className="w-full whitespace-pre-wrap break-words font-mono text-[13px] leading-7 text-foreground/88 max-h-[min(42rem,calc(100vh-14rem))] overflow-y-auto">
+                    <pre className="review-commit-message max-h-[min(42rem,calc(100vh-14rem))] overflow-y-auto">
                       {selectedRevisionCommitMessage}
                     </pre>
                   </div>
@@ -1041,6 +1129,22 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
         availableLabels={availableLabels}
         submitting={submittingReview}
       />
+
+      {hasPendingUpdate && (
+        <div className="fixed bottom-20 left-6 z-40">
+          <Button
+            type="button"
+            onClick={() => {
+              void handleApplyPendingUpdate();
+            }}
+            className="h-auto min-h-11 rounded-full border border-sky-200/80 bg-white/96 px-4 py-2.5 text-slate-900 shadow-[0_14px_40px_rgba(14,116,144,0.18)] backdrop-blur supports-[backdrop-filter]:bg-white/86"
+            variant="outline"
+          >
+            <RefreshCw className="mr-2 h-4 w-4 text-sky-600" />
+            检测到更新，点击刷新
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

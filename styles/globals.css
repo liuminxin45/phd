@@ -218,4 +218,27 @@
   .diff-code .token.punctuation {
     color: rgb(51, 65, 85);
   }
+
+  .review-commit-message {
+    width: 100%;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+    color: hsl(var(--foreground) / 0.9);
+    font-size: 13px;
+    line-height: 1.5;
+    letter-spacing: 0.01em;
+    font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", "Source Han Serif SC", "Noto Serif SC", Georgia, serif;
+    max-width: 76ch;
+    text-wrap: pretty;
+  }
+
+  .review-commit-message::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  .review-commit-message::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 999px;
+  }
 }
