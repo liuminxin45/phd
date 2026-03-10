@@ -119,12 +119,9 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   const [relatedChanges, setRelatedChanges] = useState<GerritRelatedChange[]>([]);
   const [selectedRelatedKeys, setSelectedRelatedKeys] = useState<Set<string>>(new Set());
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const aiWorkspaceRef = useRef<HTMLDivElement | null>(null);
 
   // Inline comments state (accumulated per file before submission)
   const [pendingComments, setPendingComments] = useState<Record<string, { localKey: string; line: number; message: string; in_reply_to?: string; unresolved?: boolean }[]>>({});
-
-  // (Reviewer add/remove UI state moved to ReviewSidebar)
 
   const pendingCommentsStorageKey = buildPendingCommentsStorageKey(
     changeNumber,
@@ -731,11 +728,6 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     }
   }, [changeNumber, fetchDetail]);
 
-  const handleOpenAiWorkspace = useCallback(() => {
-    if (!aiWorkspaceRef.current) return;
-    aiWorkspaceRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, []);
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -766,6 +758,9 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
 
   const selectedRevisionNumber = selectedRevisionId && change.revisions?.[selectedRevisionId]
     ? change.revisions[selectedRevisionId]._number
+    : undefined;
+  const baseRevisionNumber = baseRevisionId && change.revisions?.[baseRevisionId]
+    ? change.revisions[baseRevisionId]._number
     : undefined;
 
   const baseRevisionCandidates = revisionsDesc
@@ -834,7 +829,6 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
                   }}
                   onSubmitMerge={handleSubmitMerge}
                   onOpenReviewDialog={() => setShowReviewDialog(true)}
-                  onOpenAiWorkspace={handleOpenAiWorkspace}
                   selectedPatchsetNumber={selectedRevisionNumber}
                   fileCount={files.length}
                   totalInsertions={totalInsertions}
@@ -858,7 +852,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
               </div>
 
               <aside className="space-y-3 xl:sticky xl:top-6">
-                <div ref={aiWorkspaceRef}>
+                <div>
                   <AiReviewWorkspace
                     changeNumber={changeNumber}
                     revisionId={selectedRevisionId}
@@ -943,6 +937,9 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
           files={files}
           onSelectFile={handleSelectFile}
           selectedFile={selectedFile}
+          compareMode={compareMode}
+          baseLabel={compareMode ? (baseRevisionNumber ? `PS${baseRevisionNumber}` : 'Parent') : undefined}
+          currentLabel={selectedRevisionNumber ? `PS${selectedRevisionNumber}` : 'Current'}
           totalInsertions={totalInsertions}
           totalDeletions={totalDeletions}
           currentDiff={currentDiff}

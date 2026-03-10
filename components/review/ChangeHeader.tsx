@@ -18,7 +18,6 @@ import {
   User,
   Loader2,
   RefreshCw,
-  Sparkles,
   MessageSquare,
   type LucideIcon,
 } from 'lucide-react';
@@ -33,7 +32,6 @@ interface ChangeHeaderProps {
   onRefresh: () => void;
   onSubmitMerge: () => void;
   onOpenReviewDialog: () => void;
-  onOpenAiWorkspace: () => void;
   selectedPatchsetNumber?: number;
   fileCount?: number;
   totalInsertions?: number;
@@ -50,7 +48,6 @@ export function ChangeHeader({
   onRefresh,
   onSubmitMerge,
   onOpenReviewDialog,
-  onOpenAiWorkspace,
   selectedPatchsetNumber,
   fileCount,
   totalInsertions,
@@ -71,7 +68,6 @@ export function ChangeHeader({
         
         <div className="flex flex-wrap items-center gap-2 self-start">
           <HeaderActionButton icon={MessageSquare} label="Review" onClick={onOpenReviewDialog} />
-          <HeaderActionButton icon={Sparkles} label="AI Review" onClick={onOpenAiWorkspace} />
 
           {canShowMerge && (
             <Button

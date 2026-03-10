@@ -1,6 +1,6 @@
 import { useRouter } from 'next/router';
 import { cn } from '@/lib/utils';
-import { getStatusColor, getStatusLabel } from '@/lib/gerrit/helpers';
+import { getLabelScoreColor, getLabelScoreText, getStatusColor, getStatusLabel } from '@/lib/gerrit/helpers';
 import type { GerritRelatedChange } from '@/lib/gerrit/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +26,18 @@ function getRelatedChangeSubject(rc: GerritRelatedChange): string {
     }
   }
   return `#${rc._change_number}`;
+}
+
+function getRelatedCodeReviewScore(rc: GerritRelatedChange): number | null {
+  const label = rc.labels?.['Code-Review'] || rc.labels?.['Label-Code-Review'];
+  if (!label?.all?.length) return null;
+
+  const numericVotes = label.all
+    .map((vote) => vote?.value)
+    .filter((value): value is number => typeof value === 'number');
+
+  if (numericVotes.length === 0) return null;
+  return Math.max(...numericVotes);
 }
 
 interface RelationChainProps {
@@ -149,6 +161,7 @@ export function RelationChain({
             const checked = selectedRelatedKeys.has(key);
             const commitSha = normalizeCommitSha((rc as any).commit);
             const subject = getRelatedChangeSubject(rc);
+            const codeReviewScore = getRelatedCodeReviewScore(rc);
             
             return (
               <div 
@@ -197,6 +210,19 @@ export function RelationChain({
                           <span className="font-mono flex items-center gap-0.5 text-muted-foreground/70" title={`SHA: ${commitSha}`}>
                             {commitSha.slice(0, 7)}
                           </span>
+                        )}
+
+                        {codeReviewScore !== null && (
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              'h-5 px-1.5 text-[10px] font-semibold',
+                              getLabelScoreColor(codeReviewScore)
+                            )}
+                            title="Code-Review"
+                          >
+                            CR {getLabelScoreText(codeReviewScore)}
+                          </Badge>
                         )}
                       </div>
                     </div>

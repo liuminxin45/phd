@@ -13,7 +13,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { getRuntimeEnv } from '@/lib/settings/runtime-env';
-import { gerritFetch } from './fetch';
+import { gerritFetch, type GerritFetchResponse } from './fetch';
 
 export const GERRIT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
 
@@ -158,7 +158,7 @@ export async function refreshGerritSession(): Promise<GerritCookieJar> {
       while (currentUrl && hop < MAX_HOPS) {
         hop++;
 
-        const res: Response = await gerritFetch(currentUrl, {
+        const res: GerritFetchResponse = await gerritFetch(currentUrl, {
           method: 'GET',
           headers: {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -194,7 +194,7 @@ export async function refreshGerritSession(): Promise<GerritCookieJar> {
 
           // Submit the form
           const formBody = new URLSearchParams(autoForm.fields);
-          const formRes: Response = await gerritFetch(autoForm.action, {
+          const formRes: GerritFetchResponse = await gerritFetch(autoForm.action, {
             method: autoForm.method,
             headers: {
               'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -259,7 +259,7 @@ export async function refreshGerritSession(): Promise<GerritCookieJar> {
       formData.append('_eventId', 'submit');
       formData.append('geolocation', '');
 
-      const loginRes: Response = await gerritFetch(casLoginUrl, {
+      const loginRes: GerritFetchResponse = await gerritFetch(casLoginUrl, {
         method: 'POST',
         headers: {
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -291,7 +291,7 @@ export async function refreshGerritSession(): Promise<GerritCookieJar> {
       while (currentUrl && hop < MAX_HOPS) {
         hop++;
 
-        const res: Response = await gerritFetch(currentUrl, {
+        const res: GerritFetchResponse = await gerritFetch(currentUrl, {
           method: 'GET',
           headers: {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',

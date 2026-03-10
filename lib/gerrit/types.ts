@@ -116,6 +116,7 @@ export interface GerritRelatedChange {
   status: 'NEW' | 'MERGED' | 'ABANDONED' | 'DRAFT';
   project?: string;
   branch?: string;
+  labels?: Record<string, GerritLabelInfo>;
 }
 
 export interface GerritCommentInfo {

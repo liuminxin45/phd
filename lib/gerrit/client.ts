@@ -8,7 +8,7 @@ import {
   GERRIT_UA,
   type GerritCookieJar,
 } from './session';
-import { gerritFetch } from './fetch';
+import { gerritFetch, type GerritFetchResponse } from './fetch';
 import { getRuntimeEnv } from '@/lib/settings/runtime-env';
 
 export class GerritClient {
@@ -27,7 +27,7 @@ export class GerritClient {
   /**
    * Gerrit REST responses are prefixed with ")]}'" to prevent XSSI.
    */
-  private async parseResponse<T>(response: Response): Promise<T> {
+  private async parseResponse<T>(response: GerritFetchResponse): Promise<T> {
     const text = await response.text();
     const cleaned = text.replace(/^\)\]\}'\n?/, '');
     if (!cleaned.trim()) return {} as T;
@@ -37,7 +37,7 @@ export class GerritClient {
   /**
    * Handle 401/403 by refreshing session and retrying once.
    */
-  private async fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+  private async fetchWithRetry(url: string, init: RequestInit): Promise<GerritFetchResponse> {
     let response = await gerritFetch(url, init);
 
     if (response.status === 401 || response.status === 403) {

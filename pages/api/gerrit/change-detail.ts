@@ -41,33 +41,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const related = relatedRes?.changes || [];
 
-    // Ensure related changes have subjects
-    // Some Gerrit versions/configs might not return full commit info in 'related'
-    const missingSubjectIds = related
-      .filter((rc: any) => !rc.subject && (!rc.commit || typeof rc.commit !== 'object' || !rc.commit.subject))
-      .map((rc: any) => rc._change_number)
-      .filter((id: any) => !!id);
+    // Some Gerrit versions/configs return partial related changes. Backfill
+    // subject + labels so the relation chain can be scanned without opening
+    // each change individually.
+    const relatedIds: number[] = Array.from(new Set(
+      related
+        .map((rc: any) => rc._change_number)
+        .filter((id: any): id is number => typeof id === 'number' && Number.isFinite(id))
+    ));
 
-    if (missingSubjectIds.length > 0) {
+    if (relatedIds.length > 0) {
       // Chunk queries to avoid URL length limits
       const CHUNK_SIZE = 20;
-      for (let i = 0; i < missingSubjectIds.length; i += CHUNK_SIZE) {
-        const chunk = missingSubjectIds.slice(i, i + CHUNK_SIZE);
+      for (let i = 0; i < relatedIds.length; i += CHUNK_SIZE) {
+        const chunk = relatedIds.slice(i, i + CHUNK_SIZE);
         const query = chunk.map((id: number) => `change:${id}`).join(' OR ');
         try {
-          const infos = await client.queryChanges(query, []);
+          const infos = await client.queryChanges(query, ['LABELS', 'DETAILED_LABELS']);
           const infoMap = new Map(infos.map((info: any) => [info._number, info]));
           
           for (const rc of related) {
-            if (missingSubjectIds.includes(rc._change_number)) {
-              const info = infoMap.get(rc._change_number);
-              if (info && info.subject) {
-                rc.subject = info.subject;
-              }
+            const info = infoMap.get(rc._change_number);
+            if (!info) continue;
+
+            if (!rc.subject && info.subject) {
+              rc.subject = info.subject;
+            }
+
+            if (!rc.labels && info.labels) {
+              rc.labels = info.labels;
             }
           }
         } catch (err) {
-          console.warn('Failed to backfill related subjects:', err);
+          console.warn('Failed to backfill related change metadata:', err);
         }
       }
     }

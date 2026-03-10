@@ -39,6 +39,20 @@ interface DiffLine {
   hiddenLines?: DiffLine[];
 }
 
+interface CompareLine {
+  type: 'row' | 'skip';
+  oldLine?: number;
+  newLine?: number;
+  leftContent: string;
+  rightContent: string;
+  leftTone: 'context' | 'removed' | 'empty';
+  rightTone: 'context' | 'added' | 'empty';
+  changed?: boolean;
+  skipCount?: number;
+  skipId?: string;
+  hiddenLines?: CompareLine[];
+}
+
 const CONTEXT_LINES = 5;
 const COMMENT_CONTEXT_LINES = 2;
 
@@ -121,6 +135,116 @@ function buildDiffLines(diff: GerritDiffInfo, emphasizedNewLines: Set<number>): 
           content: '',
           skipCount: skipped,
           skipId: `skip-${skipStart}-${i}`,
+          hiddenLines: allLines.slice(skipStart, i),
+        });
+      }
+    }
+  }
+
+  return result;
+}
+
+function buildCompareLines(diff: GerritDiffInfo, emphasizedNewLines: Set<number>): CompareLine[] {
+  const allLines: CompareLine[] = [];
+  let oldLine = 1;
+  let newLine = 1;
+
+  for (const chunk of diff.content) {
+    if (chunk.skip) {
+      for (let i = 0; i < chunk.skip; i++) {
+        allLines.push({
+          type: 'row',
+          oldLine,
+          newLine,
+          leftContent: '',
+          rightContent: '',
+          leftTone: 'context',
+          rightTone: 'context',
+        });
+        oldLine++;
+        newLine++;
+      }
+      continue;
+    }
+
+    if (chunk.ab) {
+      for (const line of chunk.ab) {
+        allLines.push({
+          type: 'row',
+          oldLine,
+          newLine,
+          leftContent: line,
+          rightContent: line,
+          leftTone: 'context',
+          rightTone: 'context',
+        });
+        oldLine++;
+        newLine++;
+      }
+    }
+
+    const removedLines = chunk.a || [];
+    const addedLines = chunk.b || [];
+    const rowCount = Math.max(removedLines.length, addedLines.length);
+
+    for (let i = 0; i < rowCount; i++) {
+      const leftContent = removedLines[i];
+      const rightContent = addedLines[i];
+      const rowOldLine = leftContent !== undefined ? oldLine++ : undefined;
+      const rowNewLine = rightContent !== undefined ? newLine++ : undefined;
+
+      allLines.push({
+        type: 'row',
+        oldLine: rowOldLine,
+        newLine: rowNewLine,
+        leftContent: leftContent || '',
+        rightContent: rightContent || '',
+        leftTone: leftContent !== undefined ? 'removed' : 'empty',
+        rightTone: rightContent !== undefined ? 'added' : 'empty',
+        changed: true,
+      });
+    }
+  }
+
+  const keep = new Uint8Array(allLines.length);
+  for (let i = 0; i < allLines.length; i++) {
+    const line = allLines[i];
+    if (line.changed) {
+      for (let j = Math.max(0, i - CONTEXT_LINES); j <= Math.min(allLines.length - 1, i + CONTEXT_LINES); j++) {
+        keep[j] = 1;
+      }
+    }
+  }
+
+  if (emphasizedNewLines.size > 0) {
+    for (let i = 0; i < allLines.length; i++) {
+      const line = allLines[i];
+      if (!line.newLine || !emphasizedNewLines.has(line.newLine)) continue;
+      for (let j = Math.max(0, i - COMMENT_CONTEXT_LINES); j <= Math.min(allLines.length - 1, i + COMMENT_CONTEXT_LINES); j++) {
+        keep[j] = 1;
+      }
+    }
+  }
+
+  const result: CompareLine[] = [];
+  let i = 0;
+  while (i < allLines.length) {
+    if (keep[i]) {
+      result.push(allLines[i]);
+      i++;
+    } else {
+      const skipStart = i;
+      while (i < allLines.length && !keep[i]) i++;
+      const skipped = i - skipStart;
+      if (skipped > 0) {
+        result.push({
+          type: 'skip',
+          leftContent: '',
+          rightContent: '',
+          leftTone: 'empty',
+          rightTone: 'empty',
+          skipCount: skipped,
+          skipId: `compare-skip-${skipStart}-${i}`,
           hiddenLines: allLines.slice(skipStart, i),
         });
       }
@@ -363,10 +487,11 @@ function InlineComment({
 
 // ─── Inline Comment Input ────────────────────────────────────────────────────
 
-function InlineCommentInput({ line, onSubmit, onCancel }: {
+function InlineCommentInput({ line, onSubmit, onCancel, colSpan = 3 }: {
   line: number;
   onSubmit: (line: number, message: string) => void;
   onCancel: () => void;
+  colSpan?: number;
 }) {
   const [text, setText] = useState('');
   const handleSubmit = () => {
@@ -376,7 +501,7 @@ function InlineCommentInput({ line, onSubmit, onCancel }: {
   };
   return (
     <tr>
-      <td colSpan={3} className="p-0 border-b border-border/50">
+      <td colSpan={colSpan} className="p-0 border-b border-border/50">
         <div className="mx-4 my-2 p-3 rounded-lg border border-primary/20 bg-primary/5 shadow-sm">
           <div className="flex items-center gap-2 mb-2 text-xs font-medium text-primary">
             <MessageSquare className="h-3.5 w-3.5" />
@@ -408,6 +533,9 @@ function InlineCommentInput({ line, onSubmit, onCancel }: {
 interface DiffViewerProps {
   diff: GerritDiffInfo | null;
   filePath: string;
+  compareMode?: boolean;
+  baseLabel?: string;
+  currentLabel?: string;
   comments?: GerritCommentInfo[];
   pendingComments?: PendingCommentData[];
   loading?: boolean;
@@ -478,7 +606,53 @@ function highlightDiffCode(content: string, filePath: string): string {
   return Prism.highlight(content, grammar, language);
 }
 
-export function DiffViewer({ diff, filePath, comments = [], pendingComments = [], loading, onAddComment, onReplyComment, onEditPendingComment, onDoneComment, onDeletePendingComment }: DiffViewerProps) {
+function getCompareToneClasses(tone: CompareLine['leftTone'] | CompareLine['rightTone']) {
+  if (tone === 'added') {
+    return {
+      number: 'diff-line-added text-foreground',
+      content: 'diff-line-added text-foreground',
+      placeholder: 'text-green-700/45',
+    };
+  }
+
+  if (tone === 'removed') {
+    return {
+      number: 'diff-line-removed text-foreground',
+      content: 'diff-line-removed text-foreground',
+      placeholder: 'text-red-700/45',
+    };
+  }
+
+  if (tone === 'empty') {
+    return {
+      number: 'bg-slate-50/90 text-muted-foreground/30',
+      content: 'bg-[linear-gradient(135deg,rgba(148,163,184,0.06),rgba(148,163,184,0.06)_8px,rgba(255,255,255,0.65)_8px,rgba(255,255,255,0.65)_16px)] text-muted-foreground/35',
+      placeholder: 'text-muted-foreground/35',
+    };
+  }
+
+  return {
+    number: 'text-muted-foreground/40',
+    content: 'text-foreground',
+    placeholder: 'text-muted-foreground/40',
+  };
+}
+
+export function DiffViewer({
+  diff,
+  filePath,
+  compareMode = false,
+  baseLabel = 'Base',
+  currentLabel = 'Current',
+  comments = [],
+  pendingComments = [],
+  loading,
+  onAddComment,
+  onReplyComment,
+  onEditPendingComment,
+  onDoneComment,
+  onDeletePendingComment,
+}: DiffViewerProps) {
   const [commentingLine, setCommentingLine] = useState<number | null>(null);
   const [expandedSkips, setExpandedSkips] = useState<Set<string>>(new Set());
   const prismLanguage = detectPrismLanguage(filePath);
@@ -583,6 +757,7 @@ export function DiffViewer({ diff, filePath, comments = [], pendingComments = []
     ...Array.from(pendingByLine.keys()),
   ]);
   const lines = buildDiffLines(diff, emphasizedLines);
+  const compareLines = compareMode ? buildCompareLines(diff, emphasizedLines) : [];
 
   const handleLineClick = (lineNum: number | undefined) => {
     if (!lineNum || !onAddComment) return;
@@ -681,8 +856,116 @@ export function DiffViewer({ diff, filePath, comments = [], pendingComments = []
             line={lineNum}
             onSubmit={handleCommentSubmit}
             onCancel={() => setCommentingLine(null)}
+            colSpan={3}
           />
         )}
+      </React.Fragment>
+    );
+  };
+
+  const renderCommentRows = (lineNum: number | undefined, key: string, colSpan: number) => {
+    const lineThreads = lineNum ? threadsByLine.get(lineNum) : undefined;
+    const linePending = lineNum ? pendingByLine.get(lineNum) : undefined;
+
+    return (
+      <>
+        {lineThreads && lineThreads.map((thread) => (
+          <tr key={`${key}-comment-thread-${thread.root.id}`}>
+            <td colSpan={colSpan} className="p-0 border-b border-border/50">
+              <InlineComment
+                filePath={filePath}
+                comment={thread.root}
+                threadReplies={thread.replies}
+                displayUnresolved={thread.unresolved}
+                replyTargetId={thread.latest.id}
+                pendingReplies={pendingRepliesByRoot.get(thread.root.id)}
+                onReply={onReplyComment}
+                onEditPending={onEditPendingComment}
+                onDeletePending={onDeletePendingComment ? (f, k) => onDeletePendingComment(k) : undefined}
+                onDone={onDoneComment}
+                onJumpToLine={(jumpFilePath, jumpLine) => {
+                  const lineEl = document.querySelector(`[data-diff-line="${jumpFilePath}:${jumpLine}"]`);
+                  if (lineEl) {
+                    lineEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    lineEl.classList.add('ring-2', 'ring-blue-400', 'ring-offset-1');
+                    setTimeout(() => lineEl.classList.remove('ring-2', 'ring-blue-400', 'ring-offset-1'), 1800);
+                  }
+                }}
+              />
+            </td>
+          </tr>
+        ))}
+        {linePending && linePending.map((c) => (
+          <tr key={`${key}-pending-${c.localKey}`}>
+            <td colSpan={colSpan} className="p-0 border-b border-border/50">
+              <PendingCommentDisplay
+                comment={c}
+                filePath={filePath}
+                onEdit={onEditPendingComment}
+                onDelete={onDeletePendingComment ? (f, k) => onDeletePendingComment(k) : undefined}
+              />
+            </td>
+          </tr>
+        ))}
+        {commentingLine === lineNum && lineNum && (
+          <InlineCommentInput
+            line={lineNum}
+            onSubmit={handleCommentSubmit}
+            onCancel={() => setCommentingLine(null)}
+            colSpan={colSpan}
+          />
+        )}
+      </>
+    );
+  };
+
+  const renderCompareRow = (line: CompareLine, key: string) => {
+    const rightLine = line.newLine;
+    const leftTone = getCompareToneClasses(line.leftTone);
+    const rightTone = getCompareToneClasses(line.rightTone);
+
+    return (
+      <React.Fragment key={key}>
+        <tr
+          className={cn('group transition-colors', line.changed && 'hover:brightness-[0.99]')}
+          data-diff-line={rightLine ? `${filePath}:${rightLine}` : undefined}
+        >
+          <td className={cn('w-14 text-right pr-3 pl-2 select-none border-r border-border/40 text-[11px] font-mono', leftTone.number)}>
+            {line.oldLine || ''}
+          </td>
+          <td className={cn('w-1/2 px-4 py-1 whitespace-pre font-mono text-[13px] leading-6 border-r border-border/40', leftTone.content)}>
+            {line.leftTone === 'empty' ? (
+              <span className={cn('font-mono italic', leftTone.placeholder)}>∅</span>
+            ) : (
+              <span
+                className={cn('diff-code', `language-${prismLanguage}`)}
+                dangerouslySetInnerHTML={{ __html: highlightDiffCode(line.leftContent || ' ', filePath) }}
+              />
+            )}
+          </td>
+          <td
+            className={cn(
+              'w-14 text-right pr-3 pl-2 select-none border-r border-border/40 text-[11px] font-mono transition-colors',
+              rightTone.number,
+              onAddComment && rightLine && 'cursor-pointer hover:bg-primary/10 hover:text-primary font-medium'
+            )}
+            onClick={() => handleLineClick(rightLine)}
+            title={onAddComment && rightLine ? `Click to comment on line ${rightLine}` : undefined}
+          >
+            {rightLine || ''}
+          </td>
+          <td className={cn('w-1/2 px-4 py-1 whitespace-pre font-mono text-[13px] leading-6', rightTone.content)}>
+            {line.rightTone === 'empty' ? (
+              <span className={cn('font-mono italic', rightTone.placeholder)}>∅</span>
+            ) : (
+              <span
+                className={cn('diff-code', `language-${prismLanguage}`)}
+                dangerouslySetInnerHTML={{ __html: highlightDiffCode(line.rightContent || ' ', filePath) }}
+              />
+            )}
+          </td>
+        </tr>
+        {renderCommentRows(rightLine, key, 4)}
       </React.Fragment>
     );
   };
@@ -704,13 +987,25 @@ export function DiffViewer({ diff, filePath, comments = [], pendingComments = []
       {/* Diff content */}
       <div className="overflow-x-auto bg-white/50">
         <table className="w-full border-collapse">
+          {compareMode && (
+            <thead className="bg-muted/[0.03] text-[11px] uppercase tracking-[0.08em] text-muted-foreground">
+              <tr>
+                <th className="w-14 border-r border-border/40 px-2 py-2 text-right font-medium">#</th>
+                <th className="w-1/2 border-r border-border/40 px-4 py-2 text-left font-medium">{baseLabel}</th>
+                <th className="w-14 border-r border-border/40 px-2 py-2 text-right font-medium">#</th>
+                <th className="w-1/2 px-4 py-2 text-left font-medium">{currentLabel}</th>
+              </tr>
+            </thead>
+          )}
           <tbody>
-            {lines.map((line, idx) => {
+            {(compareMode ? compareLines : lines).map((line, idx) => {
               if (line.type === 'skip') {
                 const isExpanded = !!line.skipId && expandedSkips.has(line.skipId);
                 if (isExpanded && line.hiddenLines) {
                   return line.hiddenLines.map((hiddenLine, hiddenIdx) =>
-                    renderDiffRow(hiddenLine, `expanded-${line.skipId}-${hiddenIdx}`)
+                    compareMode
+                      ? renderCompareRow(hiddenLine as CompareLine, `expanded-${line.skipId}-${hiddenIdx}`)
+                      : renderDiffRow(hiddenLine as DiffLine, `expanded-${line.skipId}-${hiddenIdx}`)
                   );
                 }
 
@@ -728,17 +1023,19 @@ export function DiffViewer({ diff, filePath, comments = [], pendingComments = []
                     }}
                     title="Expand hidden lines"
                   >
-                    <td colSpan={3} className="px-4 py-2 text-center">
+                    <td colSpan={compareMode ? 4 : 3} className="px-4 py-2 text-center">
                       <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground group-hover:text-primary transition-colors">
-                         <ChevronDown className="h-3 w-3" />
-                         <span>Show {line.skipCount} hidden lines</span>
+                        <ChevronDown className="h-3 w-3" />
+                        <span>Show {line.skipCount} hidden lines</span>
                       </div>
                     </td>
                   </tr>
                 );
               }
 
-              return renderDiffRow(line, `line-${idx}`);
+              return compareMode
+                ? renderCompareRow(line as CompareLine, `line-${idx}`)
+                : renderDiffRow(line as DiffLine, `line-${idx}`);
             })}
           </tbody>
         </table>
@@ -753,6 +1050,9 @@ interface FileListProps {
   files: FileEntry[];
   selectedFile: string | null;
   onSelectFile: (path: string) => void;
+  compareMode?: boolean;
+  baseLabel?: string;
+  currentLabel?: string;
   totalInsertions?: number;
   totalDeletions?: number;
   // Diff data for the currently expanded file
@@ -767,15 +1067,14 @@ interface FileListProps {
   onDeletePendingComment?: (filePath: string, localKey: string) => void;
   // Search
   onSearchFile?: (query: string) => void;
-  searchExpandedFile?: string | null;
   pendingCommentCounts?: Record<string, number>;
 }
 
 export function FileList({
-  files, selectedFile, onSelectFile, totalInsertions, totalDeletions,
+  files, selectedFile, onSelectFile, compareMode = false, baseLabel, currentLabel, totalInsertions, totalDeletions,
   currentDiff, loadingDiff, fileComments, onAddComment, onReplyComment, onEditPendingComment, onDoneComment,
   pendingCommentsByFile, onDeletePendingComment,
-  onSearchFile, searchExpandedFile, pendingCommentCounts,
+  onSearchFile, pendingCommentCounts,
 }: FileListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchActive, setSearchActive] = useState(false);
@@ -942,6 +1241,9 @@ export function FileList({
                   <DiffViewer
                     diff={currentDiff || null}
                     filePath={file.path}
+                    compareMode={compareMode}
+                    baseLabel={baseLabel}
+                    currentLabel={currentLabel}
                     comments={fileComments}
                     pendingComments={pendingCommentsByFile?.[file.path] || []}
                     loading={loadingDiff}
