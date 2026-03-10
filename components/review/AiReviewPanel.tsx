@@ -218,7 +218,7 @@ export function AiReviewPanel({
   // ── Not yet triggered ─────────────────────────────────────────────────────
   if (!isOpen && !result && !loading && !error) {
     return (
-      <Card className="border-dashed border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer" onClick={runReview}>
+      <Card className="border border-dashed border-primary/20 bg-primary/[0.03] hover:bg-primary/[0.05] shadow-none transition-colors cursor-pointer" onClick={runReview}>
         <CardContent className="p-3 flex items-center justify-center gap-2 text-sm font-medium text-primary">
           <Sparkles className="h-4 w-4" />
           <span>开始 AI 智能评审</span>
@@ -230,7 +230,7 @@ export function AiReviewPanel({
   // ── Loading state ─────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <Card>
+      <Card className="border border-border/60 shadow-none bg-card/95">
         <CardContent className="p-6 text-center space-y-3">
           <div className="flex justify-center">
              <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -245,7 +245,7 @@ export function AiReviewPanel({
   // ── Error state ───────────────────────────────────────────────────────────
   if (error) {
     return (
-      <Card className="border-red-200 bg-red-50">
+      <Card className="border border-red-200 bg-red-50 shadow-none">
         <CardContent className="p-4 space-y-2">
           <div className="flex items-center gap-2 text-sm font-medium text-red-700">
             <AlertTriangle className="h-4 w-4" />

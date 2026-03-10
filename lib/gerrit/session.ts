@@ -13,6 +13,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { getRuntimeEnv } from '@/lib/settings/runtime-env';
+import { gerritFetch } from './fetch';
 
 export const GERRIT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
 
@@ -157,7 +158,7 @@ export async function refreshGerritSession(): Promise<GerritCookieJar> {
       while (currentUrl && hop < MAX_HOPS) {
         hop++;
 
-        const res: Response = await fetch(currentUrl, {
+        const res: Response = await gerritFetch(currentUrl, {
           method: 'GET',
           headers: {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -193,7 +194,7 @@ export async function refreshGerritSession(): Promise<GerritCookieJar> {
 
           // Submit the form
           const formBody = new URLSearchParams(autoForm.fields);
-          const formRes: Response = await fetch(autoForm.action, {
+          const formRes: Response = await gerritFetch(autoForm.action, {
             method: autoForm.method,
             headers: {
               'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -258,7 +259,7 @@ export async function refreshGerritSession(): Promise<GerritCookieJar> {
       formData.append('_eventId', 'submit');
       formData.append('geolocation', '');
 
-      const loginRes: Response = await fetch(casLoginUrl, {
+      const loginRes: Response = await gerritFetch(casLoginUrl, {
         method: 'POST',
         headers: {
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -290,7 +291,7 @@ export async function refreshGerritSession(): Promise<GerritCookieJar> {
       while (currentUrl && hop < MAX_HOPS) {
         hop++;
 
-        const res: Response = await fetch(currentUrl, {
+        const res: Response = await gerritFetch(currentUrl, {
           method: 'GET',
           headers: {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -361,7 +362,7 @@ async function completeSamlFlow(
   if (relayState) callbackFormData.append('RelayState', relayState);
 
   const callbackUrl = samlCallbackUrl.includes('client_name=') ? samlCallbackUrl : `${samlCallbackUrl}?client_name=SAML2Client`;
-  const callbackRes = await fetch(callbackUrl, {
+  const callbackRes = await gerritFetch(callbackUrl, {
     method: 'POST',
     headers: {
       'Accept': 'text/html',
@@ -387,7 +388,7 @@ async function completeSamlFlow(
       ? nextLocation
       : `${gerritUrl}${nextLocation}`;
 
-    const redirectRes = await fetch(redirectUrl, {
+    const redirectRes = await gerritFetch(redirectUrl, {
       method: 'GET',
       headers: {
         'Accept': 'text/html',

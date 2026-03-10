@@ -74,15 +74,15 @@ export function AiRulesPanel() {
   if (loading) return null;
 
   return (
-    <Card className="border-l-4 border-l-slate-400/20">
-      <CardHeader className="px-4 py-3 bg-muted/20 border-b border-border/40">
+    <Card className="border border-border/60 shadow-none bg-card/95">
+      <CardHeader className="px-4 py-3 bg-muted/[0.03] border-b border-border/30">
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="w-full flex items-center justify-between group"
         >
           <div className="flex items-center gap-2">
             <Settings2 className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-            <CardTitle className="text-sm font-medium group-hover:text-foreground transition-colors">AI 规则配置</CardTitle>
+            <CardTitle className="text-[13px] font-medium group-hover:text-foreground transition-colors">AI 规则配置</CardTitle>
           </div>
           {isOpen ? (
             <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -119,7 +119,7 @@ export function AiRulesPanel() {
               onChange={(e) => setRules((prev) => ({ ...prev, customInstructions: e.target.value }))}
               placeholder="例如：重点关注并发安全，检查 SQL 注入风险..."
               rows={3}
-              className="text-xs resize-y min-h-[80px]"
+              className="text-xs resize-y min-h-[80px] shadow-none bg-muted/[0.02]"
             />
           </div>
 
@@ -147,7 +147,7 @@ export function AiRulesPanel() {
                 onChange={(e) => setNewFocus(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addFocusArea(); } }}
                 placeholder="添加关注领域 (例如：性能)..."
-                className="text-xs h-8"
+                className="text-xs h-8 shadow-none bg-muted/[0.02]"
               />
               <Button variant="outline" size="sm" className="h-8 px-2 shrink-0" onClick={addFocusArea}>
                 <Plus className="h-3.5 w-3.5" />
@@ -179,7 +179,7 @@ export function AiRulesPanel() {
                 onChange={(e) => setNewIgnore(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addIgnorePattern(); } }}
                 placeholder="添加模式 (例如：*.md, vendor/)..."
-                className="text-xs h-8 font-mono"
+                className="text-xs h-8 font-mono shadow-none bg-muted/[0.02]"
               />
               <Button variant="outline" size="sm" className="h-8 px-2 shrink-0" onClick={addIgnorePattern}>
                 <Plus className="h-3.5 w-3.5" />

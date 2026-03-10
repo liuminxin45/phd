@@ -8,6 +8,7 @@ import {
   GERRIT_UA,
   type GerritCookieJar,
 } from './session';
+import { gerritFetch } from './fetch';
 import { getRuntimeEnv } from '@/lib/settings/runtime-env';
 
 export class GerritClient {
@@ -37,7 +38,7 @@ export class GerritClient {
    * Handle 401/403 by refreshing session and retrying once.
    */
   private async fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
-    let response = await fetch(url, init);
+    let response = await gerritFetch(url, init);
 
     if (response.status === 401 || response.status === 403) {
       console.log('[GerritClient] Got 401/403, refreshing session...');
@@ -50,7 +51,7 @@ export class GerritClient {
         ...init,
         headers: { ...init.headers as Record<string, string>, 'Cookie': this.cookieHeader() },
       };
-      response = await fetch(url, retryInit);
+      response = await gerritFetch(url, retryInit);
     }
 
     if (!response.ok) {

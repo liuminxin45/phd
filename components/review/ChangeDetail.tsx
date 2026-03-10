@@ -18,15 +18,19 @@ import { FileList } from './DiffViewer';
 import { ChangeHeader } from './ChangeHeader';
 import { PatchSelector } from './PatchSelector';
 import { RelationChain } from './RelationChain';
-import { ReviewSidebar } from './ReviewSidebar';
+import { PeoplePanel } from './PeoplePanel';
+import { ReviewDialog } from './ReviewDialog';
+import { AiReviewWorkspace } from './AiReviewWorkspace';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import {
   MessageSquare,
   Loader2,
   ChevronDown,
   ChevronRight,
+  FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -111,9 +115,11 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   const [batchMerging, setBatchMerging] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
   const [showCommentHistory, setShowCommentHistory] = useState(false);
+  const [showReviewDialog, setShowReviewDialog] = useState(false);
   const [relatedChanges, setRelatedChanges] = useState<GerritRelatedChange[]>([]);
   const [selectedRelatedKeys, setSelectedRelatedKeys] = useState<Set<string>>(new Set());
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const aiWorkspaceRef = useRef<HTMLDivElement | null>(null);
 
   // Inline comments state (accumulated per file before submission)
   const [pendingComments, setPendingComments] = useState<Record<string, { localKey: string; line: number; message: string; in_reply_to?: string; unresolved?: boolean }[]>>({});
@@ -725,6 +731,11 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     }
   }, [changeNumber, fetchDetail]);
 
+  const handleOpenAiWorkspace = useCallback(() => {
+    if (!aiWorkspaceRef.current) return;
+    aiWorkspaceRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, []);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -804,50 +815,67 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     .sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || '')));
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-[1560px] space-y-5">
       {/* Top Section */}
       <div className="space-y-4">
-        <Card className="border-none shadow-sm">
-          <CardContent className="p-5">
-            <ChangeHeader
-              change={change}
-              gerritUrl={gerritUrl}
-              commitMessage={selectedRevisionCommitMessage}
-              canShowMerge={canShowMerge}
-              submittingMerge={submittingMerge}
-              submittingReview={submittingReview}
-              onBack={onBack}
-              onRefresh={() => {
-                void fetchDetail({ silent: true });
-              }}
-              onSubmitMerge={handleSubmitMerge}
-            />
+        <Card className="overflow-hidden rounded-[26px] border border-border/50 bg-background/95 shadow-[0_12px_36px_rgba(15,23,42,0.05)]">
+          <CardContent className="p-5 md:p-6">
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_19rem] xl:items-start">
+              <div className="min-w-0">
+                <ChangeHeader
+                  change={change}
+                  gerritUrl={gerritUrl}
+                  canShowMerge={canShowMerge}
+                  submittingMerge={submittingMerge}
+                  submittingReview={submittingReview}
+                  onBack={onBack}
+                  onRefresh={() => {
+                    void fetchDetail({ silent: true });
+                  }}
+                  onSubmitMerge={handleSubmitMerge}
+                  onOpenReviewDialog={() => setShowReviewDialog(true)}
+                  onOpenAiWorkspace={handleOpenAiWorkspace}
+                  selectedPatchsetNumber={selectedRevisionNumber}
+                  fileCount={files.length}
+                  totalInsertions={totalInsertions}
+                  totalDeletions={totalDeletions}
+                />
 
-            <PatchSelector
-              revisionsDesc={revisionsDesc}
-              selectedRevisionId={selectedRevisionId}
-              baseRevisionId={baseRevisionId}
-              compareMode={compareMode}
-              currentRevision={change.current_revision}
-              revisionCommentCounts={revisionCommentCounts}
-              baseRevisionCandidates={baseRevisionCandidates}
-              currentSubmitSignal={currentSubmitSignal}
-              onSelectRevision={(id) => {
-                setSelectedRevisionId(id);
-                setSelectedFile(null);
-                setCurrentDiff(null);
-              }}
-              onToggleCompare={() => {
-                setCompareMode((prev) => !prev);
-                setSelectedFile(null);
-                setCurrentDiff(null);
-              }}
-              onSelectBase={(id) => {
-                setBaseRevisionId(id);
-                setSelectedFile(null);
-                setCurrentDiff(null);
-              }}
-            />
+                <Separator className="my-5" />
+
+                {selectedRevisionCommitMessage && (
+                  <div className="mb-4 min-w-0 rounded-2xl border border-border/50 bg-muted/[0.018] px-4 py-3.5">
+                    <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                      <FileText className="h-3.5 w-3.5" />
+                      Commit Message
+                    </div>
+                    <pre className="w-full whitespace-pre-wrap break-words font-mono text-[13px] leading-7 text-foreground/88 max-h-[min(42rem,calc(100vh-14rem))] overflow-y-auto">
+                      {selectedRevisionCommitMessage}
+                    </pre>
+                  </div>
+                )}
+
+              </div>
+
+              <aside className="space-y-3 xl:sticky xl:top-6">
+                <div ref={aiWorkspaceRef}>
+                  <AiReviewWorkspace
+                    changeNumber={changeNumber}
+                    revisionId={selectedRevisionId}
+                    baseRevisionId={compareMode ? baseRevisionId : undefined}
+                    onAddDraftComment={handleAddAiDraftComment}
+                    onJumpToLine={jumpToDiffLine}
+                  />
+                </div>
+
+                <PeoplePanel
+                  change={change}
+                  gerritUrl={gerritUrl}
+                  onAddReviewer={handleAddReviewer}
+                  onRemoveReviewer={handleRemoveReviewer}
+                />
+              </aside>
+            </div>
           </CardContent>
         </Card>
 
@@ -877,128 +905,145 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
         )}
       </div>
 
-      {/* Two-column layout: Files + Diff on left, Review on right */}
-      <div className="flex flex-col lg:flex-row gap-6">
-        {/* Main content */}
-        <div className="flex-1 min-w-0 space-y-6">
-          <FileList
-            files={files}
-            onSelectFile={handleSelectFile}
-            selectedFile={selectedFile}
-            totalInsertions={totalInsertions}
-            totalDeletions={totalDeletions}
-            currentDiff={currentDiff}
-            loadingDiff={loadingDiff}
-            fileComments={fileComments}
-            onAddComment={handleAddInlineComment}
-            onReplyComment={handleReplyComment}
-            onEditPendingComment={handleEditPendingComment}
-            onDoneComment={handleResolveInlineComment}
-            pendingCommentsByFile={pendingComments}
-            onDeletePendingComment={handleDeletePendingComment}
-            onSearchFile={handleSearchFile}
-            pendingCommentCounts={Object.fromEntries(
-              Object.entries(pendingComments).map(([f, arr]) => [f, arr.length])
-            )}
-          />
-
-          {Object.keys(pendingComments).length > 0 && (
-            <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 shadow-sm">
-              <MessageSquare className="h-5 w-5 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <p className="text-sm font-medium">
-                  {Object.values(pendingComments).reduce((sum, arr) => sum + arr.length, 0)} pending comments
-                </p>
-                <p className="text-xs opacity-90">
-                  These comments are saved as drafts locally. They will be sent when you submit your review.
-                  You can review them in the file list or delete them individually.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {change.messages && change.messages.length > 0 && (
-            <Card>
-              <CardContent className="p-0">
-                <button
-                  onClick={() => setShowMessages(!showMessages)}
-                  className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
-                >
-                  <span className="flex items-center gap-2">
-                    <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                    Review History ({change.messages.length})
-                  </span>
-                  {showMessages ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                </button>
-                {showMessages && (
-                  <div className="border-t divide-y divide-border max-h-[500px] overflow-y-auto">
-                    {change.messages.map((msg) => (
-                      <MessageItem key={msg.id} message={msg} gerritUrl={gerritUrl} />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {commentEntries.length > 0 && (
-            <Card>
-              <CardContent className="p-0">
-                <button
-                  onClick={() => setShowCommentHistory(!showCommentHistory)}
-                  className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
-                >
-                  <span className="flex items-center gap-2">
-                    <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                    Comment Locator ({commentEntries.length})
-                  </span>
-                  {showCommentHistory ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                </button>
-                {showCommentHistory && (
-                  <div className="border-t divide-y divide-border max-h-80 overflow-y-auto">
-                    {commentEntries.map((c) => (
-                      <button
-                        key={`${c.id}-${c.path}`}
-                        onClick={() => jumpToCommentLocation(c.path, c.line, c.patch_set)}
-                        className="w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors group"
-                      >
-                        <div className="flex items-center gap-2 text-[11px] mb-1.5">
-                          <Badge variant="outline" className="text-[10px] bg-background">PS{c.patch_set || '?'}</Badge>
-                          <span className="font-mono text-foreground font-medium truncate max-w-[300px]" title={c.path}>{c.path}</span>
-                          {typeof c.line === 'number' && <span className="text-muted-foreground font-mono">L{c.line}</span>}
-                          <span className="text-muted-foreground ml-auto">{relativeTime(c.updated)}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground truncate group-hover:text-foreground transition-colors">{c.message}</p>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* Right sidebar */}
-        <ReviewSidebar
-          change={change}
-          gerritUrl={gerritUrl}
-          changeNumber={changeNumber}
+      <div className="space-y-5">
+        <PatchSelector
+          compact
+          revisionsDesc={revisionsDesc}
           selectedRevisionId={selectedRevisionId}
-          compareMode={compareMode}
           baseRevisionId={baseRevisionId}
-          availableLabels={availableLabels}
-          submittingReview={submittingReview}
+          compareMode={compareMode}
+          currentRevision={change.current_revision}
+          revisionCommentCounts={revisionCommentCounts}
+          baseRevisionCandidates={baseRevisionCandidates}
+          currentSubmitSignal={currentSubmitSignal}
+          onSelectRevision={(id) => {
+            setSelectedRevisionId(id);
+            setSelectedFile(null);
+            setCurrentDiff(null);
+          }}
+          onToggleCompare={() => {
+            setCompareMode((prev) => !prev);
+            setSelectedFile(null);
+            setCurrentDiff(null);
+          }}
+          onSelectBase={(id) => {
+            setBaseRevisionId(id);
+            setSelectedFile(null);
+            setCurrentDiff(null);
+          }}
+          onStartCompareWith={(id) => {
+            setCompareMode(true);
+            setBaseRevisionId(id);
+            setSelectedFile(null);
+            setCurrentDiff(null);
+          }}
+        />
+
+        <FileList
+          files={files}
+          onSelectFile={handleSelectFile}
+          selectedFile={selectedFile}
           totalInsertions={totalInsertions}
           totalDeletions={totalDeletions}
-          fileCount={files.length}
-          onSubmitReview={handleSubmitReview}
-          onTriggerInternalAgent={handleTriggerInternalAgent}
-          onAddDraftComment={handleAddAiDraftComment}
-          onJumpToLine={jumpToDiffLine}
-          onAddReviewer={handleAddReviewer}
-          onRemoveReviewer={handleRemoveReviewer}
+          currentDiff={currentDiff}
+          loadingDiff={loadingDiff}
+          fileComments={fileComments}
+          onAddComment={handleAddInlineComment}
+          onReplyComment={handleReplyComment}
+          onEditPendingComment={handleEditPendingComment}
+          onDoneComment={handleResolveInlineComment}
+          pendingCommentsByFile={pendingComments}
+          onDeletePendingComment={handleDeletePendingComment}
+          onSearchFile={handleSearchFile}
+          pendingCommentCounts={Object.fromEntries(
+            Object.entries(pendingComments).map(([f, arr]) => [f, arr.length])
+          )}
         />
+
+        {Object.keys(pendingComments).length > 0 && (
+          <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800 shadow-sm">
+            <MessageSquare className="mt-0.5 h-5 w-5 shrink-0" />
+            <div className="space-y-1">
+              <p className="text-sm font-medium">
+                {Object.values(pendingComments).reduce((sum, arr) => sum + arr.length, 0)} pending comments
+              </p>
+              <p className="text-xs opacity-90">
+                These comments are saved as drafts locally. They will be sent when you submit your review.
+                You can review them in the file list or delete them individually.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {change.messages && change.messages.length > 0 && (
+          <Card className="overflow-hidden rounded-2xl border-border/50 shadow-none">
+            <CardContent className="p-0">
+              <button
+                onClick={() => setShowMessages(!showMessages)}
+                className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                  Review History ({change.messages.length})
+                </span>
+                {showMessages ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+              </button>
+              {showMessages && (
+                <div className="border-t divide-y divide-border max-h-[500px] overflow-y-auto">
+                  {change.messages.map((msg) => (
+                    <MessageItem key={msg.id} message={msg} gerritUrl={gerritUrl} />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {commentEntries.length > 0 && (
+          <Card className="overflow-hidden rounded-2xl border-border/50 shadow-none">
+            <CardContent className="p-0">
+              <button
+                onClick={() => setShowCommentHistory(!showCommentHistory)}
+                className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                  Comment Locator ({commentEntries.length})
+                </span>
+                {showCommentHistory ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+              </button>
+              {showCommentHistory && (
+                <div className="border-t divide-y divide-border max-h-80 overflow-y-auto">
+                  {commentEntries.map((c) => (
+                    <button
+                      key={`${c.id}-${c.path}`}
+                      onClick={() => jumpToCommentLocation(c.path, c.line, c.patch_set)}
+                      className="w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors group"
+                    >
+                      <div className="flex items-center gap-2 text-[11px] mb-1.5">
+                        <Badge variant="outline" className="text-[10px] bg-background">PS{c.patch_set || '?'}</Badge>
+                        <span className="font-mono text-foreground font-medium truncate max-w-[300px]" title={c.path}>{c.path}</span>
+                        {typeof c.line === 'number' && <span className="text-muted-foreground font-mono">L{c.line}</span>}
+                        <span className="text-muted-foreground ml-auto">{relativeTime(c.updated)}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate group-hover:text-foreground transition-colors">{c.message}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
+
+      <ReviewDialog
+        open={showReviewDialog}
+        onOpenChange={setShowReviewDialog}
+        onSubmit={handleSubmitReview}
+        onTriggerInternalAgent={handleTriggerInternalAgent}
+        availableLabels={availableLabels}
+        submitting={submittingReview}
+      />
     </div>
   );
 }

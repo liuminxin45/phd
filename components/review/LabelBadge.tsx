@@ -29,9 +29,17 @@ export function LabelBadge({ name, label, compact }: LabelBadgeProps) {
                score === 0 ? <Minus className="h-3 w-3" /> : null;
 
   if (compact) {
+    const compactName = shortName === 'Code Review' ? 'CR' : shortName;
     return (
-      <span className={cn('inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-medium border', colorClass)}>
-        {shortName}{scoreText}
+      <span
+        className={cn(
+          'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] leading-none font-medium border',
+          colorClass
+        )}
+        title={`${shortName} ${scoreText}`}
+      >
+        {icon}
+        <span>{compactName} {scoreText}</span>
       </span>
     );
   }

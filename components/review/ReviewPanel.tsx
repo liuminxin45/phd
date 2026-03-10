@@ -74,9 +74,9 @@ export function ReviewPanel({ onSubmit, onTriggerInternalAgent, availableLabels 
   };
 
   return (
-    <Card className="border-l-4 border-l-primary/20">
-      <CardHeader className="px-4 py-3 border-b border-border/40">
-        <CardTitle className="text-sm font-medium flex items-center gap-2">
+    <Card className="border border-border/60 shadow-none bg-card/95">
+      <CardHeader className="px-4 py-3 border-b border-border/30">
+        <CardTitle className="text-[13px] font-medium flex items-center gap-2 text-foreground/85">
           <MessageSquare className="h-4 w-4" />
           Submit Review
         </CardTitle>
@@ -89,7 +89,7 @@ export function ReviewPanel({ onSubmit, onTriggerInternalAgent, availableLabels 
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Write your review comment..."
-            className="min-h-[100px] text-sm resize-y"
+            className="min-h-[92px] text-sm resize-y shadow-none bg-muted/[0.02]"
             disabled={submitting}
           />
           <p className="text-[10px] text-muted-foreground text-right">
@@ -123,10 +123,10 @@ export function ReviewPanel({ onSubmit, onTriggerInternalAgent, availableLabels 
                         });
                       }}
                       className={cn(
-                        'flex-1 h-8 rounded text-xs font-medium border transition-all',
+                        'flex-1 h-8 rounded-md text-xs font-medium border transition-all shadow-none',
                         isSelected
                           ? cn(colorClass, 'shadow-sm ring-1 ring-black/5')
-                          : 'border-border text-muted-foreground bg-muted/20 hover:bg-muted hover:text-foreground'
+                          : 'border-border/60 text-muted-foreground bg-muted/[0.03] hover:bg-muted/[0.08] hover:text-foreground'
                       )}
                       disabled={submitting}
                       title={score > 0 ? `+${score}` : `${score}`}
@@ -162,7 +162,7 @@ export function ReviewPanel({ onSubmit, onTriggerInternalAgent, availableLabels 
             value={agentTriggerMessage}
             onChange={(e) => handleAgentTriggerChange(e.target.value)}
             placeholder="例如：@AI2"
-            className="h-8 text-xs"
+            className="h-8 text-xs shadow-none bg-muted/[0.02]"
             disabled={submitting}
           />
           <p className="text-[10px] text-muted-foreground">点击按钮会发送一条评论以触发公司内部评审 Agent</p>

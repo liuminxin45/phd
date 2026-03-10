@@ -10,7 +10,7 @@ import type { GerritChange } from '@/lib/gerrit/types';
 import type { RiskLevel } from '@/lib/gerrit/ai-types';
 import { LabelsSummary } from './LabelBadge';
 import { AiRiskDot } from './AiRiskDot';
-import { MessageSquare, GitBranch, ExternalLink, User, Calendar, AlertCircle } from 'lucide-react';
+import { MessageSquare, GitBranch, ExternalLink, User, Calendar } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 
@@ -31,19 +31,22 @@ export function ChangeCard({ change, onClick, gerritUrl, showOwner = true, unrea
     <Card 
       onClick={onClick}
       className={cn(
-        "group cursor-pointer hover:shadow-md transition-all duration-200 border-l-4",
-        hasUnresolved ? "border-l-amber-400" : "border-l-transparent"
+        "group cursor-pointer transition-all duration-200 border border-border/60 shadow-none bg-card hover:border-border hover:bg-muted/[0.03]",
+        hasUnresolved && "border-l-2 border-l-amber-400"
       )}
     >
-      <CardContent className="p-3">
-        <div className="flex flex-col gap-2">
+      <CardContent className="p-3.5">
+        <div className="flex flex-col gap-2.5">
           {/* Top Row: Title & Primary Meta */}
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0 flex-1">
               {unread && <span className="h-2 w-2 rounded-full bg-red-500 shrink-0" aria-label="unread" />}
-              <h3 className="text-sm font-medium text-foreground group-hover:text-primary transition-colors leading-none truncate" title={change.subject}>
+              <h3 className="text-[15px] font-medium text-foreground group-hover:text-primary transition-colors leading-none truncate" title={change.subject}>
                 {change.subject}
               </h3>
+              <div className="shrink-0">
+                <LabelsSummary labels={change.labels} compact />
+              </div>
               
               {/* Meta: Owner & Date (Inline) */}
               <div className="hidden sm:flex items-center gap-3 text-xs text-muted-foreground ml-2 shrink-0">
@@ -75,7 +78,7 @@ export function ChangeCard({ change, onClick, gerritUrl, showOwner = true, unrea
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="text-muted-foreground/40 hover:text-primary transition-colors shrink-0"
+                className="shrink-0 opacity-0 pointer-events-none -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:pointer-events-auto group-hover:translate-x-0 text-muted-foreground/55 hover:text-foreground"
                 title="Open in Gerrit"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
@@ -86,7 +89,7 @@ export function ChangeCard({ change, onClick, gerritUrl, showOwner = true, unrea
           {/* Bottom Row: Status, Repo, Stats, Labels */}
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 text-xs text-muted-foreground flex-1 min-w-0 overflow-hidden">
-              <Badge variant="secondary" className={cn('px-1.5 py-0 text-[10px] font-medium rounded-sm shrink-0', getStatusColor(change.status))}>
+              <Badge variant="secondary" className={cn('px-1.5 py-0 text-[10px] font-medium rounded-md shrink-0 border border-transparent', getStatusColor(change.status))}>
                 {getStatusLabel(change.status)}
               </Badge>
 
@@ -105,7 +108,7 @@ export function ChangeCard({ change, onClick, gerritUrl, showOwner = true, unrea
                 <span className="truncate">{change.branch}</span>
               </span>
 
-              <div className="hidden xs:block h-3 w-px bg-border/60 shrink-0" />
+              <div className="hidden xs:block h-3 w-px bg-border/40 shrink-0" />
 
               <span className="hidden xs:flex items-center gap-1 font-mono text-[10px] shrink-0">
                 <span className="text-emerald-600">+{change.insertions || 0}</span>
@@ -116,17 +119,13 @@ export function ChangeCard({ change, onClick, gerritUrl, showOwner = true, unrea
 
               {(change.total_comment_count || 0) > 0 && (
                 <>
-                  <div className="h-3 w-px bg-border/60 shrink-0" />
+                  <div className="h-3 w-px bg-border/40 shrink-0" />
                   <span className={cn('flex items-center gap-1 shrink-0', hasUnresolved ? 'text-amber-600 font-medium' : '')}>
                     <MessageSquare className="h-3 w-3" />
                     {change.unresolved_comment_count || 0}/{change.total_comment_count}
                   </span>
                 </>
               )}
-            </div>
-
-            <div className="shrink-0">
-              <LabelsSummary labels={change.labels} compact />
             </div>
           </div>
         </div>

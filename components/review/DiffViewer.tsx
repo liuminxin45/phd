@@ -1,5 +1,23 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
+import Prism from 'prismjs';
+import 'prismjs/components/prism-bash';
+import 'prismjs/components/prism-c';
+import 'prismjs/components/prism-clike';
+import 'prismjs/components/prism-cmake';
+import 'prismjs/components/prism-cpp';
+import 'prismjs/components/prism-css';
+import 'prismjs/components/prism-go';
+import 'prismjs/components/prism-java';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-jsx';
+import 'prismjs/components/prism-markdown';
+import 'prismjs/components/prism-python';
+import 'prismjs/components/prism-rust';
+import 'prismjs/components/prism-tsx';
+import 'prismjs/components/prism-typescript';
+import 'prismjs/components/prism-yaml';
 import type { GerritDiffInfo, GerritCommentInfo, FileEntry } from '@/lib/gerrit/types';
 import { getAccountName } from '@/lib/gerrit/helpers';
 import { MessageSquare, ChevronDown, ChevronRight, Search, Trash2, Reply, Pencil, X, Check } from 'lucide-react';
@@ -400,9 +418,70 @@ interface DiffViewerProps {
   onDeletePendingComment?: (localKey: string) => void;
 }
 
+function getDiffRowTone(type: DiffLine['type']) {
+  if (type === 'added') {
+    return {
+      row: 'hover:brightness-[0.985]',
+      oldNumber: 'diff-line-added text-foreground',
+      newNumber: 'diff-line-added text-foreground',
+      contentCell: 'diff-line-added',
+      contentText: 'text-foreground',
+    };
+  }
+
+  if (type === 'removed') {
+    return {
+      row: 'hover:brightness-[0.985]',
+      oldNumber: 'diff-line-removed text-foreground',
+      newNumber: 'diff-line-removed text-foreground',
+      contentCell: 'diff-line-removed',
+      contentText: 'text-foreground',
+    };
+  }
+
+  return {
+    row: 'hover:bg-muted/30',
+    oldNumber: 'text-muted-foreground/40',
+    newNumber: 'text-muted-foreground/40',
+    contentCell: '',
+    contentText: '',
+  };
+}
+
+function detectPrismLanguage(filePath: string): string {
+  const normalized = filePath.toLowerCase();
+
+  if (normalized.endsWith('.tsx')) return 'tsx';
+  if (normalized.endsWith('.ts')) return 'typescript';
+  if (normalized.endsWith('.jsx')) return 'jsx';
+  if (normalized.endsWith('.js') || normalized.endsWith('.mjs') || normalized.endsWith('.cjs')) return 'javascript';
+  if (normalized.endsWith('.json')) return 'json';
+  if (normalized.endsWith('.yml') || normalized.endsWith('.yaml')) return 'yaml';
+  if (normalized.endsWith('.css')) return 'css';
+  if (normalized.endsWith('.html') || normalized.endsWith('.htm') || normalized.endsWith('.xml')) return 'markup';
+  if (normalized.endsWith('.md')) return 'markdown';
+  if (normalized.endsWith('.py')) return 'python';
+  if (normalized.endsWith('.java')) return 'java';
+  if (normalized.endsWith('.go')) return 'go';
+  if (normalized.endsWith('.rs')) return 'rust';
+  if (normalized.endsWith('.sh') || normalized.endsWith('.bash')) return 'bash';
+  if (normalized.endsWith('.c')) return 'c';
+  if (normalized.endsWith('.cc') || normalized.endsWith('.cpp') || normalized.endsWith('.cxx') || normalized.endsWith('.hpp') || normalized.endsWith('.h')) return 'cpp';
+  if (normalized.endsWith('cmakelists.txt') || normalized.endsWith('.cmake')) return 'cmake';
+
+  return 'clike';
+}
+
+function highlightDiffCode(content: string, filePath: string): string {
+  const language = detectPrismLanguage(filePath);
+  const grammar = Prism.languages[language] || Prism.languages.clike;
+  return Prism.highlight(content, grammar, language);
+}
+
 export function DiffViewer({ diff, filePath, comments = [], pendingComments = [], loading, onAddComment, onReplyComment, onEditPendingComment, onDoneComment, onDeletePendingComment }: DiffViewerProps) {
   const [commentingLine, setCommentingLine] = useState<number | null>(null);
   const [expandedSkips, setExpandedSkips] = useState<Set<string>>(new Set());
+  const prismLanguage = detectPrismLanguage(filePath);
 
   useEffect(() => {
     setExpandedSkips(new Set());
@@ -519,26 +598,26 @@ export function DiffViewer({ diff, filePath, comments = [], pendingComments = []
     const lineNum = line.newLine;
     const lineThreads = lineNum ? threadsByLine.get(lineNum) : undefined;
     const linePending = lineNum ? pendingByLine.get(lineNum) : undefined;
+    const tone = getDiffRowTone(line.type);
 
     return (
       <React.Fragment key={key}>
-        <tr className="group hover:bg-muted/30 transition-colors" data-diff-line={lineNum ? `${filePath}:${lineNum}` : undefined}>
+        <tr
+          className={cn('group transition-colors', tone.row)}
+          data-diff-line={lineNum ? `${filePath}:${lineNum}` : undefined}
+        >
           {/* Old line number */}
           <td className={cn(
-            'w-12 text-right pr-3 pl-2 select-none border-r border-border/40 text-[10px] font-mono',
-            line.type === 'added' ? 'bg-green-50/30' :
-            line.type === 'removed' ? 'bg-red-50/30 text-red-400' :
-            'text-muted-foreground/40'
+            'w-14 text-right pr-3 pl-2 select-none border-r border-border/40 text-[11px] font-mono',
+            tone.oldNumber
           )}>
             {line.oldLine || ''}
           </td>
           {/* New line number — clickable for comments */}
           <td
             className={cn(
-              'w-12 text-right pr-3 select-none border-r border-border/40 text-[10px] font-mono transition-colors',
-              line.type === 'added' ? 'bg-green-50/30 text-green-600' :
-              line.type === 'removed' ? 'bg-red-50/30' :
-              'text-muted-foreground/40',
+              'w-14 text-right pr-3 select-none border-r border-border/40 text-[11px] font-mono transition-colors',
+              tone.newNumber,
               onAddComment && lineNum && 'cursor-pointer hover:bg-primary/10 hover:text-primary font-medium'
             )}
             onClick={() => handleLineClick(lineNum)}
@@ -548,16 +627,13 @@ export function DiffViewer({ diff, filePath, comments = [], pendingComments = []
           </td>
           {/* Content */}
           <td className={cn(
-            'px-4 py-0.5 whitespace-pre font-mono text-[11px] leading-5',
-            line.type === 'added' && 'bg-green-50/40',
-            line.type === 'removed' && 'bg-red-50/40'
+            'px-4 py-1 whitespace-pre font-mono text-[13px] leading-6',
+            tone.contentCell
           )}>
-            <span className={cn(
-              line.type === 'added' && 'text-green-800 dark:text-green-400',
-              line.type === 'removed' && 'text-red-700 dark:text-red-400 opacity-70 line-through decoration-red-200'
-            )}>
-              {line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' '}{line.content}
-            </span>
+            <span
+              className={cn('diff-code', `language-${prismLanguage}`, tone.contentText)}
+              dangerouslySetInnerHTML={{ __html: highlightDiffCode(line.content || ' ', filePath) }}
+            />
           </td>
         </tr>
         {/* Existing comments on this line */}
@@ -705,6 +781,8 @@ export function FileList({
   const [searchActive, setSearchActive] = useState(false);
   const [highlightedFile, setHighlightedFile] = useState<string | null>(null);
   const fileHeaderRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const fileDiffRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const pendingScrollFileRef = useRef<string | null>(null);
 
   const handleSearch = () => {
     if (!searchQuery.trim()) return;
@@ -719,31 +797,54 @@ export function FileList({
 
   const handleToggleFile = (path: string, isExpanded: boolean) => {
     onSelectFile(path);
-    if (!isExpanded) return;
-
-    // After collapse layout is applied, scroll the same file header to top for context continuity.
-    requestAnimationFrame(() => {
+    if (isExpanded) {
+      pendingScrollFileRef.current = null;
       requestAnimationFrame(() => {
-        fileHeaderRefs.current[path]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        setHighlightedFile(path);
-        window.setTimeout(() => {
-          setHighlightedFile((prev) => (prev === path ? null : prev));
-        }, 1000);
+        requestAnimationFrame(() => {
+          fileHeaderRefs.current[path]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          setHighlightedFile(path);
+          window.setTimeout(() => {
+            setHighlightedFile((prev) => (prev === path ? null : prev));
+          }, 1000);
+        });
       });
-    });
+      return;
+    }
+
+    pendingScrollFileRef.current = path;
+    setHighlightedFile(path);
   };
 
+  useEffect(() => {
+    const targetPath = pendingScrollFileRef.current;
+    if (!targetPath || selectedFile !== targetPath || loadingDiff) return;
+
+    const target = fileDiffRefs.current[targetPath] || fileHeaderRefs.current[targetPath];
+    if (!target) return;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        window.setTimeout(() => {
+          setHighlightedFile((prev) => (prev === targetPath ? null : prev));
+        }, 1200);
+      });
+    });
+
+    pendingScrollFileRef.current = null;
+  }, [loadingDiff, selectedFile, currentDiff]);
+
   return (
-    <div className="border rounded-lg bg-card shadow-sm">
+    <div className="rounded-2xl border border-border/50 bg-card shadow-none overflow-hidden">
       {/* Header with search */}
-      <div className="px-4 py-3 bg-muted/20 border-b space-y-3">
-        <div className="flex items-center justify-between">
+      <div className="space-y-3 border-b border-border/50 bg-muted/[0.02] px-4 py-3.5">
+        <div className="flex items-center justify-between gap-3">
           <span className="text-sm font-semibold text-foreground">
             Files ({files.length})
           </span>
           <div className="flex items-center gap-2 text-xs font-mono">
-            {totalInsertions !== undefined && <span className="text-green-600 bg-green-50 px-1.5 py-0.5 rounded font-medium">+{totalInsertions}</span>}
-            {totalDeletions !== undefined && <span className="text-red-500 bg-red-50 px-1.5 py-0.5 rounded font-medium">-{totalDeletions}</span>}
+            {totalInsertions !== undefined && <span className="rounded-full bg-green-50 px-2 py-0.5 font-medium text-green-600">+{totalInsertions}</span>}
+            {totalDeletions !== undefined && <span className="rounded-full bg-red-50 px-2 py-0.5 font-medium text-red-500">-{totalDeletions}</span>}
           </div>
         </div>
         {/* Search bar */}
@@ -755,19 +856,19 @@ export function FileList({
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); if (e.key === 'Escape') handleClearSearch(); }}
               placeholder="Search file content..."
-              className="w-full pl-8 h-8 text-xs bg-background"
+              className="h-9 w-full rounded-xl border-border/60 bg-background pl-8 text-xs shadow-none"
             />
           </div>
           <Button
             onClick={handleSearch}
             disabled={!searchQuery.trim()}
             size="sm"
-            className="h-8 text-xs"
+            className="h-9 rounded-xl px-3 text-xs shadow-none"
           >
             Search
           </Button>
           {searchActive && (
-            <Button variant="ghost" onClick={handleClearSearch} size="sm" className="h-8 text-xs text-muted-foreground">
+            <Button variant="ghost" onClick={handleClearSearch} size="sm" className="h-9 rounded-xl px-3 text-xs text-muted-foreground">
               Clear
             </Button>
           )}
@@ -789,8 +890,8 @@ export function FileList({
                 }}
                 onClick={() => handleToggleFile(file.path, isExpanded)}
                 className={cn(
-                  'w-full flex items-center justify-between px-4 py-2.5 text-xs text-left transition-colors',
-                  isExpanded ? 'bg-card sticky top-0 z-20 shadow-sm border-b border-border' : 'hover:bg-muted/30',
+                  'w-full flex items-center justify-between px-4 py-3 text-xs text-left transition-colors',
+                  isExpanded ? 'sticky top-0 z-20 border-b border-border bg-card shadow-sm' : 'hover:bg-muted/[0.03]',
                   highlightedFile === file.path && 'ring-2 ring-primary/40 bg-primary/10'
                 )}
               >
@@ -832,7 +933,12 @@ export function FileList({
 
               {/* Inline diff (expanded) */}
               {isExpanded && (
-                <div className="border-b border-border/50 animate-in slide-in-from-top-2 duration-200">
+                <div
+                  ref={(el) => {
+                    fileDiffRefs.current[file.path] = el;
+                  }}
+                  className="border-b border-border/50 animate-in slide-in-from-top-2 duration-200 scroll-mt-24"
+                >
                   <DiffViewer
                     diff={currentDiff || null}
                     filePath={file.path}

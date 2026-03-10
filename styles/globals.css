@@ -167,4 +167,55 @@
   [data-sonner-toast] {
     @apply !overflow-visible relative;
   }
+
+  .diff-line-added {
+    background-color: rgb(170, 242, 170);
+  }
+
+  .diff-line-removed {
+    background-color: rgb(255, 205, 210);
+  }
+
+  .diff-code {
+    color: rgb(15, 23, 42);
+  }
+
+  .diff-code .token.comment,
+  .diff-code .token.prolog,
+  .diff-code .token.doctype,
+  .diff-code .token.cdata {
+    color: rgb(100, 116, 139);
+    font-style: italic;
+  }
+
+  .diff-code .token.keyword,
+  .diff-code .token.boolean,
+  .diff-code .token.atrule {
+    color: rgb(109, 40, 217);
+    font-weight: 600;
+  }
+
+  .diff-code .token.string,
+  .diff-code .token.char,
+  .diff-code .token.attr-value {
+    color: rgb(22, 163, 74);
+  }
+
+  .diff-code .token.function,
+  .diff-code .token.class-name,
+  .diff-code .token.property {
+    color: rgb(37, 99, 235);
+  }
+
+  .diff-code .token.number,
+  .diff-code .token.symbol,
+  .diff-code .token.constant,
+  .diff-code .token.inserted {
+    color: rgb(194, 65, 12);
+  }
+
+  .diff-code .token.operator,
+  .diff-code .token.punctuation {
+    color: rgb(51, 65, 85);
+  }
 }

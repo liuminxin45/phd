@@ -11,7 +11,7 @@ import {
   buildIssueVerificationPrompt,
 } from '@/lib/gerrit/ai-prompts';
 import type { GerritDiffInfo, GerritFileInfo } from '@/lib/gerrit/types';
-import type { AiReviewResult, AiOverview, AiIssue, AiFeedbackEntry } from '@/lib/gerrit/ai-types';
+import type { AiReviewResult, AiOverview, AiIssue, AiFeedbackEntry, AiTeamRules } from '@/lib/gerrit/ai-types';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -23,14 +23,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: '未配置 LLM 设置 (请在设置中配置)' });
   }
 
-  const { changeNumber, revisionId, baseRevisionId, feedbackEntries } = req.body;
+  const { changeNumber, revisionId, baseRevisionId, feedbackEntries, rulesOverride } = req.body;
   if (!changeNumber) {
     return res.status(400).json({ error: '缺少 changeNumber 参数' });
   }
 
   try {
     const gerritClient = await createGerritClient();
-    const teamRules = readTeamRules();
+    const storedRules = readTeamRules();
+    const teamRules: AiTeamRules = {
+      ...storedRules,
+      ...(rulesOverride && typeof rulesOverride === 'object' ? rulesOverride : {}),
+    };
     const llmUrl = normalizeLlmUrl(llmConfig.baseUrl);
     const normalizedFeedbackEntries: AiFeedbackEntry[] = Array.isArray(feedbackEntries)
       ? feedbackEntries.slice(0, 40).filter((entry: any) => !!entry?.value)

@@ -67,7 +67,7 @@ export function ReviewSidebar({
   }
 
   return (
-    <div className="w-80 shrink-0 hidden lg:block space-y-6">
+    <div className="w-[19rem] shrink-0 hidden lg:block space-y-4">
       {/* AI Analysis */}
       <AiReviewPanel
         changeNumber={changeNumber}
@@ -86,22 +86,22 @@ export function ReviewSidebar({
       />
 
       {/* People (Reviewers & CC) */}
-      <Card>
-        <CardHeader className="px-4 py-3 border-b border-border/40">
-           <CardTitle className="text-sm font-medium flex items-center gap-2">
+      <Card className="border border-border/60 shadow-none bg-card/95">
+        <CardHeader className="px-4 py-3 border-b border-border/30">
+           <CardTitle className="text-[13px] font-medium flex items-center gap-2 text-foreground/85">
             <Users className="h-4 w-4" />
             People
            </CardTitle>
         </CardHeader>
-        <CardContent className="p-4 space-y-5">
+        <CardContent className="p-4 space-y-4">
           {/* Reviewers */}
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Reviewers</span>
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="h-5 w-5 text-muted-foreground hover:text-primary" 
+                className="h-6 w-6 text-muted-foreground hover:text-primary rounded-md" 
                 onClick={() => setAddingReviewer(!addingReviewer)}
               >
                 <UserPlus className="h-3.5 w-3.5" />
@@ -120,7 +120,7 @@ export function ReviewSidebar({
             
             <div className="space-y-1">
               {change.reviewers?.REVIEWER?.map((r) => (
-                <div key={r._account_id} className="flex items-center justify-between group text-sm">
+                <div key={r._account_id} className="flex items-center justify-between group text-sm rounded-lg px-2 py-1.5 hover:bg-muted/[0.04]">
                   <div className="flex items-center gap-2 overflow-hidden">
                     <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <a
@@ -162,13 +162,13 @@ export function ReviewSidebar({
           <Separator />
 
           {/* CC */}
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">CC</span>
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="h-5 w-5 text-muted-foreground hover:text-primary" 
+                className="h-6 w-6 text-muted-foreground hover:text-primary rounded-md" 
                 onClick={() => setAddingCC(!addingCC)}
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -187,7 +187,7 @@ export function ReviewSidebar({
 
             <div className="space-y-1">
               {change.reviewers?.CC?.map((r) => (
-                <div key={r._account_id} className="flex items-center justify-between group text-sm text-muted-foreground/80">
+                <div key={r._account_id} className="flex items-center justify-between group text-sm text-muted-foreground/80 rounded-lg px-2 py-1.5 hover:bg-muted/[0.04]">
                    <div className="flex items-center gap-2 overflow-hidden">
                     <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <a
@@ -217,17 +217,17 @@ export function ReviewSidebar({
       </Card>
 
       {/* Change Info */}
-      <Card>
-        <CardHeader className="px-4 py-3 border-b border-border/40">
-           <CardTitle className="text-sm font-medium flex items-center gap-2">
+      <Card className="border border-border/60 shadow-none bg-card/95">
+        <CardHeader className="px-4 py-3 border-b border-border/30">
+           <CardTitle className="text-[13px] font-medium flex items-center gap-2 text-foreground/85">
             <Info className="h-4 w-4" />
             Metadata
            </CardTitle>
         </CardHeader>
-        <CardContent className="p-4 space-y-3 text-xs">
+        <CardContent className="p-4 space-y-2.5 text-xs">
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Change-Id</span>
-            <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded truncate max-w-[140px]" title={change.change_id}>
+            <span className="font-mono text-[10px] bg-muted/25 px-1.5 py-0.5 rounded-md truncate max-w-[140px]" title={change.change_id}>
               {change.change_id?.slice(0, 12)}...
             </span>
           </div>
@@ -242,7 +242,7 @@ export function ReviewSidebar({
           {change.topic && (
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Topic</span>
-              <Badge variant="outline" className="text-[10px] h-5 font-normal">{change.topic}</Badge>
+              <Badge variant="outline" className="text-[10px] h-5 font-normal rounded-md bg-muted/[0.03]">{change.topic}</Badge>
             </div>
           )}
           <Separator className="my-2" />
