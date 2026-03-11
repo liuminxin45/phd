@@ -227,7 +227,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    const reviewedIssues = issues
+    const verifiedIssues = issues
       .map((issue, index) => {
         const verification = verificationMap.get(index);
         if (!verification) return issue;
@@ -237,6 +237,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         };
       })
       .filter((issue) => issue.verification?.status !== 'rejected');
+
+    // Fallback: if verification aggressively rejects all findings, preserve first-pass issues.
+    const reviewedIssues = verifiedIssues.length > 0 || issues.length === 0
+      ? verifiedIssues
+      : issues;
 
     const result: AiReviewResult = {
       changeNumber,

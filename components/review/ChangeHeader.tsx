@@ -23,16 +23,19 @@ import {
   Sparkles,
   type LucideIcon,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface ChangeHeaderProps {
   change: GerritChange;
   gerritUrl: string;
   canShowMerge: boolean;
+  mergeReady?: boolean;
+  mergeHint?: string;
   submittingMerge: boolean;
   submittingReview: boolean;
   aiReviewRunning?: boolean;
   onBack: () => void;
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<boolean | void>;
   onSubmitMerge: () => void;
   onOpenReviewDialog: () => void;
   onOpenAiReviewDialog: () => void;
@@ -42,6 +45,8 @@ export function ChangeHeader({
   change,
   gerritUrl,
   canShowMerge,
+  mergeReady = false,
+  mergeHint,
   submittingMerge,
   submittingReview,
   aiReviewRunning = false,
@@ -56,8 +61,37 @@ export function ChangeHeader({
   const handleCopyGerritLink = async () => {
     try {
       await navigator.clipboard.writeText(gerritChangeUrl);
+      toast.success('Gerrit 链接已复制');
     } catch {
-      // ignore clipboard failures
+      toast.error('复制失败，请手动复制链接');
+    }
+  };
+
+  const handleOpenGerrit = () => {
+    const newWindow = window.open(gerritChangeUrl, '_blank', 'noopener,noreferrer');
+    if (newWindow) {
+      toast.success('已在新窗口打开 Gerrit');
+    } else {
+      toast.error('打开失败，请检查浏览器弹窗设置');
+    }
+  };
+
+  const handleOpenReview = () => {
+    onOpenReviewDialog();
+  };
+
+  const handleOpenAiReview = () => {
+    onOpenAiReviewDialog();
+  };
+
+  const handleRefresh = async () => {
+    try {
+      const result = await onRefresh();
+      if (result !== false) {
+        toast.success('提交详情已刷新');
+      }
+    } catch {
+      toast.error('刷新失败，请稍后重试');
     }
   };
 
@@ -78,12 +112,12 @@ export function ChangeHeader({
           <HeaderActionButton
             icon={Sparkles}
             label={aiReviewRunning ? 'AI Review Running' : 'Start Review'}
-            onClick={onOpenAiReviewDialog}
+            onClick={handleOpenAiReview}
             disabled={aiReviewRunning}
             animate={aiReviewRunning}
           />
           
-          <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none" onClick={onRefresh} title="Refresh">
+          <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none" onClick={handleRefresh} title="Refresh">
             <RefreshCw className="h-4 w-4" />
           </Button>
 
@@ -97,27 +131,21 @@ export function ChangeHeader({
             <Copy className="h-3.5 w-3.5" />
           </Button>
           
-          <a
-            href={gerritChangeUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex"
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none"
+            title="Open in Gerrit"
+            onClick={handleOpenGerrit}
           >
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none"
-              title="Open in Gerrit"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-            </Button>
-          </a>
+            <ExternalLink className="h-3.5 w-3.5" />
+          </Button>
 
           <Button
             variant="default"
             size="icon"
             className="h-9 w-9 rounded-xl shadow-none"
-            onClick={onOpenReviewDialog}
+            onClick={handleOpenReview}
             title="Review"
           >
             <MessageSquare className="h-3.5 w-3.5" />
@@ -125,12 +153,17 @@ export function ChangeHeader({
 
           {canShowMerge && (
             <Button
-              variant="destructive"
+              variant="outline"
               size="icon"
-              className="h-9 w-9 rounded-xl shadow-none"
+              className={cn(
+                "h-9 w-9 rounded-xl shadow-none border",
+                mergeReady
+                  ? "border-emerald-300 bg-emerald-500 text-white hover:bg-emerald-600"
+                  : "border-red-300 bg-red-500 text-white hover:bg-red-600"
+              )}
               onClick={onSubmitMerge}
               disabled={submittingMerge || submittingReview || change.status !== 'NEW'}
-              title={submittingMerge ? 'Merging...' : 'Merge'}
+              title={submittingMerge ? 'Merging...' : (mergeHint || 'Merge')}
             >
               {submittingMerge ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />

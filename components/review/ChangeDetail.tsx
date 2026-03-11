@@ -24,7 +24,18 @@ import { AiReviewWorkspace } from './AiReviewWorkspace';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useUser } from '@/contexts/UserContext';
 import type { AiReviewResult } from '@/lib/gerrit/ai-types';
 import { RISK_LEVEL_META } from '@/lib/gerrit/ai-types';
@@ -61,6 +72,35 @@ function buildPendingLocalKey(prefix: string): string {
 
 function buildPendingCommentsStorageKey(changeNumber: number, revisionId?: string): string {
   return `review-pending-comments:${changeNumber}:${revisionId || 'current'}`;
+}
+
+interface PendingDraftComment {
+  localKey: string;
+  line: number;
+  message: string;
+  in_reply_to?: string;
+  unresolved?: boolean;
+}
+
+type PendingDraftMap = Record<string, PendingDraftComment[]>;
+
+interface PendingDraftLocalSnapshot {
+  comments: PendingDraftMap;
+  updatedAt: string;
+}
+
+function parsePendingDraftStorage(raw: string | null): PendingDraftMap {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+    if (parsed.comments && typeof parsed.comments === 'object') {
+      return parsed.comments as PendingDraftMap;
+    }
+    return parsed as PendingDraftMap;
+  } catch {
+    return {};
+  }
 }
 
 function clearPendingCommentsStorageForChange(changeNumber: number): void {
@@ -107,6 +147,95 @@ function extractApiErrorMessage(err: any): string {
   return tail || raw;
 }
 
+interface MergeGuardState {
+  ready: boolean;
+  reasons: string[];
+  hint: string;
+  hasExternalPlusOne: boolean;
+  hasExternalMinusOne: boolean;
+  unresolvedCount: number;
+}
+
+function computeMergeGuard(change: GerritChange | null): MergeGuardState {
+  if (!change) {
+    return {
+      ready: false,
+      reasons: ['变更详情未加载完成'],
+      hint: '变更详情未加载完成',
+      hasExternalPlusOne: false,
+      hasExternalMinusOne: false,
+      unresolvedCount: 0,
+    };
+  }
+
+  const unresolvedCount = Math.max(0, change.unresolved_comment_count || 0);
+  const owner = change.owner;
+  const ownerId = owner?._account_id;
+  const ownerEmail = owner?.email?.trim().toLowerCase();
+  const ownerName = getAccountName(owner).trim();
+
+  const resolveName = (account: { name?: string; username?: string; email?: string } | undefined): string => {
+    if (!account) return '';
+    return (account.name || account.username || account.email || '').trim();
+  };
+
+  const normalizeReviewerKey = (account: { _account_id?: number; email?: string; name?: string; username?: string } | undefined): string => {
+    if (!account) return '';
+    if (typeof account._account_id === 'number') return `id:${account._account_id}`;
+    if (account.email) return `email:${account.email.trim().toLowerCase()}`;
+    const name = resolveName(account).toLowerCase();
+    return name ? `name:${name}` : '';
+  };
+
+  const isOwner = (account: { _account_id?: number; email?: string; name?: string; username?: string } | undefined): boolean => {
+    if (!account) return false;
+    if (typeof ownerId === 'number' && typeof account._account_id === 'number' && account._account_id === ownerId) return true;
+    const email = account.email?.trim().toLowerCase();
+    if (ownerEmail && email && ownerEmail === email) return true;
+    const name = resolveName(account);
+    if (ownerName && name && ownerName === name) return true;
+    return false;
+  };
+
+  const latestVotesByReviewer = new Map<string, number>();
+  const messagesAsc = [...(change.messages || [])].sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  for (const message of messagesAsc) {
+    const author = message.author || message.real_author;
+    if (!author || isOwner(author)) continue;
+    const matched = String(message.message || '').match(/Code-Review([+-]\d)\b/i);
+    if (!matched) continue;
+    const vote = Number(matched[1]);
+    if (!Number.isFinite(vote)) continue;
+    const reviewerKey = normalizeReviewerKey(author);
+    if (!reviewerKey) continue;
+    latestVotesByReviewer.set(reviewerKey, vote);
+  }
+
+  const reviewerVotes = Array.from(latestVotesByReviewer.values());
+  const hasExternalPlusOne = reviewerVotes.some((vote) => vote >= 1);
+  const hasExternalMinusOne = reviewerVotes.some((vote) => vote <= -1);
+
+  const reasons: string[] = [];
+  if (unresolvedCount > 0) {
+    reasons.push(`仍有 ${unresolvedCount} 条 unresolved 评论`);
+  }
+  if (!hasExternalPlusOne && hasExternalMinusOne) {
+    reasons.push('存在 Reviewer 最新投票为 -1，且当前没有非提交者 +1/+2');
+  }
+  if (!hasExternalPlusOne) {
+    reasons.push('当前没有非提交者 Code-Review +1/+2');
+  }
+
+  return {
+    ready: reasons.length === 0,
+    reasons,
+    hint: reasons.length === 0 ? '满足合并前置条件，点击后仍需二次确认' : reasons[0],
+    hasExternalPlusOne,
+    hasExternalMinusOne,
+    unresolvedCount,
+  };
+}
+
 function waitForElement(selector: string, timeoutMs = 2500, intervalMs = 60): Promise<Element | null> {
   return new Promise((resolve) => {
     const start = Date.now();
@@ -145,6 +274,19 @@ interface UnresolvedThreadTarget {
   line: number;
   patchSet: number | undefined;
   updated: string;
+}
+
+interface CommentLocatorEntry {
+  rootId: string;
+  latestId: string;
+  path: string;
+  line: number | undefined;
+  patchSet: number | undefined;
+  updated: string;
+  message: string;
+  authorName: string;
+  participantNames: string[];
+  unresolved: boolean;
 }
 
 interface PendingCommentJumpTarget {
@@ -248,8 +390,13 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   const [batchMerging, setBatchMerging] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
   const [showCommentHistory, setShowCommentHistory] = useState(false);
+  const [historyQuery, setHistoryQuery] = useState('');
+  const [locatorQuery, setLocatorQuery] = useState('');
+  const [locatorOnlyUnresolved, setLocatorOnlyUnresolved] = useState(false);
   const [showReviewDialog, setShowReviewDialog] = useState(false);
   const [showAiReviewDialog, setShowAiReviewDialog] = useState(false);
+  const [showMergeConfirmDialog, setShowMergeConfirmDialog] = useState(false);
+  const [mergeDialogMode, setMergeDialogMode] = useState<'confirm' | 'warning'>('confirm');
   const [relatedChanges, setRelatedChanges] = useState<GerritRelatedChange[]>([]);
   const [selectedRelatedKeys, setSelectedRelatedKeys] = useState<Set<string>>(new Set());
   const [hasPendingUpdate, setHasPendingUpdate] = useState(false);
@@ -261,9 +408,10 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const pendingDetailRef = useRef<ChangeDetailResponse | null>(null);
   const detailSignatureRef = useRef<string | null>(null);
+  const pendingDraftPersistTimerRef = useRef<number | null>(null);
 
   // Inline comments state (accumulated per file before submission)
-  const [pendingComments, setPendingComments] = useState<Record<string, { localKey: string; line: number; message: string; in_reply_to?: string; unresolved?: boolean }[]>>({});
+  const [pendingComments, setPendingComments] = useState<PendingDraftMap>({});
   const [commitMessageTypos, setCommitMessageTypos] = useState<CommitMessageTypoIssue[]>([]);
   const [checkingCommitMessage, setCheckingCommitMessage] = useState(false);
   const commitMessageCheckCacheRef = useRef<Record<string, CommitMessageTypoIssue[]>>({});
@@ -425,7 +573,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     setHasPendingUpdate(false);
   }, []);
 
-  const fetchDetail = useCallback(async (options?: { silent?: boolean; backgroundCheck?: boolean }) => {
+  const fetchDetail = useCallback(async (options?: { silent?: boolean; backgroundCheck?: boolean }): Promise<boolean> => {
     const silent = options?.silent ?? false;
     const backgroundCheck = options?.backgroundCheck ?? false;
     if (!silent) {
@@ -448,16 +596,18 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
           pendingDetailRef.current = res;
           setHasPendingUpdate(true);
         }
-        return;
+        return true;
       }
 
       applyDetailResponse(res);
+      return true;
     } catch (err: any) {
       if (!silent) {
         setError(err.message || 'Failed to load change detail');
       } else if (!backgroundCheck) {
         toast.error(err.message || 'Failed to refresh change detail');
       }
+      return false;
     } finally {
       if (!silent) {
         setLoading(false);
@@ -514,31 +664,91 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    try {
-      const raw = localStorage.getItem(pendingCommentsStorageKey);
-      if (!raw) {
-        setPendingComments({});
+    let cancelled = false;
+
+    const hydratePendingDrafts = async () => {
+      let localRaw: string | null = null;
+      try {
+        localRaw = localStorage.getItem(pendingCommentsStorageKey);
+      } catch {
+        localRaw = null;
+      }
+      const localDrafts = parsePendingDraftStorage(localRaw);
+      const hasLocalDrafts = Object.values(localDrafts).some((items) => Array.isArray(items) && items.length > 0);
+      if (hasLocalDrafts) {
+        if (!cancelled) setPendingComments(localDrafts);
         return;
       }
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object') {
-        setPendingComments({});
-        return;
+
+      try {
+        const response = await fetch(`/api/gerrit/review-drafts-state?key=${encodeURIComponent(pendingCommentsStorageKey)}`);
+        if (!response.ok) throw new Error('Failed to load review drafts');
+        const payload = await response.json();
+        const comments = (payload?.draft?.comments || {}) as PendingDraftMap;
+        if (!cancelled) {
+          setPendingComments(comments);
+        }
+        try {
+          const snapshot: PendingDraftLocalSnapshot = {
+            comments,
+            updatedAt: new Date().toISOString(),
+          };
+          localStorage.setItem(pendingCommentsStorageKey, JSON.stringify(snapshot));
+        } catch {
+          // ignore localStorage failures
+        }
+      } catch {
+        if (!cancelled) setPendingComments({});
       }
-      setPendingComments(parsed as Record<string, { localKey: string; line: number; message: string; in_reply_to?: string; unresolved?: boolean }[]>);
-    } catch {
-      setPendingComments({});
-    }
+    };
+
+    void hydratePendingDrafts();
+    return () => {
+      cancelled = true;
+    };
   }, [pendingCommentsStorageKey]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      localStorage.setItem(pendingCommentsStorageKey, JSON.stringify(pendingComments));
+      const snapshot: PendingDraftLocalSnapshot = {
+        comments: pendingComments,
+        updatedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(pendingCommentsStorageKey, JSON.stringify(snapshot));
     } catch {
       // ignore localStorage failures
     }
-  }, [pendingComments, pendingCommentsStorageKey]);
+
+    if (pendingDraftPersistTimerRef.current) {
+      window.clearTimeout(pendingDraftPersistTimerRef.current);
+    }
+    pendingDraftPersistTimerRef.current = window.setTimeout(() => {
+      pendingDraftPersistTimerRef.current = null;
+      void fetch('/api/gerrit/review-drafts-state', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          key: pendingCommentsStorageKey,
+          changeNumber,
+          revisionId: selectedRevisionId || change?.current_revision,
+          comments: pendingComments,
+        }),
+      }).catch(() => {
+        // keep local snapshot even if disk sync fails
+      });
+    }, 150);
+  }, [change?.current_revision, changeNumber, pendingComments, pendingCommentsStorageKey, selectedRevisionId]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingDraftPersistTimerRef.current) {
+        window.clearTimeout(pendingDraftPersistTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const defaults = new Set(
@@ -654,6 +864,35 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     }));
   }, []);
 
+  const upsertPendingReplyForFile = useCallback(
+    (filePath: string, commentId: string, line: number | undefined, message: string, unresolved?: boolean) => {
+      setPendingComments((prev) => {
+        const existing = prev[filePath] || [];
+        const filtered = existing.filter((item) => item.in_reply_to !== commentId);
+        const nextComment: {
+          localKey: string;
+          line: number;
+          message: string;
+          in_reply_to?: string;
+          unresolved?: boolean;
+        } = {
+          localKey: buildPendingLocalKey(unresolved === false ? 'resolve' : 'reply'),
+          line: typeof line === 'number' ? line : 0,
+          message,
+          in_reply_to: commentId,
+        };
+        if (typeof unresolved === 'boolean') {
+          nextComment.unresolved = unresolved;
+        }
+        return {
+          ...prev,
+          [filePath]: [...filtered, nextComment],
+        };
+      });
+    },
+    []
+  );
+
   // Add inline comment to pending list
   const handleAddInlineComment = useCallback((line: number, message: string) => {
     if (!selectedFile) return;
@@ -672,36 +911,15 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     if (!trimmed) return;
 
     if (unresolved === false) {
-      try {
-        await httpPost('/api/gerrit/review', {
-          changeId: changeNumber,
-          revisionId: selectedRevisionId || 'current',
-          comments: {
-            [filePath]: [
-              {
-                in_reply_to: commentId,
-                message: trimmed,
-                ...(typeof line === 'number' ? { line } : {}),
-                unresolved: false,
-              },
-            ],
-          },
-        });
-        toast.success('Reply submitted and marked as resolved');
-        setExpandedCommentThreadId(null);
-        setTimeout(() => {
-          void fetchDetail({ silent: true });
-        }, 500);
-        return;
-      } catch (err: any) {
-        toast.error('Failed to submit resolved reply: ' + (err.message || 'Unknown error'));
-        return;
-      }
+      upsertPendingReplyForFile(filePath, commentId, line, trimmed, false);
+      setExpandedCommentThreadId(null);
+      toast.success('Resolved reply saved to drafts. It will be submitted with Review.');
+      return;
     }
 
-    appendPendingComment(filePath, { localKey: buildPendingLocalKey('reply'), line: line || 0, message: trimmed, in_reply_to: commentId, unresolved });
+    upsertPendingReplyForFile(filePath, commentId, line, trimmed, unresolved);
     toast.success('Reply added (pending submission)');
-  }, [appendPendingComment, changeNumber, fetchDetail, selectedRevisionId]);
+  }, [upsertPendingReplyForFile]);
 
   const handleReplyComment = useCallback(async (commentId: string, line: number | undefined, message: string, unresolved?: boolean) => {
     if (!selectedFile) return;
@@ -731,47 +949,10 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   }, []);
 
   const handleResolveInlineCommentForFile = useCallback(async (filePath: string, commentId: string, line: number | undefined) => {
-    try {
-      await httpPost('/api/gerrit/review', {
-        changeId: changeNumber,
-        revisionId: selectedRevisionId || 'current',
-        message: 'Done',
-        comments: {
-          [filePath]: [
-            {
-              in_reply_to: commentId,
-              message: 'Done',
-              ...(typeof line === 'number' ? { line } : {}),
-              unresolved: false,
-            },
-          ],
-        },
-      });
-      toast.success('Comment marked as resolved');
-      setExpandedCommentThreadId(null);
-      
-      // Clear any pending replies for this comment since we just posted a "Done" reply
-      setPendingComments((prev) => {
-          const existing = prev[filePath] || [];
-          const filtered = existing.filter((c) => c.in_reply_to !== commentId);
-          if (filtered.length === existing.length) return prev;
-          const next = { ...prev };
-          if (filtered.length === 0) {
-            delete next[filePath];
-          } else {
-            next[filePath] = filtered;
-          }
-          return next;
-        });
-      
-      // Small delay to ensure Gerrit has processed the resolved status before refreshing
-      setTimeout(() => {
-        void fetchDetail({ silent: true });
-      }, 500);
-    } catch (err: any) {
-      toast.error('Failed to resolve comment: ' + (err.message || 'Unknown error'));
-    }
-  }, [changeNumber, fetchDetail, selectedRevisionId]);
+    upsertPendingReplyForFile(filePath, commentId, line, 'Done', false);
+    setExpandedCommentThreadId(null);
+    toast.success('Marked as resolved in drafts. It will be submitted with Review.');
+  }, [upsertPendingReplyForFile]);
 
   const handleResolveInlineComment = useCallback(async (commentId: string, line: number | undefined) => {
     if (!selectedFile) return;
@@ -922,6 +1103,9 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
       toast.success('Review submitted successfully');
       setPendingComments({});
       clearPendingCommentsStorageForChange(changeNumber);
+      void fetch(`/api/gerrit/review-drafts-state?changeNumber=${changeNumber}`, {
+        method: 'DELETE',
+      }).catch(() => {});
       
       // Small delay to ensure Gerrit has processed the comments before refreshing
       setTimeout(() => {
@@ -956,10 +1140,19 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     }
   }, [changeNumber, fetchDetail, selectedRevisionId]);
 
-  const handleSubmitMerge = useCallback(async () => {
-    const confirmed = window.confirm(`确认 Merge 变更 #${changeNumber} 吗？\n\n该操作将提交当前 patch set。`);
-    if (!confirmed) return;
+  const handleSubmitMerge = useCallback(() => {
+    const guard = computeMergeGuard(change || null);
+    if (!guard.ready) {
+      setMergeDialogMode('warning');
+      setShowMergeConfirmDialog(true);
+      return;
+    }
+    setMergeDialogMode('confirm');
+    setShowMergeConfirmDialog(true);
+  }, [change]);
 
+  const handleConfirmMerge = useCallback(async () => {
+    setShowMergeConfirmDialog(false);
     setSubmittingMerge(true);
     setMergeError(null);
     try {
@@ -1065,85 +1258,6 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     });
   }, []);
 
-  const unresolvedThreadTargets = useMemo<UnresolvedThreadTarget[]>(() => {
-    return Object.entries(comments || {})
-      .flatMap(([path, fileComments]) => {
-        const commentsById = new Map<string, GerritCommentInfo>();
-        for (const comment of fileComments || []) {
-          commentsById.set(comment.id, comment);
-        }
-
-        const threadsByRoot = new Map<string, GerritCommentInfo[]>();
-        for (const comment of fileComments || []) {
-          let rootId = comment.id;
-          let cursor = comment;
-          const seen = new Set<string>();
-          while (cursor.in_reply_to && commentsById.has(cursor.in_reply_to) && !seen.has(cursor.in_reply_to)) {
-            seen.add(cursor.in_reply_to);
-            rootId = cursor.in_reply_to;
-            cursor = commentsById.get(cursor.in_reply_to)!;
-          }
-          const existing = threadsByRoot.get(rootId) || [];
-          existing.push(comment);
-          threadsByRoot.set(rootId, existing);
-        }
-
-        return Array.from(threadsByRoot.entries())
-          .map(([rootId, thread]) => {
-            const root = commentsById.get(rootId) || thread[0];
-            const sorted = [...thread].sort((a, b) => String(a.updated || '').localeCompare(String(b.updated || '')));
-            const latest = sorted[sorted.length - 1] || root;
-            const unresolved = typeof latest.unresolved === 'boolean' ? latest.unresolved : !!root?.unresolved;
-            const line = root?.line ?? latest?.line;
-            if (!unresolved || typeof line !== 'number') return null;
-            return {
-              rootId,
-              path,
-              line,
-              patchSet: latest.patch_set || root?.patch_set,
-              updated: latest.updated || root?.updated || '',
-            };
-          })
-          .filter((item): item is UnresolvedThreadTarget => item !== null);
-      })
-      .sort((a, b) => {
-        const patchDiff = (a.patchSet || 0) - (b.patchSet || 0);
-        if (patchDiff !== 0) return patchDiff;
-        const pathDiff = a.path.localeCompare(b.path);
-        if (pathDiff !== 0) return pathDiff;
-        return a.line - b.line;
-      });
-  }, [comments]);
-
-  useEffect(() => {
-    if (unresolvedThreadTargets.length === 0) {
-      setActiveUnresolvedIndex(-1);
-      return;
-    }
-    setActiveUnresolvedIndex((prev) => {
-      if (prev < 0) return -1;
-      return prev % unresolvedThreadTargets.length;
-    });
-  }, [unresolvedThreadTargets]);
-
-  const handleJumpToNextUnresolved = useCallback(() => {
-    if (unresolvedThreadTargets.length === 0) {
-      toast.info('No unresolved comments');
-      return;
-    }
-    const nextIndex = (activeUnresolvedIndex + 1 + unresolvedThreadTargets.length) % unresolvedThreadTargets.length;
-    const target = unresolvedThreadTargets[nextIndex];
-    setActiveUnresolvedIndex(nextIndex);
-    setExpandedCommentThreadId(target.rootId);
-    setPendingCommentJump({
-      rootId: target.rootId,
-      path: target.path,
-      line: target.line,
-      patchSet: target.patchSet,
-      highlightTone: 'emerald',
-    });
-  }, [activeUnresolvedIndex, unresolvedThreadTargets]);
-
   useEffect(() => {
     if (!pendingCommentJump) return;
 
@@ -1237,6 +1351,165 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     toast.success('已刷新到最新提交详情');
   }, [applyDetailResponse, fetchDetail]);
 
+  const commentLocatorEntries = useMemo<CommentLocatorEntry[]>(() => {
+    const result: CommentLocatorEntry[] = [];
+
+    for (const [path, fileComments] of Object.entries(comments || {})) {
+      const commentsById = new Map<string, GerritCommentInfo>();
+      for (const comment of fileComments || []) {
+        commentsById.set(comment.id, comment);
+      }
+
+      const resolveRootId = (commentId: string): string => {
+        let rootId = commentId;
+        let cursor = commentsById.get(commentId);
+        const seen = new Set<string>();
+        while (cursor?.in_reply_to && commentsById.has(cursor.in_reply_to) && !seen.has(cursor.in_reply_to)) {
+          seen.add(cursor.in_reply_to);
+          rootId = cursor.in_reply_to;
+          cursor = commentsById.get(cursor.in_reply_to);
+        }
+        return rootId;
+      };
+
+      const threadsByRoot = new Map<string, GerritCommentInfo[]>();
+      for (const comment of fileComments || []) {
+        const rootId = resolveRootId(comment.id);
+        const thread = threadsByRoot.get(rootId) || [];
+        thread.push(comment);
+        threadsByRoot.set(rootId, thread);
+      }
+
+      const pendingForFile = pendingComments[path] || [];
+
+      for (const [rootId, thread] of threadsByRoot.entries()) {
+        const root = commentsById.get(rootId) || thread[0];
+        const sorted = [...thread].sort((a, b) => String(a.updated || '').localeCompare(String(b.updated || '')));
+        const latest = sorted[sorted.length - 1] || root;
+        let unresolved = typeof latest.unresolved === 'boolean' ? latest.unresolved : !!root?.unresolved;
+
+        for (const draft of pendingForFile) {
+          if (!draft.in_reply_to || typeof draft.unresolved !== 'boolean') continue;
+          if (resolveRootId(draft.in_reply_to) === rootId) {
+            unresolved = draft.unresolved;
+          }
+        }
+
+        result.push({
+          rootId,
+          latestId: latest.id,
+          path,
+          line: root?.line ?? latest?.line,
+          patchSet: latest.patch_set || root?.patch_set,
+          updated: latest.updated || root?.updated || '',
+          message: latest.message || root?.message || '',
+          authorName: getAccountName(latest.author || root?.author),
+          participantNames: Array.from(
+            new Set(
+              sorted
+                .map((entry) => getAccountName(entry.author))
+                .filter((name) => Boolean(name && name.trim()))
+            )
+          ),
+          unresolved,
+        });
+      }
+    }
+
+    return result.sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || '')));
+  }, [comments, pendingComments]);
+
+  const filteredMessages = useMemo(() => {
+    const keyword = historyQuery.trim().toLowerCase();
+    const messages = [...(change?.messages || [])].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    if (!keyword) return messages;
+    return messages.filter((msg) => {
+      const author = getAccountName(msg.author || msg.real_author).toLowerCase();
+      const messageText = String(msg.message || '').toLowerCase();
+      const tag = String(msg.tag || '').toLowerCase();
+      const patch = String(msg._revision_number || '').toLowerCase();
+      return (
+        author.includes(keyword) ||
+        messageText.includes(keyword) ||
+        tag.includes(keyword) ||
+        patch.includes(keyword)
+      );
+    });
+  }, [change?.messages, historyQuery]);
+
+  const filteredCommentEntries = useMemo(() => {
+    const keyword = locatorQuery.trim().toLowerCase();
+    return commentLocatorEntries.filter((entry) => {
+      if (locatorOnlyUnresolved && !entry.unresolved) return false;
+      if (!keyword) return true;
+      return (
+        String(entry.path || '').toLowerCase().includes(keyword) ||
+        String(entry.message || '').toLowerCase().includes(keyword) ||
+        String(entry.line || '').toLowerCase().includes(keyword) ||
+        String(entry.authorName || '').toLowerCase().includes(keyword) ||
+        entry.participantNames.some((name) => name.toLowerCase().includes(keyword))
+      );
+    });
+  }, [commentLocatorEntries, locatorOnlyUnresolved, locatorQuery]);
+
+  const unresolvedCommentCount = useMemo(() => (
+    commentLocatorEntries.reduce((sum, entry) => sum + (entry.unresolved ? 1 : 0), 0)
+  ), [commentLocatorEntries]);
+
+  const autogeneratedMessageCount = useMemo(() => (
+    (change?.messages || []).reduce((sum, msg) => sum + (msg.tag?.startsWith('autogenerated:') ? 1 : 0), 0)
+  ), [change?.messages]);
+
+  const mergeGuard = useMemo(() => computeMergeGuard(change), [change]);
+
+  const unresolvedThreadTargets = useMemo<UnresolvedThreadTarget[]>(() => {
+    return commentLocatorEntries
+      .filter((entry) => entry.unresolved && typeof entry.line === 'number')
+      .map((entry) => ({
+        rootId: entry.rootId,
+        path: entry.path,
+        line: entry.line as number,
+        patchSet: entry.patchSet,
+        updated: entry.updated,
+      }))
+      .sort((a, b) => {
+        const patchDiff = (a.patchSet || 0) - (b.patchSet || 0);
+        if (patchDiff !== 0) return patchDiff;
+        const pathDiff = a.path.localeCompare(b.path);
+        if (pathDiff !== 0) return pathDiff;
+        return a.line - b.line;
+      });
+  }, [commentLocatorEntries]);
+
+  useEffect(() => {
+    if (unresolvedThreadTargets.length === 0) {
+      setActiveUnresolvedIndex(-1);
+      return;
+    }
+    setActiveUnresolvedIndex((prev) => {
+      if (prev < 0) return -1;
+      return prev % unresolvedThreadTargets.length;
+    });
+  }, [unresolvedThreadTargets]);
+
+  const handleJumpToNextUnresolved = useCallback(() => {
+    if (unresolvedThreadTargets.length === 0) {
+      toast.info('No unresolved comments');
+      return;
+    }
+    const nextIndex = (activeUnresolvedIndex + 1 + unresolvedThreadTargets.length) % unresolvedThreadTargets.length;
+    const target = unresolvedThreadTargets[nextIndex];
+    setActiveUnresolvedIndex(nextIndex);
+    setExpandedCommentThreadId(target.rootId);
+    setPendingCommentJump({
+      rootId: target.rootId,
+      path: target.path,
+      line: target.line,
+      patchSet: target.patchSet,
+      highlightTone: 'emerald',
+    });
+  }, [activeUnresolvedIndex, unresolvedThreadTargets]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -1324,10 +1597,6 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   const relatedSelectedTotal = relatedChanges.filter((c) => selectedRelatedKeys.has(`${c._change_number}:${c._revision_number}`)).length;
   const relatedAllChecked = relatedSelectableTotal > 0 && relatedSelectedTotal === relatedSelectableTotal;
   const relatedSomeChecked = relatedSelectedTotal > 0 && relatedSelectedTotal < relatedSelectableTotal;
-
-  const commentEntries = Object.entries(comments || {})
-    .flatMap(([path, arr]) => (arr || []).map((c) => ({ path, ...c })))
-    .sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || '')));
   return (
     <div className="mx-auto max-w-[1560px] space-y-5">
       {/* Top Section */}
@@ -1340,13 +1609,13 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
                   change={change}
                   gerritUrl={gerritUrl}
                   canShowMerge={canShowMerge}
+                  mergeReady={mergeGuard.ready}
+                  mergeHint={mergeGuard.hint}
                   submittingMerge={submittingMerge}
                   submittingReview={submittingReview}
                   aiReviewRunning={aiReviewRunning}
                   onBack={onBack}
-                  onRefresh={() => {
-                    void fetchDetail({ silent: true });
-                  }}
+                  onRefresh={async () => fetchDetail({ silent: true })}
                   onSubmitMerge={handleSubmitMerge}
                   onOpenReviewDialog={() => setShowReviewDialog(true)}
                   onOpenAiReviewDialog={() => setShowAiReviewDialog(true)}
@@ -1559,7 +1828,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
             <CardContent className="p-0">
               <button
                 onClick={() => setShowMessages(!showMessages)}
-                className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
+                className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/45"
               >
                 <span className="flex items-center gap-2">
                   <MessageSquare className="h-4 w-4 text-muted-foreground" />
@@ -1568,55 +1837,119 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
                 {showMessages ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
               </button>
               {showMessages && (
-                <div className="border-t divide-y divide-border max-h-[500px] overflow-y-auto">
-                  {change.messages.map((msg) => (
-                    <MessageItem key={msg.id} message={msg} gerritUrl={gerritUrl} />
-                  ))}
+                <div className="border-t">
+                  <div className="sticky top-0 z-10 border-b border-border/50 bg-background/95 px-4 py-3 backdrop-blur">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Input
+                        value={historyQuery}
+                        onChange={(event) => setHistoryQuery(event.target.value)}
+                        placeholder="Search author / message / patchset"
+                        className="h-8 max-w-sm text-xs shadow-none"
+                      />
+                      <Badge variant="outline" className="h-6 text-[10px]">
+                        {filteredMessages.length}/{change.messages.length} visible
+                      </Badge>
+                      <Badge variant="secondary" className="h-6 text-[10px]">
+                        {autogeneratedMessageCount} autogenerated
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-border max-h-[500px] overflow-y-auto">
+                    {filteredMessages.length > 0 ? (
+                      filteredMessages.map((msg) => (
+                        <MessageItem key={msg.id} message={msg} gerritUrl={gerritUrl} />
+                      ))
+                    ) : (
+                      <div className="px-4 py-10 text-center text-xs text-muted-foreground">
+                        No history entries match your search.
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </CardContent>
           </Card>
         )}
 
-        {commentEntries.length > 0 && (
+        {commentLocatorEntries.length > 0 && (
           <Card className="overflow-hidden rounded-2xl border-border/50 shadow-none">
             <CardContent className="p-0">
               <button
                 onClick={() => setShowCommentHistory(!showCommentHistory)}
-                className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
+                className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/45"
               >
                 <span className="flex items-center gap-2">
                   <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                  Comment Locator ({commentEntries.length})
+                  Comment Locator ({commentLocatorEntries.length})
                 </span>
                 {showCommentHistory ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
               </button>
               {showCommentHistory && (
-                <div className="border-t divide-y divide-border max-h-80 overflow-y-auto">
-                    {commentEntries.map((c) => (
+                <div className="border-t">
+                  <div className="sticky top-0 z-10 border-b border-border/50 bg-background/95 px-4 py-3 backdrop-blur">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Input
+                        value={locatorQuery}
+                        onChange={(event) => setLocatorQuery(event.target.value)}
+                        placeholder="Search path / comment / line / author"
+                        className="h-8 max-w-sm text-xs shadow-none"
+                      />
+                      <Button
+                        type="button"
+                        variant={locatorOnlyUnresolved ? 'default' : 'outline'}
+                        size="sm"
+                        className="h-8 text-xs"
+                        onClick={() => setLocatorOnlyUnresolved((prev) => !prev)}
+                      >
+                        {locatorOnlyUnresolved ? 'Showing unresolved only' : 'Only unresolved'}
+                      </Button>
+                      <Badge variant="outline" className="h-6 text-[10px]">
+                        {filteredCommentEntries.length}/{commentLocatorEntries.length} visible
+                      </Badge>
+                      <Badge variant="secondary" className="h-6 text-[10px]">
+                        {unresolvedCommentCount} unresolved
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-border max-h-80 overflow-y-auto">
+                    {filteredCommentEntries.length > 0 ? filteredCommentEntries.map((c) => (
                       <button
-                        key={`${c.id}-${c.path}`}
+                        key={`${c.rootId}-${c.path}`}
                         onClick={() => {
-                          setExpandedCommentThreadId(c.in_reply_to || c.id);
+                          setExpandedCommentThreadId(c.rootId);
                           setPendingCommentJump({
-                            rootId: c.in_reply_to || c.id,
+                            rootId: c.rootId,
                             path: c.path,
                             line: c.line,
-                            patchSet: c.patch_set,
+                            patchSet: c.patchSet,
                             highlightTone: 'emerald',
                           });
                         }}
-                        className="w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors group"
+                        className="group w-full px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/45"
                       >
-                      <div className="flex items-center gap-2 text-[11px] mb-1.5">
-                        <Badge variant="outline" className="text-[10px] bg-background">PS{c.patch_set || '?'}</Badge>
+                      <div className="mb-1.5 flex items-center gap-2 text-[11px]">
+                        <Badge variant="outline" className="text-[10px] bg-background">PS{c.patchSet || '?'}</Badge>
                         <span className="font-mono text-foreground font-medium truncate max-w-[300px]" title={c.path}>{c.path}</span>
-                        {typeof c.line === 'number' && <span className="text-muted-foreground font-mono">L{c.line}</span>}
+                        {c.unresolved && (
+                          <Badge variant="secondary" className="h-5 border border-amber-300/70 bg-amber-100 text-[10px] text-amber-800">
+                            unresolved
+                          </Badge>
+                        )}
                         <span className="text-muted-foreground ml-auto">{relativeTime(c.updated)}</span>
                       </div>
-                      <p className="text-xs text-muted-foreground truncate group-hover:text-foreground transition-colors">{c.message}</p>
+                      <p
+                        className="truncate text-xs text-muted-foreground transition-colors group-hover:text-foreground"
+                        title={`${c.authorName || 'Unknown'}: ${c.message || ''}`}
+                      >
+                        {`${c.authorName || 'Unknown'}: ${c.message || ''}`}
+                      </p>
                     </button>
-                  ))}
+                    )) : (
+                      <div className="px-4 py-10 text-center text-xs text-muted-foreground">
+                        No comments match the current filter.
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -1649,6 +1982,43 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
           />
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={showMergeConfirmDialog} onOpenChange={setShowMergeConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{mergeDialogMode === 'warning' ? '暂不建议 Merge' : '确认 Merge'}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {mergeDialogMode === 'warning'
+                ? `当前 Change #${changeNumber} 不满足合并前置条件，请先处理以下问题：`
+                : `确认要提交 Change #${changeNumber} 的当前 patch set 吗？该操作将触发 Gerrit submit。`}
+            </AlertDialogDescription>
+            {mergeDialogMode === 'warning' && (
+              <div className="mt-2 space-y-1.5 text-sm text-red-600">
+                {mergeGuard.reasons.map((reason, index) => (
+                  <div key={`${reason}-${index}`}>- {reason}</div>
+                ))}
+              </div>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submittingMerge}>
+              {mergeDialogMode === 'warning' ? '我知道了' : '取消'}
+            </AlertDialogCancel>
+            {mergeDialogMode === 'confirm' && (
+              <AlertDialogAction
+                onClick={(event) => {
+                  event.preventDefault();
+                  void handleConfirmMerge();
+                }}
+                disabled={submittingMerge}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {submittingMerge ? 'Merging...' : '确认 Merge'}
+              </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {hasPendingUpdate && (
         <div className="fixed bottom-20 left-6 z-40">

@@ -89,9 +89,9 @@ function normalizeConfidence(value: unknown): RiskLevel | undefined {
 function isWeakFinding(title: string, description: string): boolean {
   const titleLower = title.toLowerCase();
   const descriptionLower = description.toLowerCase();
-  if (title.length < 4 || description.length < 12) return true;
-  if (titleLower.includes('建议关注') || titleLower.includes('可进一步确认')) return true;
-  if (descriptionLower.includes('可能需要更多上下文') && description.length < 24) return true;
+  if (title.length < 2 || description.length < 8) return true;
+  if (titleLower.includes('待确认') && description.length < 16) return true;
+  if (descriptionLower.includes('需要更多上下文') && description.length < 20) return true;
   return false;
 }
 
@@ -114,11 +114,6 @@ function hasSnippetEvidence(index: DiffReferenceIndex, file: string | undefined,
   const normalized = snippet.trim();
   if (!normalized) return false;
   return (index.evidenceSnippetsByFile.get(file) || []).some((candidate) => candidate.includes(normalized) || normalized.includes(candidate));
-}
-
-function isValidChangedLine(index: DiffReferenceIndex, file: string | undefined, line: number | undefined): boolean {
-  if (!file || !line) return false;
-  return index.addedLinesByFile.get(file)?.has(line) || false;
 }
 
 function sortIssues(issues: AiIssue[]): AiIssue[] {
@@ -228,9 +223,11 @@ export function normalizeIssues(params: {
     const category = normalizeCategory(rawIssue?.category);
     const severity = normalizeRiskLevel(rawIssue?.severity, category === 'style' ? 'low' : 'medium');
     const confidence = normalizeConfidence(rawIssue?.confidence);
-    const file = cleanText(rawIssue?.file);
+    const explicitFile = cleanText(rawIssue?.file);
+    const evidenceFile = cleanText(rawIssue?.evidence?.file);
+    const file = explicitFile || evidenceFile;
     const rawLine = normalizeLine(rawIssue?.line) ?? normalizeLine(rawIssue?.evidence?.line);
-    const line = isValidChangedLine(diffIndex, file, rawLine) ? rawLine : undefined;
+    const line = rawLine && file && diffIndex.changedFiles.has(file) ? rawLine : undefined;
 
     if (file && !diffIndex.changedFiles.has(file)) continue;
 

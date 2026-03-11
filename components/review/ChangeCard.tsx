@@ -10,9 +10,10 @@ import type { GerritChange } from '@/lib/gerrit/types';
 import type { RiskLevel } from '@/lib/gerrit/ai-types';
 import { LabelsSummary } from './LabelBadge';
 import { AiRiskDot } from './AiRiskDot';
-import { MessageSquare, GitBranch, ExternalLink, User, Calendar } from 'lucide-react';
+import { MessageSquare, GitBranch, User, Calendar, Archive, Undo2, Copy } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { toast } from 'sonner';
 
 interface ChangeCardProps {
   change: GerritChange;
@@ -22,10 +23,37 @@ interface ChangeCardProps {
   unread?: boolean;
   aiRiskLevel?: RiskLevel;
   aiRiskReason?: string;
+  onArchiveToggle?: (change: GerritChange) => void;
+  archiveMode?: 'archive' | 'restore';
 }
 
-export function ChangeCard({ change, onClick, gerritUrl, showOwner = true, unread = false, aiRiskLevel, aiRiskReason }: ChangeCardProps) {
+export function ChangeCard({
+  change,
+  onClick,
+  gerritUrl,
+  showOwner = true,
+  unread = false,
+  aiRiskLevel,
+  aiRiskReason,
+  onArchiveToggle,
+  archiveMode = 'archive',
+}: ChangeCardProps) {
   const hasUnresolved = (change.unresolved_comment_count || 0) > 0;
+  const changeUrl = gerritUrl ? `${gerritUrl}/c/${change._number}` : '';
+
+  const handleCopyChangeUrl = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (!changeUrl) {
+      toast.error('复制失败：Gerrit 地址不可用');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(changeUrl);
+      toast.success(`已复制 Change #${change._number} 链接`);
+    } catch {
+      toast.error('复制失败，请手动复制');
+    }
+  };
 
   return (
     <Card 
@@ -72,18 +100,35 @@ export function ChangeCard({ change, onClick, gerritUrl, showOwner = true, unrea
             </div>
 
             {/* External Link */}
-            {gerritUrl && (
-              <a
-                href={`${gerritUrl}/c/${change._number}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="shrink-0 opacity-0 pointer-events-none -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:pointer-events-auto group-hover:translate-x-0 text-muted-foreground/55 hover:text-foreground"
-                title="Open in Gerrit"
+            <div className="shrink-0 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCopyChangeUrl}
+                className="opacity-0 pointer-events-none -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:pointer-events-auto group-hover:translate-x-0 text-muted-foreground/55 hover:text-foreground"
+                title="Copy Change URL"
+                aria-label="Copy change URL"
               >
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            )}
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+              {onArchiveToggle && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onArchiveToggle(change);
+                  }}
+                  className="opacity-0 pointer-events-none -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:pointer-events-auto group-hover:translate-x-0 text-muted-foreground/55 hover:text-foreground"
+                  title={archiveMode === 'restore' ? 'Unarchive' : 'Archive'}
+                  aria-label={archiveMode === 'restore' ? 'Unarchive change' : 'Archive change'}
+                >
+                  {archiveMode === 'restore' ? (
+                    <Undo2 className="h-3.5 w-3.5" />
+                  ) : (
+                    <Archive className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Bottom Row: Status, Repo, Stats, Labels */}
