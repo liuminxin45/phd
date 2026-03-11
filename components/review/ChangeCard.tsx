@@ -14,6 +14,7 @@ import { MessageSquare, GitBranch, User, Calendar, Archive, Undo2, Copy } from '
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
+import { glassPanelClass } from '@/components/ui/glass';
 
 interface ChangeCardProps {
   change: GerritChange;
@@ -59,7 +60,8 @@ export function ChangeCard({
     <Card 
       onClick={onClick}
       className={cn(
-        "group cursor-pointer transition-all duration-200 border border-border/60 shadow-none bg-card hover:border-border hover:bg-muted/[0.03]",
+        "group glass-interactive cursor-pointer transition-all duration-200 hover:border-border hover:bg-white/78",
+        glassPanelClass,
         hasUnresolved && "border-l-2 border-l-amber-400"
       )}
     >

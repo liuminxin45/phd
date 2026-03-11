@@ -9,7 +9,18 @@ import { ChangeDetail } from '@/components/review/ChangeDetail';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import {
+  GlassIconButton,
+  GlassPage,
+  GlassPanel,
+  GlassSection,
+  GlassToolbar,
+  glassInputClass,
+  glassPanelStrongClass,
+} from '@/components/ui/glass';
 import {
   GitPullRequest,
   Search,
@@ -18,13 +29,15 @@ import {
   Inbox,
   Send,
   AlertCircle,
-  ExternalLink,
-  Sparkles
+  Sparkles,
+  Archive,
 } from 'lucide-react';
 
 const DEFAULT_GERRIT_URL = 'https://review.tp-link.net/gerrit';
 const REVIEW_UNREAD_CHANGE_IDS_KEY = 'review-unread-change-ids-v1';
 const REVIEW_DASHBOARD_SCROLL_TOP_KEY = 'review-dashboard-scroll-top-v1';
+const REVIEW_ARCHIVED_CHANGES_KEY = 'review-archived-changes-v1';
+const REVIEW_AI_REVIEWED_DONE_KEY = 'review-ai-reviewed-done-v1';
 
 const SECTION_ICONS: Record<string, typeof Inbox> = {
   'Your Turn': AlertCircle,
@@ -60,6 +73,38 @@ function buildChangeSignature(change: GerritChange): string {
 
 type ViewState = 'dashboard' | 'detail' | 'search';
 
+function loadArchivedChanges(): Record<number, GerritChange> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(REVIEW_ARCHIVED_CHANGES_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+    const entries = Object.entries(parsed as Record<string, GerritChange>)
+      .filter(([key, value]) => Number.isFinite(Number(key)) && !!value)
+      .map(([key, value]) => [Number(key), value] as const);
+    return Object.fromEntries(entries);
+  } catch {
+    return {};
+  }
+}
+
+function loadAiReviewedDoneMap(): Record<number, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(REVIEW_AI_REVIEWED_DONE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+    const entries = Object.entries(parsed as Record<string, string>)
+      .filter(([key, value]) => Number.isFinite(Number(key)) && typeof value === 'string')
+      .map(([key, value]) => [Number(key), value] as const);
+    return Object.fromEntries(entries);
+  } catch {
+    return {};
+  }
+}
+
 export default function ReviewPage() {
   const router = useRouter();
   // ── View navigation ─────────────────────────────────
@@ -79,6 +124,9 @@ export default function ReviewPage() {
   const [searchResults, setSearchResults] = useState<GerritChange[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [archivedChanges, setArchivedChanges] = useState<Record<number, GerritChange>>(() => loadArchivedChanges());
+  const [aiReviewedDoneMap, setAiReviewedDoneMap] = useState<Record<number, string>>(() => loadAiReviewedDoneMap());
   const [unreadChangeIds, setUnreadChangeIds] = useState<Set<number>>(() => {
     if (typeof window === 'undefined') return new Set();
     try {
@@ -99,6 +147,7 @@ export default function ReviewPage() {
   const {
     riskMap,
     autoAiEnabled,
+    autoAiJobs,
   } = useAutoAiMonitor(dashboard);
 
   // ── Auto-refresh ────────────────────────────────────
@@ -169,6 +218,24 @@ export default function ReviewPage() {
   }, [unreadChangeIds]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(REVIEW_ARCHIVED_CHANGES_KEY, JSON.stringify(archivedChanges));
+    } catch {
+      // ignore localStorage errors
+    }
+  }, [archivedChanges]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(REVIEW_AI_REVIEWED_DONE_KEY, JSON.stringify(aiReviewedDoneMap));
+    } catch {
+      // ignore localStorage errors
+    }
+  }, [aiReviewedDoneMap]);
+
+  useEffect(() => {
     if (!router.isReady) return;
     const rawChange = Array.isArray(router.query.change) ? router.query.change[0] : router.query.change;
     const parsed = rawChange ? Number(rawChange) : NaN;
@@ -228,6 +295,30 @@ export default function ReviewPage() {
     router.replace({ pathname: '/review', query: { change: String(change._number) } }, undefined, { shallow: true }).catch(() => {});
   }, [router]);
 
+  const archiveChange = useCallback((change: GerritChange) => {
+    setArchivedChanges((prev) => {
+      if (prev[change._number]) return prev;
+      return { ...prev, [change._number]: change };
+    });
+    setUnreadChangeIds((prev) => {
+      if (!prev.has(change._number)) return prev;
+      const next = new Set(prev);
+      next.delete(change._number);
+      return next;
+    });
+    toast.success(`已归档 Change #${change._number}`);
+  }, []);
+
+  const restoreArchivedChange = useCallback((change: GerritChange) => {
+    setArchivedChanges((prev) => {
+      if (!prev[change._number]) return prev;
+      const next = { ...prev };
+      delete next[change._number];
+      return next;
+    });
+    toast.success(`已从归档取出 Change #${change._number}`);
+  }, []);
+
   useEffect(() => {
     if (view !== 'dashboard') return;
 
@@ -275,12 +366,31 @@ export default function ReviewPage() {
   const focusedSections = dashboard
     ? [...dashboard.sections]
         .map((section) => ({ ...section, title: normalizeSectionTitle(section.title) }))
+        .map((section) => ({
+          ...section,
+          changes: section.changes.filter((change) => !archivedChanges[change._number]),
+        }))
         .filter((section) => PRIMARY_SECTION_ORDER.includes(section.title))
         .sort((a, b) => PRIMARY_SECTION_ORDER.indexOf(a.title) - PRIMARY_SECTION_ORDER.indexOf(b.title))
     : [];
 
   const primaryQueue = focusedSections.filter((section) => section.title === 'Your Turn' || section.title === 'Incoming Reviews');
   const secondaryQueue = focusedSections.filter((section) => section.title === 'Outgoing Reviews');
+  const archivedList = Object.values(archivedChanges).sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || '')));
+  const latestDoneByChange = Object.values(autoAiJobs).reduce<Record<number, string>>((acc, job) => {
+    if (job.status !== 'done') return acc;
+    const current = acc[job.changeNumber];
+    const nextUpdated = String(job.updatedAt || job.finishedAt || '');
+    if (!current || nextUpdated > current) {
+      acc[job.changeNumber] = nextUpdated;
+    }
+    return acc;
+  }, {});
+  const unreadAiDoneCount = Object.entries(latestDoneByChange).reduce((count, [changeNumberRaw, latestDoneAt]) => {
+    const changeNumber = Number(changeNumberRaw);
+    const reviewedAt = aiReviewedDoneMap[changeNumber] || '';
+    return latestDoneAt > reviewedAt ? count + 1 : count;
+  }, 0);
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
@@ -305,81 +415,132 @@ export default function ReviewPage() {
   }
 
   return (
-    <div ref={scrollContainerRef} className="h-full overflow-auto bg-[hsl(var(--background))]">
-      <div className="max-w-5xl mx-auto p-5 space-y-5">
+    <GlassPage showOrbs={false}>
+      <div ref={scrollContainerRef} className="h-full overflow-auto">
+        <div className="relative z-10 max-w-5xl mx-auto p-5 space-y-5">
 
-        {/* ── Header ────────────────────────────────────────────── */}
-        <Card className="border border-border/60 shadow-none bg-card/90">
-          <CardContent className="p-4">
+          {/* ── Header ────────────────────────────────────────────── */}
+          <GlassPanel className={cn(glassPanelStrongClass, 'rounded-3xl p-4 md:p-5')}>
             <div className="flex flex-col gap-3">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-2xl bg-primary/8 border border-primary/10 flex items-center justify-center">
-                    <GitPullRequest className="h-4.5 w-4.5 text-primary" />
+                  <div className="h-10 w-10 rounded-2xl border border-white/55 bg-white/52 shadow-[0_12px_28px_rgba(37,99,235,0.14)] backdrop-blur-lg flex items-center justify-center">
+                    <GitPullRequest className="h-4.5 w-4.5 text-sky-700" />
                   </div>
                   <div>
-                    <h1 className="text-lg font-semibold text-foreground">Review Inbox</h1>
+                    <h1 className="text-lg font-semibold tracking-tight text-slate-900">Review Inbox</h1>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <GlassToolbar className="flex items-center gap-3">
                   <div className="relative w-full md:w-72 lg:w-96">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                     <Input
                       data-review-search
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       onKeyDown={handleSearchKeyDown}
-                      className="pl-9 h-9 text-sm bg-muted/18 border-border/50 shadow-none focus:bg-background focus:border-border"
+                      className={cn('pl-9 h-9 text-sm shadow-none focus:border-sky-300', glassInputClass)}
                     />
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
+                    <GlassIconButton
                       onClick={handleSearch}
                       disabled={searchLoading || !searchQuery.trim()}
-                      className="h-9 w-9 text-muted-foreground/70 hover:text-foreground"
                       title="Search"
+                      tone="primary"
                     >
                       {searchLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                    </Button>
+                    </GlassIconButton>
 
-                    <Button
-                      variant="ghost"
-                      size="icon"
+                    <GlassIconButton
                       onClick={() => {
                         void fetchDashboard();
                       }}
                       disabled={loadingDashboard}
-                      className="h-9 w-9 text-muted-foreground/70 hover:text-foreground"
                       title="Refresh"
                     >
                       <RefreshCw className={cn('h-4 w-4', loadingDashboard && 'animate-spin')} />
-                    </Button>
+                    </GlassIconButton>
 
-                    <Button
-                      variant="ghost"
-                      size="icon"
+                    <GlassIconButton
                       onClick={() => {
+                        setAiReviewedDoneMap((prev) => {
+                          if (unreadAiDoneCount <= 0) return prev;
+                          const next = { ...prev };
+                          for (const [changeNumberRaw, latestDoneAt] of Object.entries(latestDoneByChange)) {
+                            const changeNumber = Number(changeNumberRaw);
+                            if (!next[changeNumber] || latestDoneAt > next[changeNumber]) {
+                              next[changeNumber] = latestDoneAt;
+                            }
+                          }
+                          return next;
+                        });
                         void router.push('/review-auto-ai');
                       }}
-                      className={cn(
-                        'h-9 w-9 hover:text-foreground',
-                        autoAiEnabled ? 'text-primary' : 'text-muted-foreground/70'
-                      )}
+                      className={cn('relative', autoAiEnabled ? 'text-sky-700' : 'text-slate-600')}
                       title="AI Assistant"
+                      tone="primary"
                     >
                       <Sparkles className="h-3.5 w-3.5" />
-                    </Button>
+                      {unreadAiDoneCount > 0 && (
+                        <span className="absolute -right-1 -top-1 min-w-4 h-4 px-1 rounded-full bg-sky-500 text-white text-[9px] leading-4 text-center">
+                          {unreadAiDoneCount > 99 ? '99+' : unreadAiDoneCount}
+                        </span>
+                      )}
+                    </GlassIconButton>
+
+                    <GlassIconButton
+                      onClick={() => setArchiveDialogOpen(true)}
+                      className="relative"
+                      title="Archived Changes"
+                      tone="warning"
+                    >
+                      <Archive className="h-3.5 w-3.5" />
+                      {archivedList.length > 0 && (
+                        <span className="absolute -right-1 -top-1 min-w-4 h-4 px-1 rounded-full bg-amber-500 text-white text-[9px] leading-4 text-center">
+                          {archivedList.length > 99 ? '99+' : archivedList.length}
+                        </span>
+                      )}
+                    </GlassIconButton>
                   </div>
-                </div>
+                </GlassToolbar>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </GlassPanel>
+
+        <Dialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>
+          <DialogContent className={cn("max-w-3xl rounded-3xl border border-white/70 bg-[#f8fbff]/92 p-5 shadow-[0_28px_66px_rgba(15,23,42,0.2)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[#f8fbff]/78")}>
+            <DialogHeader className="pb-1">
+              <DialogTitle className="text-slate-900">Archived Changes ({archivedList.length})</DialogTitle>
+            </DialogHeader>
+            {archivedList.length === 0 ? (
+              <GlassSection className="glass-interactive border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
+                No archived changes.
+              </GlassSection>
+            ) : (
+              <div className="max-h-[60vh] overflow-auto rounded-2xl border border-white/70 bg-white/48 p-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-white/34">
+                <div className="space-y-3 pr-1">
+                {archivedList.map((change) => (
+                  <ChangeCard
+                    key={`archived-${change._number}`}
+                    change={change}
+                    onClick={() => openChange(change)}
+                    gerritUrl={gerritUrl}
+                    unread={false}
+                    aiRiskLevel={riskMap[change._number]?.riskLevel}
+                    aiRiskReason={riskMap[change._number]?.briefReason}
+                    onArchiveToggle={restoreArchivedChange}
+                    archiveMode="restore"
+                  />
+                ))}
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* ── Search results view ──────────────────────────────── */}
         {view === 'search' && (
@@ -400,13 +561,22 @@ export default function ReviewPage() {
             ) : searchResults.length > 0 ? (
               <div className="grid gap-3">
                 {searchResults.map((change) => (
-                  <ChangeCard key={change._number} change={change} onClick={() => openChange(change)} gerritUrl={gerritUrl} unread={unreadChangeIds.has(change._number)} aiRiskLevel={riskMap[change._number]?.riskLevel} aiRiskReason={riskMap[change._number]?.briefReason} />
+                  <ChangeCard
+                    key={change._number}
+                    change={change}
+                    onClick={() => openChange(change)}
+                    gerritUrl={gerritUrl}
+                    unread={unreadChangeIds.has(change._number)}
+                    aiRiskLevel={riskMap[change._number]?.riskLevel}
+                    aiRiskReason={riskMap[change._number]?.briefReason}
+                    onArchiveToggle={archiveChange}
+                  />
                 ))}
               </div>
             ) : (
-              <div className="text-center py-20 text-muted-foreground bg-card rounded-lg border border-dashed">
+              <GlassSection className="text-center py-20 text-muted-foreground border-dashed">
                 <p className="text-sm">No changes found matching your query.</p>
-              </div>
+              </GlassSection>
             )}
           </div>
         )}
@@ -447,7 +617,7 @@ export default function ReviewPage() {
                   {primaryQueue.map((section) => {
                     const Icon = SECTION_ICONS[section.title] || Inbox;
                     return (
-                      <div key={section.title} id={`section-${section.title}`} className="space-y-3">
+                      <GlassSection key={section.title} id={`section-${section.title}`} className="space-y-3">
                         <div className="flex items-center gap-3">
                           <div className="h-8 w-8 rounded-2xl bg-primary/8 border border-primary/10 text-primary flex items-center justify-center">
                             <Icon className="h-4.5 w-4.5" />
@@ -474,18 +644,19 @@ export default function ReviewPage() {
                                 unread={unreadChangeIds.has(change._number)}
                                 aiRiskLevel={riskMap[change._number]?.riskLevel}
                                 aiRiskReason={riskMap[change._number]?.briefReason}
+                                onArchiveToggle={archiveChange}
                               />
                             ))}
                           </div>
                         )}
-                      </div>
+                      </GlassSection>
                     );
                   })}
                 </div>
               </section>
 
               {secondaryQueue.length > 0 && (
-                <section className="space-y-4">
+                <GlassSection className="space-y-4">
                   <div className="flex items-center gap-3">
                     <div className="h-8 w-8 rounded-2xl bg-primary/8 border border-primary/10 text-primary flex items-center justify-center">
                       <Send className="h-4.5 w-4.5" />
@@ -515,23 +686,25 @@ export default function ReviewPage() {
                             unread={unreadChangeIds.has(change._number)}
                             aiRiskLevel={riskMap[change._number]?.riskLevel}
                             aiRiskReason={riskMap[change._number]?.briefReason}
+                            onArchiveToggle={archiveChange}
                           />
                         ))
                       )}
                     </div>
                   ))}
-                </section>
+                </GlassSection>
               )}
 
               {dashboard && focusedSections.length === 0 && !loadingDashboard && (
-                <div className="rounded-xl border border-dashed bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
+                <GlassSection className="border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
                   No review items found in the focused queues.
-                </div>
+                </GlassSection>
               )}
             </div>
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </GlassPage>
   );
 }

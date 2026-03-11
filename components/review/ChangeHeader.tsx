@@ -117,14 +117,14 @@ export function ChangeHeader({
             animate={aiReviewRunning}
           />
           
-          <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none" onClick={handleRefresh} title="Refresh">
+          <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none backdrop-blur supports-[backdrop-filter]:bg-background/70" onClick={handleRefresh} title="Refresh">
             <RefreshCw className="h-4 w-4" />
           </Button>
 
           <Button
             variant="outline"
             size="icon"
-            className="h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none"
+            className="h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none backdrop-blur supports-[backdrop-filter]:bg-background/70"
             onClick={handleCopyGerritLink}
             title="Copy Gerrit URL"
           >
@@ -134,7 +134,7 @@ export function ChangeHeader({
           <Button
             variant="outline"
             size="icon"
-            className="h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none"
+            className="h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none backdrop-blur supports-[backdrop-filter]:bg-background/70"
             title="Open in Gerrit"
             onClick={handleOpenGerrit}
           >
@@ -144,7 +144,7 @@ export function ChangeHeader({
           <Button
             variant="default"
             size="icon"
-            className="h-9 w-9 rounded-xl shadow-none"
+            className="h-9 w-9 rounded-xl shadow-none backdrop-blur supports-[backdrop-filter]:bg-primary/88"
             onClick={handleOpenReview}
             title="Review"
           >
@@ -243,7 +243,7 @@ function HeaderActionButton({
       variant="outline"
       size="icon"
       className={cn(
-        'h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none',
+        'h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none backdrop-blur supports-[backdrop-filter]:bg-background/70',
         animate && 'animate-pulse',
         disabled && 'cursor-not-allowed opacity-70'
       )}

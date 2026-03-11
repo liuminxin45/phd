@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import { httpGet } from '@/lib/httpClient';
 import type { DashboardResponse, GerritChange } from '@/lib/gerrit/types';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -21,6 +20,15 @@ import {
   XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  GlassIconButton,
+  GlassPage,
+  GlassPanel,
+  GlassSection,
+  GlassToolbar,
+  glassInputClass,
+  glassPanelStrongClass,
+} from '@/components/ui/glass';
 import {
   AUTO_AI_STATE_EVENT,
   DEFAULT_AUTO_AI_MAX_LINES,
@@ -91,11 +99,11 @@ function MetricCard({
   tone: 'amber' | 'blue' | 'emerald' | 'slate' | 'red';
 }) {
   const tones = {
-    amber: 'text-amber-700 bg-amber-50 border-amber-200',
-    blue: 'text-blue-700 bg-blue-50 border-blue-200',
-    emerald: 'text-emerald-700 bg-emerald-50 border-emerald-200',
-    slate: 'text-slate-700 bg-slate-50 border-slate-200',
-    red: 'text-red-700 bg-red-50 border-red-200',
+    amber: 'text-amber-700 bg-amber-50/75 border-amber-200/70 backdrop-blur-md',
+    blue: 'text-blue-700 bg-blue-50/75 border-blue-200/70 backdrop-blur-md',
+    emerald: 'text-emerald-700 bg-emerald-50/75 border-emerald-200/70 backdrop-blur-md',
+    slate: 'text-slate-700 bg-slate-50/75 border-slate-200/70 backdrop-blur-md',
+    red: 'text-red-700 bg-red-50/75 border-red-200/70 backdrop-blur-md',
   };
   return (
     <div className={cn('rounded-2xl border p-4', tones[tone])}>
@@ -134,7 +142,7 @@ function JobCard({
   const risk = job.status === 'done' ? riskMeta(job.riskSummary?.riskLevel) : null;
 
   return (
-    <div className="rounded-2xl border border-border/60 bg-background/95 p-4 shadow-sm transition-colors hover:bg-muted/20">
+    <div className="glass-interactive rounded-2xl border border-white/55 bg-white/62 p-4 shadow-[0_12px_28px_rgba(15,23,42,0.1)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/48 transition-colors hover:bg-white/72">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1 space-y-3">
           <button
@@ -203,16 +211,16 @@ function JobColumn({
   onRemove: (key: string) => void;
 }) {
   return (
-    <Card className="overflow-hidden border-border/60 bg-card/95 shadow-none">
-      <CardHeader className="border-b border-border/50 bg-muted/20 px-5 py-4">
+    <GlassSection className="overflow-hidden p-0">
+      <div className="border-b border-white/45 bg-white/35 px-5 py-4 backdrop-blur-md">
         <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-sm font-semibold">{title}</CardTitle>
+          <div className="text-sm font-semibold text-slate-800">{title}</div>
           <Badge variant="secondary" className="rounded-full px-2.5 py-1 font-mono text-[11px]">
             {items.length}
           </Badge>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-3 p-4">
+      </div>
+      <div className="space-y-3 p-4">
         {items.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
             No tasks in this lane.
@@ -222,8 +230,8 @@ function JobColumn({
             <JobCard key={job.key} job={job} onOpenChange={onOpenChange} onRemove={onRemove} />
           ))
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </GlassSection>
   );
 }
 
@@ -351,21 +359,20 @@ export default function ReviewAutoAiPage() {
   }, [jobs]);
 
   return (
-    <div className="min-h-full overflow-auto bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.12),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.10),_transparent_24%),linear-gradient(180deg,_hsl(var(--background))_0%,_hsl(var(--background))_100%)]">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6 p-6">
-        <Card className="overflow-hidden border-border/60 bg-card/95 shadow-none">
-          <CardContent className="p-0">
-            <div className="grid gap-6 px-6 py-6 lg:grid-cols-[1.4fr_0.9fr]">
+    <GlassPage className="overflow-auto" showOrbs={false}>
+      <div className="relative z-10 mx-auto flex max-w-7xl flex-col gap-6 p-6">
+        <GlassPanel className={cn(glassPanelStrongClass, 'overflow-hidden rounded-3xl p-0')}>
+          <div className="grid gap-6 px-6 py-6 lg:grid-cols-[1.4fr_0.9fr]">
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
-                  <Button variant="ghost" size="icon" onClick={() => router.push('/review')} className="h-10 w-10 rounded-full">
+                  <GlassIconButton onClick={() => router.push('/review')} className="h-10 w-10 rounded-full" title="Back">
                     <ArrowLeft className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="icon" onClick={() => void loadDashboard()} className="h-10 w-10 rounded-full">
+                  </GlassIconButton>
+                  <GlassIconButton onClick={() => void loadDashboard()} className="h-10 w-10 rounded-full" title="Refresh">
                     {loadingChanges ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                  </Button>
+                  </GlassIconButton>
                   <div>
-                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">AI Review Monitor</h1>
+                    <h1 className="text-2xl font-semibold tracking-tight text-slate-900">AI Review Monitor</h1>
                   </div>
                 </div>
 
@@ -377,7 +384,7 @@ export default function ReviewAutoAiPage() {
                 </div>
               </div>
 
-              <div className="rounded-[28px] border border-border/60 bg-muted/20 p-5">
+              <GlassToolbar className="rounded-[28px] p-5">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className="text-sm font-semibold text-foreground">Automatic monitor</div>
@@ -398,21 +405,20 @@ export default function ReviewAutoAiPage() {
                       min={1}
                       value={maxLines}
                       onChange={(event) => handleUpdateMaxLines(event.target.value)}
-                      className="h-10 w-32 rounded-xl bg-background font-mono"
+                      className={cn('h-10 w-32 rounded-xl font-mono', glassInputClass)}
                     />
                   </label>
                 </div>
-              </div>
+              </GlassToolbar>
             </div>
-          </CardContent>
-        </Card>
+        </GlassPanel>
 
         <div className="grid gap-6 xl:grid-cols-[1.2fr_1.8fr]">
-          <Card className="overflow-hidden border-border/60 bg-card/95 shadow-none">
-            <CardHeader className="border-b border-border/50 bg-muted/20">
-              <CardTitle className="text-base">Readable changes</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 p-4">
+          <GlassSection className="overflow-hidden p-0">
+            <div className="border-b border-white/45 bg-white/35 px-5 py-4 backdrop-blur-md">
+              <div className="text-base font-semibold text-slate-800">Readable changes</div>
+            </div>
+            <div className="space-y-3 p-4">
               {loadingChanges && allReadableChanges.length === 0 ? (
                 <div className="flex items-center justify-center rounded-2xl border border-dashed border-border/70 px-4 py-12 text-sm text-muted-foreground">
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -427,7 +433,7 @@ export default function ReviewAutoAiPage() {
                   const currentJob = queuedJobMap.get(`${change._number}:${String(change.current_revision)}`);
                   const queued = currentJob?.status === 'pending' || currentJob?.status === 'running';
                   return (
-                    <div key={`${change._number}:${change.current_revision}`} className="rounded-2xl border border-border/60 bg-background/95 p-4">
+                    <div key={`${change._number}:${change.current_revision}`} className="glass-interactive rounded-2xl border border-white/55 bg-white/62 p-4 shadow-[0_12px_28px_rgba(15,23,42,0.1)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/50">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1 space-y-3">
                           <button
@@ -458,8 +464,8 @@ export default function ReviewAutoAiPage() {
                   );
                 })
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </GlassSection>
 
           <div className="grid gap-6 xl:grid-cols-2">
             <JobColumn title="Pending" items={grouped.pending} onOpenChange={handleOpenChange} onRemove={handleRemovePending} />
@@ -469,6 +475,6 @@ export default function ReviewAutoAiPage() {
           </div>
         </div>
       </div>
-    </div>
+    </GlassPage>
   );
 }
