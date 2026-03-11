@@ -20,12 +20,12 @@ import 'prismjs/components/prism-typescript';
 import 'prismjs/components/prism-yaml';
 import type { GerritDiffInfo, GerritCommentInfo, FileEntry } from '@/lib/gerrit/types';
 import { getAccountName } from '@/lib/gerrit/helpers';
-import { MessageSquare, ChevronDown, ChevronRight, Search, Trash2, Reply, Pencil, X, Check } from 'lucide-react';
+import { MessageSquare, ChevronDown, ChevronRight, Trash2, Reply, Pencil, X, Check } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
+import { GlassSearchInput } from '@/components/ui/glass-search-input';
 
 // ─── Diff Line Types ─────────────────────────────────────────────────────────
 
@@ -1320,16 +1320,14 @@ export function FileList({
         </div>
         {/* Search bar */}
         <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Escape') handleClearSearch(); }}
-              placeholder="Search file content..."
-              className="h-9 w-full rounded-xl border-border/60 bg-background pl-8 text-xs shadow-none"
-            />
-          </div>
+          <GlassSearchInput
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Escape') handleClearSearch(); }}
+            placeholder="Search file content..."
+            containerClassName="flex-1"
+            inputClassName="h-9 w-full text-xs"
+          />
           {searchQuery.trim() && (
             <Button variant="ghost" onClick={handleClearSearch} size="sm" className="h-9 rounded-xl px-3 text-xs text-muted-foreground">
               Clear

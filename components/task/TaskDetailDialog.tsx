@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { 
-  X, Edit2, Clock, Hash, AlertCircle, User, Flag, ChevronDown, ChevronUp, AlignLeft, 
-  ListTodo, Plus, MessageSquare, Send, Users, Briefcase, CalendarDays, 
-  CalendarClock, Award, Check, Copy, Pin, PinOff, Loader2 
+import {
+  X, Edit2, Clock, Hash, AlertCircle, User, Flag, ChevronDown, ChevronUp, AlignLeft,
+  ListTodo, Plus, MessageSquare, Send, Users, Briefcase, CalendarDays,
+  CalendarClock, Award, Check, Copy, Pin, PinOff, Loader2
 } from 'lucide-react';
-import { 
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose 
+import {
+  Dialog, DialogContent, DialogTitle, DialogClose, dialogGlassCloseButtonBaseClass
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -36,6 +36,7 @@ import { batchFetchSubtasks, getCachedProjects, getCachedUsers } from '@/lib/con
 import { usePinnedPanel } from '@/contexts/PinnedPanelContext';
 import { cn } from '@/lib/utils';
 import type { Subtask } from '@/lib/task/types';
+import { glassInputClass, glassSectionClass, glassToolbarClass } from '@/components/ui/glass';
 
 interface Comment {
   id: number;
@@ -76,10 +77,10 @@ interface ProjectCache {
   };
 }
 
-export function TaskDetailDialog({ 
-  task, 
-  open, 
-  onOpenChange, 
+export function TaskDetailDialog({
+  task,
+  open,
+  onOpenChange,
   onTaskUpdate,
   overlayZIndex,
   contentZIndex
@@ -135,33 +136,33 @@ export function TaskDetailDialog({
       setIsLoadingDetails(true);
       setIsLoadingSubtasks(true);
       setIsLoadingComments(true);
-      
+
       setSubtasks([]);
       setComments([]);
-      
+
       if (loadAbortController) {
         loadAbortController.abort();
       }
-      
+
       try {
         const data = await httpClient<TaskDetailData>(`/api/tasks/${task.id}`);
         setDetailData(data);
 
         setTaskTitle(data.task.fields.name);
         setTaskStatus(data.task.fields.status.value);
-        
+
         const priorityValue = data.task.fields.priority?.value;
         if (priorityValue !== undefined) {
           setTaskPriority(String(priorityValue));
         }
-        
+
         const desc = data.task.fields.description;
         setTaskDescription(typeof desc === 'string' ? desc : desc?.raw || '');
 
         const customFields = data.task.fields as any;
         const workloadValue = customFields['custom.tp-link.estimated-days'] || '';
         setWorkload(String(workloadValue));
-        
+
         if (data.subtasks && data.subtasks.length > 0) {
           const rootSubtasks: Subtask[] = data.subtasks
             .filter((st: any) => st.fields?.status?.value !== 'invalid')
@@ -175,7 +176,7 @@ export function TaskDetailDialog({
             }));
           setSubtasks(rootSubtasks);
           setIsLoadingSubtasks(false);
-          
+
           const abortController = new AbortController();
           setLoadAbortController(abortController);
           setIsLoadingSubtasksBackground(true);
@@ -183,12 +184,12 @@ export function TaskDetailDialog({
         } else {
           setIsLoadingSubtasks(false);
         }
-        
+
         const estimatedDate = customFields['custom.tp-link.estimated-date-complete'];
         if (estimatedDate) {
           setPlannedCompletion(new Date(estimatedDate * 1000));
         }
-        
+
         const updateDate = customFields['custom.tp-link.update-date-complete'];
         if (updateDate) {
           setUpdatedPlan(new Date(updateDate * 1000));
@@ -197,10 +198,10 @@ export function TaskDetailDialog({
         const workClass = customFields['custom.tp-link.work-class'];
         const workScore = customFields['custom.tp-link.work-score'];
         const completeRate = customFields['custom.tp-link.complete-rate'];
-        
+
         const isValidWorkClass = workClass && workClass !== '0' && workClass !== '待定';
         const isValidWorkScore = workScore && workScore !== '待定';
-        
+
         if (isValidWorkClass && isValidWorkScore) {
           setHasRating(true);
           setTaskScoring({ workClass: workClass || '', workScore: workScore || '', completeRate: completeRate || '' });
@@ -215,7 +216,7 @@ export function TaskDetailDialog({
         }
         const subscriberPHIDs = data.task.attachments?.subscribers?.subscriberPHIDs || [];
         subscriberPHIDs.forEach((phid: string) => userPHIDs.add(phid));
-        
+
         const commentTransactions = (data.transactions || [])
           .filter((t: any) => t.comments && t.comments.length > 0);
         commentTransactions.forEach((t: any) => {
@@ -261,7 +262,7 @@ export function TaskDetailDialog({
           const sortedTransactions = commentTransactions
             .slice()
             .sort((a: any, b: any) => a.dateCreated - b.dateCreated);
-          
+
           const commentOverrides = new Map<string, { kind: 'edit' | 'delete'; text: string }>();
           const hiddenTransactionPHIDs = new Set<string>();
           const deletedTargetPHIDs = new Set<string>();
@@ -298,7 +299,7 @@ export function TaskDetailDialog({
               const originalText = transaction.comments[0]?.content?.raw || '';
               const override = commentOverrides.get(transaction.phid);
               const effectiveText = override ? override.text : originalText;
-              
+
               return {
                 id: transaction.id,
                 phid: transaction.phid,
@@ -310,7 +311,7 @@ export function TaskDetailDialog({
             })
             .filter((comment) => comment.content.trim().length > 0)
             .reverse();
-          
+
           setComments(commentList);
           setIsLoadingComments(false);
         }
@@ -374,7 +375,7 @@ export function TaskDetailDialog({
     try {
       let totalLoaded = 0;
       setSubtasksLoadProgress(0);
-      
+
       const updateMultipleTaskChildren = (
         tasks: Subtask[],
         updates: Map<number, { children: Subtask[]; hasChildren: boolean }>
@@ -390,28 +391,28 @@ export function TaskDetailDialog({
           return task;
         });
       };
-      
+
       const loadLevel = async (tasksToLoad: Subtask[], level: number): Promise<Subtask[]> => {
         if (level > 5 || abortController.signal.aborted || tasksToLoad.length === 0) {
           return [];
         }
-        
+
         const needsLoading = tasksToLoad.filter(t => t.hasChildren && t.children.length === 0);
         if (needsLoading.length === 0) return [];
-        
+
         const taskIds = needsLoading.map(t => t.id);
-        
+
         const subtasksMap = await batchFetchSubtasks(taskIds, {
           onProgress: (completed, total) => {
             setSubtasksLoadProgress(totalLoaded + completed);
           }
         });
-        
+
         if (abortController.signal.aborted) return [];
-        
+
         const updates = new Map<number, { children: Subtask[]; hasChildren: boolean }>();
         const allChildren: Subtask[] = [];
-        
+
         for (const task of needsLoading) {
           const subtaskData = subtasksMap.get(task.id) || [];
           const children: Subtask[] = subtaskData
@@ -426,34 +427,34 @@ export function TaskDetailDialog({
               hasChildren: true,
               isLoadingChildren: false
             }));
-          
+
           updates.set(task.id, { children, hasChildren: children.length > 0 });
           allChildren.push(...children);
         }
-        
+
         totalLoaded += needsLoading.length;
-        
+
         if (!abortController.signal.aborted) {
           setSubtasks(prev => updateMultipleTaskChildren(prev, updates));
           setSubtasksLoadProgress(totalLoaded);
         }
-        
+
         return allChildren;
       };
-      
+
       let currentLevel = rootSubtasks;
       let level = 0;
-      
+
       while (currentLevel.length > 0 && level < 6 && !abortController.signal.aborted) {
         const nextLevel = await loadLevel(currentLevel, level);
         currentLevel = nextLevel;
         level++;
       }
-      
+
       if (!abortController.signal.aborted) {
         setIsLoadingSubtasksBackground(false);
       }
-      
+
     } catch (error) {
       console.error('Background subtask loading failed:', error);
       setIsLoadingSubtasksBackground(false);
@@ -463,7 +464,7 @@ export function TaskDetailDialog({
   const calculateSubtaskStats = (tasks: Subtask[]): { total: number; completed: number; percentage: number } => {
     let total = 0;
     let completed = 0;
-    
+
     const count = (items: Subtask[]) => {
       items.forEach(item => {
         total++;
@@ -473,7 +474,7 @@ export function TaskDetailDialog({
         }
       });
     };
-    
+
     count(tasks);
     const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
     return { total, completed, percentage };
@@ -490,21 +491,21 @@ export function TaskDetailDialog({
       }
       return null;
     };
-    
+
     const subtask = findSubtask(subtasks);
     if (!subtask) return;
-    
+
     const currentStatus = subtask.status || (subtask.completed ? 'resolved' : 'open');
-    
+
     if (currentStatus === 'resolved' || currentStatus === 'excluded') {
       handleReopenSubtask(taskId, currentStatus);
       return;
     }
-    
+
     const statusValue = currentStatus === 'wontfix' ? 'excluded' : 'resolved';
     handleCompleteSubtask(taskId, statusValue);
   };
-  
+
   const handleCompleteSubtask = async (taskId: number, statusValue: string) => {
     setUpdatingSubtaskId(taskId);
     try {
@@ -517,7 +518,7 @@ export function TaskDetailDialog({
           ],
         },
       });
-      
+
       const updateStatus = (tasks: Subtask[]): Subtask[] => {
         return tasks.map(task => {
           if (task.id === taskId) {
@@ -530,7 +531,7 @@ export function TaskDetailDialog({
         });
       };
       setSubtasks(updateStatus(subtasks));
-      
+
       toast.success(
         statusValue === 'excluded' ? '子任务已完成（不加入统计）' : '子任务已完成'
       );
@@ -540,12 +541,12 @@ export function TaskDetailDialog({
       setUpdatingSubtaskId(null);
     }
   };
-  
+
   const handleReopenSubtask = async (taskId: number, currentStatus: string) => {
     setUpdatingSubtaskId(taskId);
     try {
       const newStatus = currentStatus === 'excluded' ? 'wontfix' : 'open';
-      
+
       await httpClient('/api/tasks/edit', {
         method: 'POST',
         body: {
@@ -555,7 +556,7 @@ export function TaskDetailDialog({
           ],
         },
       });
-      
+
       const updateStatus = (tasks: Subtask[]): Subtask[] => {
         return tasks.map(task => {
           if (task.id === taskId) {
@@ -568,7 +569,7 @@ export function TaskDetailDialog({
         });
       };
       setSubtasks(updateStatus(subtasks));
-      
+
       toast.success('子任务已重新打开');
     } catch (error) {
       toast.error('更新子任务状态失败');
@@ -583,7 +584,7 @@ export function TaskDetailDialog({
       for (const task of tasks) {
         if (task.id === taskId) {
           const newExpanded = !task.expanded;
-          
+
           if (newExpanded && task.children.length === 0 && task.hasChildren) {
             try {
               const subtaskData = await httpClient<any>(`/api/tasks/${taskId}`);
@@ -598,7 +599,7 @@ export function TaskDetailDialog({
                   children: [],
                   hasChildren: true
                 })) || [];
-              
+
               result.push({ ...task, expanded: newExpanded, children, isLoadingChildren: false });
             } catch (error) {
               console.error(`Failed to load subtasks for task ${taskId}:`, error);
@@ -616,14 +617,14 @@ export function TaskDetailDialog({
       }
       return result;
     };
-    
+
     const updatedSubtasks = await findAndToggle(subtasks);
     setSubtasks(updatedSubtasks);
   };
 
   const addSubtask = async (parentId: number | null) => {
     if (!newSubtaskTitle.trim() || !task) return;
-    
+
     try {
       let parentPHID: string;
       if (parentId === null || parentId === 0) {
@@ -635,7 +636,7 @@ export function TaskDetailDialog({
         }
         parentPHID = parentData.task.phid;
       }
-      
+
       const response = await httpClient<any>('/api/tasks/create', {
         method: 'POST',
         body: {
@@ -645,12 +646,12 @@ export function TaskDetailDialog({
           projects: detailData?.task?.attachments?.projects?.projectPHIDs || []
         }
       });
-      
+
       const createdTaskId = response?.object?.id;
       if (!createdTaskId) {
         throw new Error('Failed to get created task ID from response');
       }
-      
+
       const newTask: Subtask = {
         id: createdTaskId,
         title: newSubtaskTitle,
@@ -659,7 +660,7 @@ export function TaskDetailDialog({
         children: [],
         hasChildren: false
       };
-      
+
       if (parentId === null || parentId === 0) {
         setSubtasks([...subtasks, newTask]);
       } else {
@@ -681,7 +682,7 @@ export function TaskDetailDialog({
         };
         setSubtasks(addToParent(subtasks));
       }
-      
+
       setNewSubtaskTitle('');
       setAddingSubtaskToId(null);
       toast.success('子任务已添加');
@@ -708,7 +709,7 @@ export function TaskDetailDialog({
 
   const filterSubtasks = (tasks: Subtask[]): Subtask[] => {
     if (showCompletedSubtasks) return tasks;
-    
+
     return tasks
       .map(task => ({
         ...task,
@@ -725,15 +726,15 @@ export function TaskDetailDialog({
     try {
       const data = await httpClient<TaskDetailData>(`/api/tasks/${taskId}`);
       setDetailData(data);
-      
+
       const commentTransactions = (data.transactions || [])
         .filter((t: any) => t.comments && t.comments.length > 0);
-      
+
       const userPHIDs = new Set<string>();
       commentTransactions.forEach((t: any) => {
         if (t.authorPHID) userPHIDs.add(t.authorPHID);
       });
-      
+
       let newUserCache = { ...userCache };
       if (userPHIDs.size > 0) {
         const usersMap = await getCachedUsers(Array.from(userPHIDs));
@@ -748,11 +749,11 @@ export function TaskDetailDialog({
         });
         setUserCache(newUserCache);
       }
-      
+
       const sortedTransactions = commentTransactions
         .slice()
         .sort((a: any, b: any) => a.dateCreated - b.dateCreated);
-      
+
       const commentOverrides = new Map<string, { kind: 'edit' | 'delete'; text: string }>();
       const hiddenTransactionPHIDs = new Set<string>();
       const deletedTargetPHIDs = new Set<string>();
@@ -795,7 +796,7 @@ export function TaskDetailDialog({
         })
         .filter((comment) => comment.content.trim().length > 0)
         .reverse();
-      
+
       setComments(commentList);
     } catch (error) {
       console.error('Failed to refresh comments:', error);
@@ -828,7 +829,7 @@ export function TaskDetailDialog({
     setTaskScoring(data);
     setHasRating(true);
     if (!task) return;
-    
+
     setIsRatingPanelOpen(false);
     try {
       await httpClient('/api/tasks/edit', {
@@ -853,12 +854,12 @@ export function TaskDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn(
-        "max-w-[100vw] h-[100vh] sm:max-w-[90vw] sm:h-[90vh] md:max-w-6xl p-0 flex flex-col gap-0 border-none shadow-2xl bg-background overflow-hidden",
+      <DialogContent showCloseButton={false} className={cn(
+        "max-w-[100vw] h-[100vh] sm:max-w-[90vw] sm:h-[90vh] md:max-w-6xl p-0 flex flex-col gap-0 rounded-3xl border border-white/68 bg-[#f8fbff]/92 shadow-[0_28px_66px_rgba(15,23,42,0.2)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[#f8fbff]/78 overflow-hidden",
         contentZIndex
       )}>
         {/* Header */}
-        <div className="flex-none px-6 py-4 border-b flex items-start justify-between gap-6 bg-background/80 backdrop-blur z-20">
+        <div className={cn(glassToolbarClass, "z-20 m-3 flex-none border-b border-white/50 px-6 py-4 flex items-start justify-between gap-6 rounded-2xl")}>
           <div className="flex-1 min-w-0 space-y-2">
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 h-5 text-muted-foreground/70 border-border/50 bg-muted/20">
@@ -881,9 +882,9 @@ export function TaskDetailDialog({
                   }}
                   className={cn(
                     "p-1 rounded-full transition-all duration-200 opacity-0 group-hover:opacity-100 focus:opacity-100",
-                    isPinned(`task-${task.id}`) 
-                      ? "opacity-100 bg-primary/10 text-primary" 
-                      : "text-muted-foreground/40 hover:bg-muted hover:text-foreground"
+                    isPinned(`task-${task.id}`)
+                      ? "opacity-100 border border-sky-200/80 bg-sky-50/82 text-sky-700"
+                      : "border border-white/55 bg-white/70 text-muted-foreground/60 hover:border-sky-200/80 hover:bg-white/90 hover:text-foreground"
                   )}
                   title={isPinned(`task-${task.id}`) ? '取消固定' : '固定'}
                 >
@@ -891,7 +892,7 @@ export function TaskDetailDialog({
                 </button>
               )}
             </div>
-            
+
             <div className="group relative">
               {isEditingTitle ? (
                 <Input
@@ -903,7 +904,7 @@ export function TaskDetailDialog({
                   autoFocus
                 />
               ) : (
-                <DialogTitle 
+                <DialogTitle
                   className="text-xl md:text-2xl font-semibold leading-tight text-foreground/90 cursor-text py-1 hover:text-foreground transition-colors"
                   onClick={() => setIsEditingTitle(true)}
                 >
@@ -919,10 +920,10 @@ export function TaskDetailDialog({
               size="sm"
               onClick={() => setIsRatingPanelOpen(true)}
               className={cn(
-                "h-8 gap-1.5 text-xs font-medium rounded-full px-3 transition-all",
-                hasRating 
-                  ? "bg-amber-50 text-amber-600 hover:bg-amber-100 hover:text-amber-700 dark:bg-amber-950/30 dark:text-amber-400" 
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                "h-8 gap-1.5 text-xs font-medium rounded-full px-3 border border-white/55 bg-white/70 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/56 transition-all",
+                hasRating
+                  ? "border-amber-200/80 bg-amber-50/82 text-amber-700 hover:bg-amber-100/85"
+                  : "text-muted-foreground hover:border-sky-200/80 hover:bg-white/90 hover:text-foreground"
               )}
             >
               <Award className="h-4 w-4" />
@@ -930,7 +931,7 @@ export function TaskDetailDialog({
             </Button>
             <div className="w-px h-4 bg-border/50 mx-1" />
             <DialogClose asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-muted-foreground/70 hover:text-foreground hover:bg-muted/50">
+              <Button variant="ghost" size="icon" className={cn(dialogGlassCloseButtonBaseClass, "h-8 w-8 text-muted-foreground/70")}>
                 <X className="h-5 w-5" />
               </Button>
             </DialogClose>
@@ -938,12 +939,12 @@ export function TaskDetailDialog({
         </div>
 
         {/* Content Body - Two Column Layout */}
-        <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-          
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-gradient-to-br from-white/38 via-sky-50/24 to-blue-50/18">
+
           {/* LEFT: Main Content (Scrollable) */}
-          <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+          <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent bg-white/30">
             <div className="max-w-3xl mx-auto p-6 md:p-10 space-y-10">
-              
+
               {/* Description Section */}
               <div className="space-y-4 group">
                 <div className="flex items-center justify-between">
@@ -958,7 +959,7 @@ export function TaskDetailDialog({
                     </Button>
                   )}
                 </div>
-                
+
                 {isEditingDescription ? (
                   <div className="space-y-3 animate-in fade-in zoom-in-99 duration-200">
                     <RemarkupEditor
@@ -969,8 +970,8 @@ export function TaskDetailDialog({
                     />
                     <div className="flex gap-2 justify-end">
                       <Button variant="ghost" size="sm" onClick={() => setIsEditingDescription(false)}>取消</Button>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         onClick={async () => {
                           setIsEditingDescription(false);
                           try {
@@ -991,7 +992,7 @@ export function TaskDetailDialog({
                     </div>
                   </div>
                 ) : (
-                  <div 
+                  <div
                     className="text-base leading-7 text-foreground/90 min-h-[80px] cursor-text rounded-md p-1 -ml-1 transition-colors hover:bg-muted/10"
                     onClick={() => setIsEditingDescription(true)}
                   >
@@ -1004,7 +1005,7 @@ export function TaskDetailDialog({
                 )}
               </div>
 
-              <Separator className="bg-border/30" />
+              <Separator className="bg-white/55" />
 
               {/* Subtasks Section */}
               <div className="space-y-4">
@@ -1017,9 +1018,9 @@ export function TaskDetailDialog({
                     )}
                   </h3>
                   {subtasks.length > 0 && (
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => setShowCompletedSubtasks(!showCompletedSubtasks)}
                       className="h-6 text-xs text-muted-foreground hover:text-foreground"
                     >
@@ -1053,7 +1054,7 @@ export function TaskDetailDialog({
 
                     {/* Add Subtask Input */}
                     {addingSubtaskToId !== null ? (
-                      <div className="flex items-center gap-2 p-3 bg-muted/30 rounded-lg animate-in fade-in zoom-in-95 mt-2">
+                      <div className={cn(glassSectionClass, "mt-2 flex items-center gap-2 rounded-xl p-3 animate-in fade-in zoom-in-95")}>
                         <Input
                           value={newSubtaskTitle}
                           onChange={(e) => setNewSubtaskTitle(e.target.value)}
@@ -1065,20 +1066,20 @@ export function TaskDetailDialog({
                             }
                           }}
                           placeholder="输入子任务标题..."
-                          className="h-9 text-sm border-transparent bg-background shadow-sm"
+                          className={cn(glassInputClass, "h-9 text-sm border-transparent shadow-sm")}
                           autoFocus
                         />
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           className="h-9"
                           disabled={!newSubtaskTitle.trim()}
                           onClick={() => addSubtask(addingSubtaskToId === 0 ? null : addingSubtaskToId)}
                         >
                           添加
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           className="h-9"
                           onClick={() => {
                             setAddingSubtaskToId(null);
@@ -1091,7 +1092,7 @@ export function TaskDetailDialog({
                     ) : (
                       <Button
                         variant="ghost"
-                        className="w-full justify-start text-muted-foreground/60 hover:text-primary hover:bg-primary/5 h-9 text-sm"
+                        className="h-9 w-full justify-start rounded-xl border border-white/55 bg-white/70 text-sm text-muted-foreground/70 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-lg hover:border-sky-200/80 hover:bg-white/90 hover:text-primary"
                         onClick={() => setAddingSubtaskToId(0)}
                       >
                         <Plus className="h-4 w-4 mr-2" />
@@ -1102,7 +1103,7 @@ export function TaskDetailDialog({
                 )}
               </div>
 
-              <Separator className="bg-border/30" />
+              <Separator className="bg-white/55" />
 
               {/* Timeline Section */}
               <div className="space-y-4 pb-10">
@@ -1161,11 +1162,11 @@ export function TaskDetailDialog({
           </div>
 
           {/* RIGHT: Sidebar Metadata */}
-          <div className="w-full md:w-[420px] lg:w-[480px] flex-none border-l bg-muted/10 overflow-y-auto overflow-x-hidden border-border/40">
+          <div className="w-full md:w-[420px] lg:w-[480px] flex-none border-l border-white/55 bg-white/44 overflow-y-auto overflow-x-hidden">
             <div className="p-6 space-y-8">
-              
+
               {/* Status & Priority Group */}
-              <div className="space-y-5">
+              <div className={cn(glassSectionClass, "space-y-5 rounded-2xl border border-white/60 bg-white/58 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-lg supports-[backdrop-filter]:bg-white/46")}>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">状态</label>
                   <Select
@@ -1185,7 +1186,7 @@ export function TaskDetailDialog({
                       } catch (error) { toast.error('更新状态失败'); }
                     }}
                   >
-                    <SelectTrigger className="w-full h-9 bg-background border border-border/50 hover:border-border hover:shadow-sm transition-all text-sm rounded-md font-medium">
+                    <SelectTrigger className={cn(glassInputClass, "w-full h-9 text-sm rounded-xl font-medium hover:border-sky-200/80 hover:bg-white/90")}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1213,7 +1214,7 @@ export function TaskDetailDialog({
                       } catch (error) { toast.error('更新优先级失败'); }
                     }}
                   >
-                    <SelectTrigger className="w-full h-9 bg-background border border-border/50 hover:border-border hover:shadow-sm transition-all text-sm rounded-md font-medium">
+                    <SelectTrigger className={cn(glassInputClass, "w-full h-9 text-sm rounded-xl font-medium hover:border-sky-200/80 hover:bg-white/90")}>
                       <SelectValue placeholder="选择优先级" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1228,10 +1229,10 @@ export function TaskDetailDialog({
                 </div>
               </div>
 
-              <Separator className="bg-border/30" />
+              <Separator className="bg-white/55" />
 
               {/* People Group */}
-              <div className="space-y-5">
+              <div className={cn(glassSectionClass, "space-y-5 rounded-2xl border border-white/60 bg-white/58 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-lg supports-[backdrop-filter]:bg-white/46")}>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                     <User className="h-3 w-3" /> 负责人
@@ -1254,7 +1255,7 @@ export function TaskDetailDialog({
                     }}
                     maxSelections={1}
                     className="w-full"
-                    triggerClassName="w-full h-auto min-h-[36px] py-1.5 px-3 bg-transparent hover:bg-muted/40 border border-transparent hover:border-border/50 rounded-md transition-all justify-start"
+                    triggerClassName="w-full h-auto min-h-[36px] py-1.5 px-3 rounded-xl border border-white/55 bg-white/70 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-lg transition-all justify-start hover:border-sky-200/80 hover:bg-white/90"
                   />
                 </div>
 
@@ -1279,15 +1280,15 @@ export function TaskDetailDialog({
                       } catch (error) { toast.error('移除失败'); }
                     }}
                     className="w-full"
-                    triggerClassName="w-full h-auto min-h-[36px] py-1.5 px-3 bg-transparent hover:bg-muted/40 border border-transparent hover:border-border/50 rounded-md transition-all justify-start"
+                    triggerClassName="w-full h-auto min-h-[36px] py-1.5 px-3 rounded-xl border border-white/55 bg-white/70 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-lg transition-all justify-start hover:border-sky-200/80 hover:bg-white/90"
                   />
                 </div>
               </div>
 
-              <Separator className="bg-border/30" />
+              <Separator className="bg-white/55" />
 
               {/* Attributes Group */}
-              <div className="space-y-5">
+              <div className={cn(glassSectionClass, "space-y-5 rounded-2xl border border-white/60 bg-white/58 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-lg supports-[backdrop-filter]:bg-white/46")}>
                 <div className="space-y-1.5">
                    <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                     <Briefcase className="h-3 w-3" /> 项目
@@ -1310,7 +1311,7 @@ export function TaskDetailDialog({
                     }}
                     maxSelections={1}
                     className="w-full"
-                    triggerClassName="w-full h-auto min-h-[36px] py-1.5 px-3 bg-transparent hover:bg-muted/40 border border-transparent hover:border-border/50 rounded-md transition-all justify-start"
+                    triggerClassName="w-full h-auto min-h-[36px] py-1.5 px-3 rounded-xl border border-white/55 bg-white/70 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-lg transition-all justify-start hover:border-sky-200/80 hover:bg-white/90"
                   />
                 </div>
 
@@ -1329,7 +1330,7 @@ export function TaskDetailDialog({
                           toast.success('工作量已更新');
                         } catch (error) { toast.error('更新工作量失败'); }
                       }}
-                      className="h-9 text-sm bg-transparent border-border/50 hover:border-border/80 focus-visible:ring-0 focus-visible:border-primary px-3 shadow-none transition-colors"
+                      className={cn(glassInputClass, "h-9 px-3 text-sm shadow-none transition-colors focus-visible:ring-0 focus-visible:border-primary hover:border-sky-200/80 hover:bg-white/90")}
                       placeholder="如: 1d"
                     />
                   </div>
@@ -1349,7 +1350,7 @@ export function TaskDetailDialog({
                         } catch (error) { toast.error('更新失败'); }
                       }}
                       className="w-full"
-                      triggerClassName="h-9 bg-transparent border-border/50 hover:border-border/80 rounded-md px-3 shadow-none transition-colors justify-start text-sm"
+                      triggerClassName="h-9 rounded-xl border border-white/55 bg-white/70 px-3 text-sm shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-lg transition-colors justify-start hover:border-sky-200/80 hover:bg-white/90"
                     />
                   </div>
                 </div>
@@ -1369,7 +1370,7 @@ export function TaskDetailDialog({
                         } catch (error) { toast.error('更新失败'); }
                       }}
                       className="w-full"
-                      triggerClassName="h-9 bg-transparent border-border/50 hover:border-border/80 rounded-md px-3 shadow-none transition-colors justify-start text-sm"
+                      triggerClassName="h-9 rounded-xl border border-white/55 bg-white/70 px-3 text-sm shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-lg transition-colors justify-start hover:border-sky-200/80 hover:bg-white/90"
                     />
                   </div>
               </div>
@@ -1410,7 +1411,7 @@ export function TaskDetailDialog({
 
       {isLoadingSecondaryTask && (
         <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-[10240] backdrop-blur-sm">
-          <div className="bg-background/80 backdrop-blur-md rounded-xl shadow-2xl px-8 py-6 flex flex-col items-center gap-3 border border-border/20">
+          <div className="rounded-2xl border border-white/65 bg-white/78 px-8 py-6 flex flex-col items-center gap-3 shadow-[0_22px_52px_rgba(15,23,42,0.16)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/62">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
             <p className="text-sm font-medium">加载中...</p>
           </div>

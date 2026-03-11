@@ -1,6 +1,8 @@
-import { useMemo, useEffect, useRef } from 'react';
+import { useMemo, useEffect, useRef, useState } from 'react';
+import DOMPurify from 'dompurify';
 import { remarkupToHtml } from '@/lib/parsers/remarkup';
 import { httpGet } from '@/lib/httpClient';
+import { ImagePreview } from '@/components/ui/ImagePreview';
 import { cn } from '@/lib/utils';
 
 const IMAGE_EXTENSIONS = new Set([
@@ -52,7 +54,23 @@ const PROSE_COMPACT = `
 `;
 
 export function RemarkupRenderer({ content, className, compact = false }: RemarkupRendererProps) {
-  const html = useMemo(() => remarkupToHtml(content || ''), [content]);
+  const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
+  const html = useMemo(() => {
+    const unsafeHtml = remarkupToHtml(content || '');
+    if (typeof window === 'undefined') {
+      return unsafeHtml;
+    }
+    return DOMPurify.sanitize(unsafeHtml, {
+      ADD_ATTR: [
+        'target',
+        'rel',
+        'data-file-id',
+        'data-size',
+        'data-layout',
+        'data-remarkup-image',
+      ],
+    });
+  }, [content]);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Resolve {F12345} file embeds after HTML renders
@@ -84,6 +102,8 @@ export function RemarkupRenderer({ content, className, compact = false }: Remark
           else if (parseFloat(sizeAttr) > 0 && parseFloat(sizeAttr) <= 1) img.style.width = `${Math.round(parseFloat(sizeAttr) * 100)}%`;
           else if (parseFloat(sizeAttr) > 1) img.style.maxWidth = `${sizeAttr}px`;
           if (layoutAttr === 'center') img.className = 'phabricator-image-center';
+          img.dataset.remarkupImage = 'true';
+          img.style.cursor = 'zoom-in';
           el.appendChild(img);
         } else {
           const a = document.createElement('a');
@@ -102,15 +122,44 @@ export function RemarkupRenderer({ content, className, compact = false }: Remark
     return () => { cancelled = true; };
   }, [html]);
 
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const images = Array.from(container.querySelectorAll<HTMLImageElement>('img'));
+    images.forEach((img) => {
+      img.dataset.remarkupImage = 'true';
+      img.style.cursor = 'zoom-in';
+    });
+  }, [html]);
+
   const proseClasses = compact
     ? `${PROSE_BASE} ${PROSE_COMPACT}`
     : `${PROSE_BASE} ${PROSE_FULL}`;
 
   return (
-    <div
-      ref={containerRef}
-      className={cn(proseClasses, className)}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <>
+      <div
+        ref={containerRef}
+        className={cn(proseClasses, '[&_img[data-remarkup-image=\"true\"]]:cursor-zoom-in', className)}
+        onClickCapture={(event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLImageElement)) return;
+          const src = target.currentSrc || target.src;
+          if (!src) return;
+          setPreviewImage({
+            src,
+            alt: target.alt || 'Image',
+          });
+        }}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+      <ImagePreview
+        key={previewImage?.src || 'image-preview'}
+        src={previewImage?.src || ''}
+        alt={previewImage?.alt || 'Image'}
+        isOpen={Boolean(previewImage)}
+        onClose={() => setPreviewImage(null)}
+      />
+    </>
   );
 }

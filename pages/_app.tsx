@@ -5,6 +5,7 @@ import { UserProvider } from '@/contexts/UserContext';
 import { PinnedPanelProvider } from '@/contexts/PinnedPanelContext';
 import { Toaster, toast } from 'sonner';
 import { ToastWrapper } from '@/components/ui/toast-wrapper';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 
@@ -87,17 +88,28 @@ export default function App({ Component, pageProps }: AppProps) {
   }, [router]);
 
   return (
-    <UserProvider>
-      <PinnedPanelProvider>
-        <AppLayout>
-          <Component {...pageProps} />
-        </AppLayout>
+    <TooltipProvider>
+      <UserProvider>
+        <PinnedPanelProvider>
+          <AppLayout>
+            <Component {...pageProps} />
+          </AppLayout>
         <Toaster 
           position="bottom-left"
           duration={4000}
+          toastOptions={{
+            classNames: {
+              toast: 'glass-toast',
+              title: 'glass-toast-title',
+              description: 'glass-toast-description',
+              actionButton: 'glass-toast-action',
+              cancelButton: 'glass-toast-cancel',
+            },
+          }}
         />
-        <ToastWrapper />
-      </PinnedPanelProvider>
-    </UserProvider>
+          <ToastWrapper />
+        </PinnedPanelProvider>
+      </UserProvider>
+    </TooltipProvider>
   );
 }

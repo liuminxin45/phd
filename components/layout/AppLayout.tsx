@@ -1,6 +1,6 @@
 import { useRouter } from 'next/router';
 import { ReactNode, useMemo, useState, useEffect, useRef } from 'react';
-import { Home, CheckSquare, Folder, BookOpen, GitPullRequest, Search, X, Minus, Square, Settings } from 'lucide-react';
+import { Home, CheckSquare, Folder, BookOpen, GitPullRequest, X, Minus, Square, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/contexts/UserContext';
 import { Badge } from '@/components/ui/badge';
@@ -49,9 +49,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const router = useRouter();
   const { user } = useUser();
   const { isPanelExpanded } = usePinnedPanel();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
   const [currentPath, setCurrentPath] = useState('/');
   const [mountedPages, setMountedPages] = useState<Set<string>>(new Set(['/', '/review', '/review-auto-ai']));
   const [pageReloadKeys, setPageReloadKeys] = useState<Record<string, number>>({});
@@ -116,65 +113,16 @@ export default function AppLayout({ children }: AppLayoutProps) {
     });
   };
 
-  // Mock search data
-  const allData = {
-    tasks: [
-      { id: 'T123', title: 'Implement user authentication', type: 'Task' },
-      { id: 'T124', title: 'Fix memory leak in data processor', type: 'Task' },
-      { id: 'T125', title: 'Update API documentation', type: 'Task' },
-    ],
-    projects: [
-      { id: 'P1', title: 'Backend Services', type: 'Project' },
-      { id: 'P2', title: 'Frontend Redesign', type: 'Project' },
-      { id: 'P3', title: 'Mobile App', type: 'Project' },
-    ],
-  };
-
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
-    if (query.trim().length < 2) {
-      setSearchResults([]);
-      setIsSearching(false);
-      return;
-    }
-
-    setIsSearching(true);
-    const results: any[] = [];
-    const lowerQuery = query.toLowerCase();
-
-    Object.values(allData).forEach((category) => {
-      category.forEach((item) => {
-        if (item.title.toLowerCase().includes(lowerQuery) || item.id.toLowerCase().includes(lowerQuery)) {
-          results.push(item);
-        }
-      });
-    });
-
-    setSearchResults(results.slice(0, 8));
-  };
-
   const activePath = normalizePath(router.asPath || currentPath || '/');
   const currentPage = navigation.find((item) => item.href === activePath)?.name || 'Dashboard';
 
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
       {/* Fixed Sidebar */}
-      <aside className="group flex w-16 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-300 data-[collapsed=false]:w-64">
-        {/* Sidebar Header / Search */}
-        <div className="flex h-14 items-center justify-center border-b border-sidebar-border px-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-            title="Search"
-            onClick={() => {
-              // TODO: Implement global search focus or expansion
-              const searchInput = document.querySelector('[data-global-search]') as HTMLInputElement;
-              if (searchInput) searchInput.focus();
-            }}
-          >
-            <Search className="h-5 w-5" />
-          </Button>
+      <aside className="group m-3 mr-0 flex w-16 flex-col rounded-3xl border border-white/60 bg-white/52 shadow-[0_18px_46px_rgba(15,23,42,0.12)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/42 transition-[width] duration-300 data-[collapsed=false]:w-64">
+        {/* Sidebar Header */}
+        <div className="flex h-14 items-center justify-center border-b border-white/45 px-3">
+          <div className="h-2.5 w-2.5 rounded-full bg-sky-500 shadow-[0_0_0_6px_rgba(56,189,248,0.18)]" aria-hidden="true" />
         </div>
 
         {/* Navigation */}
@@ -189,10 +137,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     href={item.href}
                     onClick={(e) => handleNavigation(item.href, e)}
                     className={cn(
-                      "flex items-center justify-center rounded-md p-2.5 transition-all duration-200 outline-none ring-sidebar-ring focus-visible:ring-2",
+                      "glass-interactive flex items-center justify-center rounded-xl border border-transparent p-2.5 transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-sky-500/45",
                       isActive
-                        ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-                        : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                        ? "border-white/65 bg-white/82 text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.14)]"
+                        : "text-slate-600 hover:border-white/55 hover:bg-white/62 hover:text-slate-900"
                     )}
                     title={item.name}
                   >
@@ -205,15 +153,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
         </nav>
 
         {/* Footer / Settings */}
-        <div className="mt-auto border-t border-sidebar-border p-3">
+        <div className="mt-auto border-t border-white/45 p-3">
           <a
             href="/settings"
             onClick={(e) => handleNavigation('/settings', e)}
             className={cn(
-              "flex items-center justify-center rounded-md p-2.5 transition-all duration-200 outline-none ring-sidebar-ring focus-visible:ring-2",
+              "glass-interactive flex items-center justify-center rounded-xl border border-transparent p-2.5 transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-sky-500/45",
               currentPath === '/settings'
-                ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-                : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                ? "border-white/65 bg-white/82 text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.14)]"
+                : "text-slate-600 hover:border-white/55 hover:bg-white/62 hover:text-slate-900"
             )}
             title="Settings"
           >

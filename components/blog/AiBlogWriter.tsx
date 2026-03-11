@@ -23,6 +23,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { GlassIconButton } from '@/components/ui/glass';
 import { cn } from '@/lib/utils';
 import type { PostsResponse } from '@/lib/blog/types';
 import { buildAnalysisPrompt, buildOutlinePrompt, buildPolishPrompt, buildWritePrompt } from '@/lib/blog/prompts';
@@ -100,8 +101,10 @@ async function callLLM(
 
 export function AiBlogWriter({
   onFill,
+  iconOnly = false,
 }: {
   onFill: (title: string, content: string) => void;
+  iconOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [steps, setSteps] = useState<Step[]>(makeSteps);
@@ -318,16 +321,27 @@ export function AiBlogWriter({
   return (
     <>
       {/* Trigger Button */}
-      <Button
-        variant="outline"
-        size="sm"
-        className="gap-1.5 text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700"
-        onClick={handleOpen}
-        title="AI 智能写博客"
-      >
-        <Sparkles className="h-3.5 w-3.5" />
-        AI 写博客
-      </Button>
+      {iconOnly ? (
+        <GlassIconButton
+          onClick={handleOpen}
+          tone="primary"
+          tooltip="AI Blog Writer"
+          aria-label="AI Blog Writer"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+        </GlassIconButton>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5 text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700"
+          onClick={handleOpen}
+          title="AI 智能写博客"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          AI 写博客
+        </Button>
+      )}
 
       {/* Dialog */}
       <Dialog open={open} onOpenChange={(v) => { if (!running) setOpen(v); }}>

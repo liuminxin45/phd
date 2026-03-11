@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { 
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose 
+import {
+  Dialog, DialogContent, DialogTitle
 } from '@/components/ui/dialog';
-import { X, Info, BarChart, Kanban, FileText, Users, User, TrendingUp, MessageSquare, Send, Plus, Settings, Trash2, Search, Filter, ChevronRight, GripVertical, Upload, ExternalLink, Edit2, Check, Loader2, Maximize2, Minimize2, Pin } from 'lucide-react';
+import { Info, BarChart, Kanban, FileText, Users, User, TrendingUp, MessageSquare, Send, Plus, Settings, Trash2, Filter, ChevronRight, GripVertical, Upload, ExternalLink, Edit2, Check, Loader2, Maximize2, Minimize2, Pin, X } from 'lucide-react';
 import { Project } from '@/lib/api';
 import { httpClient } from '@/lib/httpClient';
 import { toast, toastWithUndo } from '@/lib/toast';
@@ -24,6 +24,9 @@ import { usePinnedPanel } from '@/contexts/PinnedPanelContext';
 import { RemarkupRenderer } from '@/components/ui/RemarkupRenderer';
 import { TaskDetailDialog } from '@/components/task/TaskDetailDialog';
 import { Timeline, TimelineItem } from '@/components/ui/Timeline';
+import { cn } from '@/lib/utils';
+import { GlassSearchInput } from '@/components/ui/glass-search-input';
+import { glassInputClass, glassSectionClass, glassToolbarClass } from '@/components/ui/glass';
 
 interface ProjectDetailPanelProps {
   project: Project;
@@ -52,7 +55,7 @@ interface Milestone {
   monogram?: string;
   node: string;
   preNode: string;
-  bindItem?: string; // 绑定节点池节点
+  bindItem?: string; // Bind Node Pool Item
   originalPlan?: Date;
   updatedPlan?: Date;
   actualComplete?: Date;
@@ -120,14 +123,14 @@ const TabItem = ({ tab, index, moveTab, onClick }: any) => {
     <button
       ref={ref}
       onClick={onClick}
-      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-move ${
+      className={`group flex h-9 items-center rounded-xl border px-3 py-2 text-sm font-medium transition-all duration-200 cursor-move ${
         tab.active
-          ? 'border-neutral-900 text-neutral-900'
-          : 'border-transparent text-neutral-500 hover:text-neutral-700 hover:border-neutral-300'
+          ? 'border-sky-200/90 bg-sky-50/82 text-sky-700 shadow-[0_8px_20px_rgba(14,116,144,0.14)]'
+          : 'border-white/55 bg-white/68 text-slate-600 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/52 hover:-translate-y-0.5 hover:border-sky-200/80 hover:bg-white/82 hover:text-slate-900'
       } ${isDragging ? 'opacity-50' : ''}`}
     >
       <div className="flex items-center gap-2">
-        <tab.icon className="h-4 w-4" />
+        <tab.icon className={cn("h-4 w-4 transition-transform duration-200", tab.active ? "" : "group-hover:scale-105")} />
         {tab.label}
       </div>
     </button>
@@ -167,18 +170,18 @@ const MilestoneItem = ({ milestone, index, moveMilestone, onDelete, onUpdate, on
   // Determine background color and text style based on milestone status (processNode)
   const getStatusStyles = () => {
     switch (milestone.processNode) {
-      case '已完成':
+      case 'Completed':
         // Completed: faded/grayed out style to reduce visual prominence
         return {
           container: 'bg-neutral-100 border-neutral-200 opacity-60',
           text: 'text-neutral-400'
         };
-      case '进行中':
+      case 'In Progress':
         return {
           container: 'bg-blue-50 border-blue-200',
           text: 'text-neutral-900'
         };
-      case '未开始':
+      case 'Not Started':
       default:
         return {
           container: 'bg-neutral-50 border-neutral-200',
@@ -192,10 +195,15 @@ const MilestoneItem = ({ milestone, index, moveMilestone, onDelete, onUpdate, on
   return (
     <div
       ref={ref}
-      className={`${statusStyles.container} border rounded p-2 transition-opacity group w-fit ${isDragging ? 'opacity-50' : ''}`}
+      className={cn(
+        `${statusStyles.container} border rounded-2xl p-2.5 transition-all duration-200 group w-fit`,
+        "border-white/60 bg-white/62 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/48",
+        "hover:-translate-y-0.5 hover:border-sky-200/70",
+        isDragging ? 'opacity-50' : ''
+      )}
     >
-      <div className="grid gap-2 text-[10px] items-center" style={{ 
-        gridTemplateColumns: `40px ${visibleFields.node ? '120px' : ''} ${visibleFields.preNode ? '100px' : ''} ${visibleFields.originalPlan ? '100px' : ''} ${visibleFields.updatedPlan ? '100px' : ''} ${visibleFields.actualComplete ? '100px' : ''} ${visibleFields.nodeDelay ? '80px' : ''} ${visibleFields.totalDelay ? '80px' : ''} ${visibleFields.delayCount ? '70px' : ''} ${visibleFields.delayCategory ? '80px' : ''} ${visibleFields.taskId ? '80px' : ''} ${visibleFields.processNode ? '90px' : ''} 50px`.replace(/\s+/g, ' ').trim() 
+      <div className="grid gap-2 text-[10px] items-center" style={{
+        gridTemplateColumns: `40px ${visibleFields.node ? '120px' : ''} ${visibleFields.preNode ? '100px' : ''} ${visibleFields.originalPlan ? '100px' : ''} ${visibleFields.updatedPlan ? '100px' : ''} ${visibleFields.actualComplete ? '100px' : ''} ${visibleFields.nodeDelay ? '80px' : ''} ${visibleFields.totalDelay ? '80px' : ''} ${visibleFields.delayCount ? '70px' : ''} ${visibleFields.delayCategory ? '80px' : ''} ${visibleFields.taskId ? '80px' : ''} ${visibleFields.processNode ? '90px' : ''} 50px`.replace(/\s+/g, ' ').trim()
       }}>
         <div ref={dragRef} className="flex items-center justify-center cursor-move">
           <GripVertical className="h-3.5 w-3.5 text-neutral-400 hover:text-neutral-600" />
@@ -223,7 +231,7 @@ const MilestoneItem = ({ milestone, index, moveMilestone, onDelete, onUpdate, on
         */}
         <button
           onClick={() => onDelete(milestone.id)}
-          className="p-1 hover:bg-red-100 rounded transition-colors"
+          className="rounded-lg border border-transparent p-1 transition-all hover:border-rose-200/70 hover:bg-rose-50"
           title="删除里程碑"
         >
           <Trash2 className="h-3 w-3 text-red-500" />
@@ -235,9 +243,9 @@ const MilestoneItem = ({ milestone, index, moveMilestone, onDelete, onUpdate, on
 
 // Helper function to calculate milestone status based on actualComplete field and preNode dependency
 // Status logic:
-// - If actualComplete has a date -> "已完成"
-// - The milestone whose preNode is a completed milestone (and itself is not completed) -> "进行中"
-// - All other milestones without actualComplete -> "未开始"
+// - If actualComplete has a date -> "Completed"
+// - The milestone whose preNode is a completed milestone (and itself is not completed) -> "In Progress"
+// - All other milestones without actualComplete -> "Not Started"
 const calculateMilestoneStatus = (milestones: Milestone[]): Milestone[] => {
   // First, find all completed milestone names
   const completedMilestoneNames = new Set(
@@ -245,39 +253,39 @@ const calculateMilestoneStatus = (milestones: Milestone[]): Milestone[] => {
       .filter(m => m.actualComplete)
       .map(m => m.node)
   );
-  
-  // If no completed milestones, the first milestone (or one with no preNode) is "进行中"
+
+  // If no completed milestones, the first milestone (or one with no preNode) is "In Progress"
   if (completedMilestoneNames.size === 0) {
     let foundFirst = false;
     return milestones.map((milestone) => {
       if (!foundFirst && (milestone.preNode === '-' || milestone.preNode === '')) {
         foundFirst = true;
-        return { ...milestone, processNode: '进行中' };
+        return { ...milestone, processNode: 'In Progress' };
       }
-      return { ...milestone, processNode: foundFirst ? '未开始' : '进行中' };
+      return { ...milestone, processNode: foundFirst ? 'Not Started' : 'In Progress' };
     });
   }
-  
-  // Find milestones that are "进行中":
+
+  // Find milestones that are "In Progress":
   // - Not completed (no actualComplete)
   // - Their preNode is a completed milestone
   return milestones.map((milestone) => {
     let status: string;
-    
+
     if (milestone.actualComplete) {
       // Has actual completion date = completed
-      status = '已完成';
+      status = 'Completed';
     } else if (milestone.preNode && milestone.preNode !== '-' && completedMilestoneNames.has(milestone.preNode)) {
       // This milestone's preNode is completed, so this one is in progress
-      status = '进行中';
+      status = 'In Progress';
     } else if (milestone.preNode === '-' || milestone.preNode === '') {
       // No preNode - check if it should be in progress (first milestone scenario)
-      status = completedMilestoneNames.size === 0 ? '进行中' : '未开始';
+      status = completedMilestoneNames.size === 0 ? 'In Progress' : 'Not Started';
     } else {
       // preNode is not completed yet = not started
-      status = '未开始';
+      status = 'Not Started';
     }
-    
+
     return { ...milestone, processNode: status };
   });
 };
@@ -301,7 +309,7 @@ const getDelayReasonOptions = (team: string): { value: string; label: string }[]
 
   const reasons = reasonMap[team] || [];
   return [
-    { value: '', label: '请选择' },
+    { value: '', label: 'Please select' },
     ...reasons.map(r => ({ value: r, label: r }))
   ];
 };
@@ -309,9 +317,9 @@ const getDelayReasonOptions = (team: string): { value: string; label: string }[]
 export function ProjectDetailPanel({ project, isModal = false, onClose }: ProjectDetailPanelProps) {
   const { addPinnedItem, removePinnedItem, isPinned } = usePinnedPanel();
   const [tabs, setTabs] = useState<Tab[]>([
-    { id: 'info', label: '项目信息', icon: Info, active: true },
+    { id: 'info', label: 'Project Info', icon: Info, active: true },
     { id: 'dashboard', label: 'Dashboard', icon: BarChart, active: false },
-    { id: 'kanban', label: '任务看板', icon: Kanban, active: false },
+    { id: 'kanban', label: 'Task Board', icon: Kanban, active: false },
     { id: 'docs', label: 'Docs', icon: FileText, active: false },
   ]);
 
@@ -335,7 +343,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
   const [isLoadingTimeline, setIsLoadingTimeline] = useState(false);
   const [delayTeam, setDelayTeam] = useState<string>('');
   const [delayReason, setDelayReason] = useState<string>('');
-  const [delayDesc, setDelayDesc] = useState<string>(''); // 延期原因描述
+  const [delayDesc, setDelayDesc] = useState<string>(''); // Delay Reason描述
   const [milestoneVisibleFields, setMilestoneVisibleFields] = useState({
     node: true,
     preNode: true,
@@ -500,7 +508,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
       try {
         const progressData = await httpClient<any>(`/api/projects/${project.id}/progress`);
         setProjectProgress(progressData.progressPercentage || 0);
-        
+
         // Fetch milestones data
         const milestonesData = await httpClient<any>(`/api/projects/${project.id}/milestones`);
         if (milestonesData && Array.isArray(milestonesData)) {
@@ -510,7 +518,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
             monogram: m.monogram,
             node: m.milestoneName || m.node || '-',
             preNode: m.preMilestone || m.preNode || '-',
-            bindItem: m.bindItem || '', // 绑定节点池节点
+            bindItem: m.bindItem || '', // Bind Node Pool Item
             originalPlan: m.estimateFinishDate ? new Date(m.estimateFinishDate * 1000) : undefined,
             updatedPlan: m.updateFinishDate ? new Date(m.updateFinishDate * 1000) : undefined,
             actualComplete: m.actualFinishDate ? new Date(m.actualFinishDate * 1000) : undefined,
@@ -519,7 +527,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
             delayCount: m.delayNum ? String(m.delayNum) : '0',
             delayCategory: m.delayType || '-',
             taskId: m.monogram || '-',
-            processNode: m.status || '未开始',
+            processNode: m.status || 'Not Started',
           }));
           // Calculate status based on actualComplete field
           const milestonesWithStatus = calculateMilestoneStatus(formattedMilestones);
@@ -594,12 +602,12 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
         const tasksData = await httpClient<any>(`/api/projects/${project.id}/tasks`);
         if (tasksData && tasksData.data) {
           const tasks = tasksData.data;
-          
+
           // Fetch owner info for all tasks
           const ownerPHIDs = tasks
             .map((t: any) => t.fields?.ownerPHID)
             .filter(Boolean);
-          
+
           let ownerMap: Record<string, string> = {};
           if (ownerPHIDs.length > 0) {
             const usersData = await httpClient<Record<string, any>>('/api/users/batch', {
@@ -613,7 +621,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
               ])
             );
           }
-          
+
           // Categorize tasks by status (exclude 'invalid' = 删除/中止)
           const formattedTasks: KanbanTask[] = tasks
             .filter((task: any) => {
@@ -624,21 +632,21 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
               const status = task.fields?.status?.value || 'open';
               const ownerPHID = task.fields?.ownerPHID;
               const assignee = ownerPHID ? (ownerMap[ownerPHID] || 'Unknown') : '未分配';
-              
+
               let kanbanStatus: 'Waiting' | 'In Progress' | 'Completed';
-              // 待办: notbegin(未开始) + spite(暂停)
+              // Waiting: notbegin(Not Started) + spite(暂停)
               if (status === 'notbegin' || status === 'spite') {
                 kanbanStatus = 'Waiting';
-              } 
-              // 已完成: resolved(已完成) + excluded(已完成不加入统计)
+              }
+              // Completed: resolved(Completed) + excluded(Completed不加入统计)
               else if (status === 'resolved' || status === 'excluded') {
                 kanbanStatus = 'Completed';
-              } 
-              // 进行中: open(进行中) + wontfix(进行中不加入统计) + stalled等其他状态
+              }
+              // In Progress: open(In Progress) + wontfix(In Progress不加入统计) + stalled等其他状态
               else {
                 kanbanStatus = 'In Progress';
               }
-              
+
               return {
                 id: `T${task.id}`,
                 taskId: task.id,
@@ -647,14 +655,14 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                 status: kanbanStatus,
               };
             });
-          
+
           setKanbanTasks(formattedTasks);
         }
       } catch (error) {
         console.error('Failed to fetch tasks:', error);
       }
     };
-    
+
     fetchTasks();
   }, [project.id]);
 
@@ -671,7 +679,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
             'Cache-Control': 'no-cache',
           },
         });
-        
+
         const monogram = response.headers.get('X-Schedule-Monogram');
         if (monogram && monogram !== 'none') {
           setScheduleMonogram(monogram);
@@ -681,9 +689,9 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
             setScheduleId(parseInt(idMatch[0], 10));
           }
         }
-        
+
         const commentsData = await response.json();
-        
+
         if (Array.isArray(commentsData) && commentsData.length > 0) {
           const formattedUpdates = commentsData.map((c: any) => ({
             id: c.id,
@@ -717,47 +725,58 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
   };
 
   const activeTab = tabs.find(t => t.active);
+  const projectPinId = `project-${project.id}`;
+  const isProjectPinned = isPinned(projectPinId);
 
   return (
-    <div className="flex flex-col h-full w-full bg-background text-foreground">
+    <div className="flex h-full w-full flex-col bg-gradient-to-br from-white/35 via-sky-50/22 to-blue-50/18 text-foreground">
       {/* Header */}
-      <div className={`flex-shrink-0 border-b border-border px-6 py-4 flex items-center justify-between ${isModal ? 'pr-12' : ''}`}>
-        <h2 className="text-lg font-semibold">{project.fields.name}</h2>
-        <div className="flex items-center gap-2">
+      <div className={cn(glassToolbarClass, "m-3 flex flex-shrink-0 items-center justify-between rounded-2xl border border-white/60 px-4 py-3.5 md:px-5")}>
+        <h2 className="truncate pr-3 text-lg font-semibold text-slate-900">{project.fields.name}</h2>
+        <div className="flex items-center gap-2.5">
           <button
             onClick={() => {
-              const pinId = `project-${project.id}`;
-              if (isPinned(pinId)) {
-                removePinnedItem(pinId);
+              if (isProjectPinned) {
+                removePinnedItem(projectPinId);
               } else {
                 addPinnedItem({
-                  id: pinId,
+                  id: projectPinId,
                   type: 'project',
                   title: project.fields.name,
                   projectId: project.id,
                 });
               }
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded transition-colors ${
-              isPinned(`project-${project.id}`)
-                ? 'text-primary bg-primary/10 hover:bg-primary/20'
-                : 'text-muted-foreground bg-muted hover:bg-muted/80'
+            aria-label={isProjectPinned ? 'Unpin project' : 'Pin project'}
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border transition-all duration-200 ${
+              isProjectPinned
+                ? 'border-sky-200/90 bg-sky-50/82 text-sky-700 shadow-[0_8px_20px_rgba(14,116,144,0.14)]'
+                : 'border-white/55 bg-white/68 text-slate-600 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/52 hover:-translate-y-0.5 hover:border-sky-200/80 hover:bg-white/82 hover:text-slate-900'
             }`}
-            title={isPinned(`project-${project.id}`) ? 'Unpin from panel' : 'Pin to panel'}
+            title={isProjectPinned ? 'Unpin from panel' : 'Pin to panel'}
           >
             <Pin className="h-3.5 w-3.5" />
-            <span>{isPinned(`project-${project.id}`) ? 'Pinned' : 'Pin'}</span>
           </button>
+          {isModal && onClose && (
+            <button
+              onClick={onClose}
+              aria-label="Close project details"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/55 bg-white/72 text-slate-600 shadow-[0_8px_20px_rgba(15,23,42,0.1)] backdrop-blur-lg supports-[backdrop-filter]:bg-white/58 transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-200/80 hover:bg-white/90 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/55"
+              title="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Draggable Tabs */}
       <DndProvider backend={HTML5Backend}>
-        <div className="flex-shrink-0 border-b border-border px-6 flex gap-1">
+        <div className="mx-3 mb-2 flex flex-shrink-0 gap-2 overflow-x-auto rounded-2xl border border-white/58 bg-white/48 p-2 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/36">
           {tabs.map((tab, index) => (
-            <TabItem 
-              tab={tab} 
-              index={index} 
+            <TabItem
+              tab={tab}
+              index={index}
               moveTab={moveTab}
               onClick={() => handleTabClick(tab.id)}
             />
@@ -766,102 +785,108 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
       </DndProvider>
 
       {/* Tab Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto px-4 pb-4 pt-1 md:px-6">
         {/* Info Tab */}
         {activeTab?.id === 'info' && (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {/* Basic Info */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold">基本信息</h3>
-              
+            <div className={cn(glassSectionClass, "space-y-4 rounded-2xl border border-white/60 bg-white/62 p-5 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/50")}>
+              <h3 className="text-sm font-semibold text-slate-900">基本信息</h3>
+
               <div className="space-y-3 text-sm">
                 <div className="flex items-start">
-                  <span className="text-muted-foreground w-24 flex-shrink-0">项目名称:</span>
-                  <span>{project.fields.name}</span>
+                  <span className="w-24 flex-shrink-0 text-muted-foreground">Project Name:</span>
+                  <span className="font-medium text-slate-800">{project.fields.name}</span>
                 </div>
                 <div className="flex items-start">
-                  <span className="text-muted-foreground w-24 flex-shrink-0">描述:</span>
+                  <span className="w-24 flex-shrink-0 text-muted-foreground">Description:</span>
                   <span className="text-muted-foreground text-xs">
-                    {project.fields.description || '暂无描述'}
+                    {project.fields.description || 'No description'}
                   </span>
                 </div>
               </div>
             </div>
 
             {/* Team Info */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-neutral-900 flex items-center gap-2">
+            <div className={cn(glassSectionClass, "space-y-4 rounded-2xl border border-white/60 bg-white/62 p-5 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/50")}>
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                 <Users className="h-4 w-4" />
-                团队信息
+                Team Info
               </h3>
-              
+
               <div className="grid grid-cols-1 gap-4 text-sm">
                 <div className="flex items-start gap-2">
                   <User className="h-3 w-3 text-neutral-400 flex-shrink-0 mt-0.5" />
-                  <span className="text-neutral-500 w-20 flex-shrink-0 text-xs">项目负责人:</span>
+                  <span className="text-neutral-500 w-20 flex-shrink-0 text-xs">Project Manager:</span>
                   {loading ? (
                     <div className="flex items-center gap-2 text-xs text-neutral-500">
                       <Loader2 className="h-3 w-3 animate-spin" />
-                      加载中...
+                      Loading...
                     </div>
                   ) : (
                     <PeoplePicker
                       selected={projectManager}
                       onAdd={(person) => {
                         setProjectManager([person]);
-                        toast.success(`已设置项目负责人: ${person.name}`);
+                        toast.success(`已设置Project Manager: ${person.name}`);
                       }}
                       onRemove={() => {
                         setProjectManager([]);
-                        toast.success('已移除项目负责人');
+                        toast.success('Project manager removed');
                       }}
                       maxSelections={1}
+                      className="w-full"
+                      triggerClassName="min-h-[36px] rounded-xl border border-white/55 bg-white/72 px-3 py-1.5 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-lg transition-all hover:border-sky-200/80 hover:bg-white/90"
                     />
                   )}
                 </div>
                 <div className="flex items-start gap-2">
                   <User className="h-3 w-3 text-neutral-400 flex-shrink-0 mt-0.5" />
-                  <span className="text-neutral-500 w-20 flex-shrink-0 text-xs">产品负责人:</span>
+                  <span className="text-neutral-500 w-20 flex-shrink-0 text-xs">Product Manager:</span>
                   {loading ? (
                     <div className="flex items-center gap-2 text-xs text-neutral-500">
                       <Loader2 className="h-3 w-3 animate-spin" />
-                      加载中...
+                      Loading...
                     </div>
                   ) : (
                     <PeoplePicker
                       selected={productManager}
                       onAdd={(person) => {
                         setProductManager([person]);
-                        toast.success(`已设置产品负责人: ${person.name}`);
+                        toast.success(`已设置Product Manager: ${person.name}`);
                       }}
                       onRemove={() => {
                         setProductManager([]);
-                        toast.success('已移除产品负责人');
+                        toast.success('Product manager removed');
                       }}
                       maxSelections={1}
+                      className="w-full"
+                      triggerClassName="min-h-[36px] rounded-xl border border-white/55 bg-white/72 px-3 py-1.5 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-lg transition-all hover:border-sky-200/80 hover:bg-white/90"
                     />
                   )}
                 </div>
                 <div className="flex items-start gap-2">
                   <Users className="h-3 w-3 text-neutral-400 flex-shrink-0 mt-0.5" />
-                  <span className="text-neutral-500 w-20 flex-shrink-0 text-xs">助理:</span>
+                  <span className="text-neutral-500 w-20 flex-shrink-0 text-xs">Assistant:</span>
                   {loading ? (
                     <div className="flex items-center gap-2 text-xs text-neutral-500">
                       <Loader2 className="h-3 w-3 animate-spin" />
-                      加载中...
+                      Loading...
                     </div>
                   ) : (
                     <PeoplePicker
                       selected={projectAssistant}
                       onAdd={(person) => {
                         setProjectAssistant([...projectAssistant, person]);
-                        toast.success(`已添加助理: ${person.name}`);
+                        toast.success(`Assistant added: ${person.name}`);
                       }}
                       onRemove={(personId) => {
                         setProjectAssistant(projectAssistant.filter(p => p.id !== personId));
-                        toast.success('已移除助理');
+                        toast.success('Assistant removed');
                       }}
                       maxSelections={1}
+                      className="w-full"
+                      triggerClassName="min-h-[36px] rounded-xl border border-white/55 bg-white/72 px-3 py-1.5 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-lg transition-all hover:border-sky-200/80 hover:bg-white/90"
                     />
                   )}
                 </div>
@@ -869,27 +894,29 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
             </div>
 
             {/* Members */}
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold text-neutral-900 flex items-center gap-2">
+            <div className={cn(glassSectionClass, "space-y-3 rounded-2xl border border-white/60 bg-white/62 p-5 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/50")}>
+              <h4 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                 <Users className="h-4 w-4" />
-                成员
+                Members
               </h4>
               {loading ? (
                 <div className="flex items-center gap-2 text-sm text-neutral-500 py-4">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  加载成员信息...
+                  Loading members...
                 </div>
               ) : (
                 <PeoplePicker
                   selected={projectMembers}
                   onAdd={(person) => {
                     setProjectMembers([...projectMembers, person]);
-                    toast.success(`已添加成员: ${person.name}`);
+                    toast.success(`已AddMembers: ${person.name}`);
                   }}
                   onRemove={(personId) => {
                     setProjectMembers(projectMembers.filter(p => p.id !== personId));
-                    toast.success('已移除成员');
+                    toast.success('已移除Members');
                   }}
+                  className="w-full"
+                  triggerClassName="min-h-[40px] rounded-xl border border-white/55 bg-white/72 px-3 py-2 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-lg transition-all hover:border-sky-200/80 hover:bg-white/90"
                 />
               )}
             </div>
@@ -898,21 +925,21 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
 
         {/* Dashboard Tab */}
         {activeTab?.id === 'dashboard' && (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {/* Progress Section */}
-            <div>
+            <div className={cn(glassSectionClass, "rounded-2xl border border-white/60 bg-white/62 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/50")}>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-neutral-900 flex items-center gap-2">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                   <TrendingUp className="h-4 w-4" />
-                  进度
+                  Progress
                 </h3>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setShowMilestoneFieldSettings(!showMilestoneFieldSettings)}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-neutral-100 text-neutral-700 text-xs rounded hover:bg-neutral-200 transition-colors"
+                    className="flex items-center gap-1 rounded-xl border border-white/55 bg-white/72 px-3 py-1.5 text-xs text-slate-700 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-lg transition-all hover:-translate-y-0.5 hover:border-sky-200/80 hover:bg-white/90"
                   >
                     <Settings className="h-3 w-3" />
-                    字段设置
+                    Field Settings
                   </button>
                   <button
                     onClick={() => {
@@ -927,7 +954,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                         delayCount: '0',
                         delayCategory: '-',
                         taskId: '-',
-                        processNode: '未开始',
+                        processNode: 'Not Started',
                       };
                       setEditingMilestone(newMilestone);
                       setIsAddMode(true);
@@ -936,14 +963,14 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                       setDelayDesc('');
                       setIsEditPanelOpen(true);
                     }}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-neutral-900 text-white text-xs rounded hover:bg-neutral-800 transition-colors"
+                    className="flex items-center gap-1 rounded-xl border border-sky-300/75 bg-sky-500 px-3 py-1.5 text-xs text-white shadow-[0_10px_22px_rgba(14,116,144,0.24)] transition-all hover:-translate-y-0.5 hover:bg-sky-600"
                   >
                     <Plus className="h-3 w-3" />
-                    创建里程碑
+                    Create Milestone
                   </button>
                 </div>
               </div>
-              
+
               <div className="space-y-4">
                 <div>
                   <div className="flex items-center justify-end text-sm mb-2">
@@ -951,25 +978,25 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                   </div>
                   <Progress value={projectProgress} className="h-2" />
                 </div>
-                
+
                 {/* Field Visibility Settings */}
                 {showMilestoneFieldSettings && (
-                  <div className="p-3 bg-blue-50 border border-blue-300 rounded-lg">
-                    <h4 className="text-xs font-semibold text-neutral-900 mb-2">字段可见性配置</h4>
+                  <div className="rounded-2xl border border-sky-200/70 bg-sky-50/72 p-3 shadow-[0_10px_24px_rgba(14,116,144,0.12)] backdrop-blur-lg supports-[backdrop-filter]:bg-sky-50/58">
+                    <h4 className="text-xs font-semibold text-neutral-900 mb-2">Field Visibility</h4>
                     <div className="grid grid-cols-3 gap-2">
                       {Object.entries({
-                        node: '节点',
-                        preNode: '前置节点',
-                        originalPlan: '原计划',
-                        updatedPlan: '更新计划',
-                        actualComplete: '实际完成',
-                        nodeDelay: '本节点延期',
-                        totalDelay: '总延期',
-                        delayCount: '延期次数',
-                        delayCategory: '延期类别',
+                        node: 'Node',
+                        preNode: 'Predecessor',
+                        originalPlan: 'Original Plan',
+                        updatedPlan: 'Updated Plan',
+                        actualComplete: 'Actual Completion',
+                        nodeDelay: 'Node Delay',
+                        totalDelay: 'Total Delay',
+                        delayCount: 'Delay Count',
+                        delayCategory: 'Delay Category',
                         // taskId and processNode fields are hidden - functionality not implemented yet
                         // taskId: '任务编号',
-                        // processNode: '流程节点',
+                        // processNode: 'Process Node',
                       }).map(([key, label]) => (
                         <label key={key} className="flex items-center gap-1.5 text-xs cursor-pointer">
                           <input
@@ -989,38 +1016,38 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                     </div>
                   </div>
                 )}
-                
+
                 {/* Old inline Add Milestone Input removed - now using shared edit panel */}
-                
+
                 {/* Milestones List */}
                 {isLoadingMilestones ? (
                   <div className="flex items-center justify-center gap-2 text-sm text-neutral-500 py-8">
                     <Loader2 className="h-5 w-5 animate-spin" />
-                    加载里程碑列表...
+                    Loading milestones...
                   </div>
                 ) : milestones.length > 0 && (
                   <div className="overflow-x-auto">
                     <div className="space-y-2">
                       {/* Milestone Table Header */}
-                      <div className="bg-neutral-50 border border-neutral-200 rounded p-2 mb-2 w-fit">
-                        <div className="grid gap-2 text-[10px] font-medium text-neutral-600" style={{ 
-                          gridTemplateColumns: `40px ${milestoneVisibleFields.node ? '120px' : ''} ${milestoneVisibleFields.preNode ? '100px' : ''} ${milestoneVisibleFields.originalPlan ? '100px' : ''} ${milestoneVisibleFields.updatedPlan ? '100px' : ''} ${milestoneVisibleFields.actualComplete ? '100px' : ''} ${milestoneVisibleFields.nodeDelay ? '80px' : ''} ${milestoneVisibleFields.totalDelay ? '80px' : ''} ${milestoneVisibleFields.delayCount ? '70px' : ''} ${milestoneVisibleFields.delayCategory ? '80px' : ''} ${milestoneVisibleFields.taskId ? '80px' : ''} ${milestoneVisibleFields.processNode ? '90px' : ''} 50px`.replace(/\s+/g, ' ').trim() 
+                      <div className="mb-2 w-fit rounded-2xl border border-white/60 bg-white/72 p-2 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-lg supports-[backdrop-filter]:bg-white/58">
+                        <div className="grid gap-2 text-[10px] font-medium text-neutral-600" style={{
+                          gridTemplateColumns: `40px ${milestoneVisibleFields.node ? '120px' : ''} ${milestoneVisibleFields.preNode ? '100px' : ''} ${milestoneVisibleFields.originalPlan ? '100px' : ''} ${milestoneVisibleFields.updatedPlan ? '100px' : ''} ${milestoneVisibleFields.actualComplete ? '100px' : ''} ${milestoneVisibleFields.nodeDelay ? '80px' : ''} ${milestoneVisibleFields.totalDelay ? '80px' : ''} ${milestoneVisibleFields.delayCount ? '70px' : ''} ${milestoneVisibleFields.delayCategory ? '80px' : ''} ${milestoneVisibleFields.taskId ? '80px' : ''} ${milestoneVisibleFields.processNode ? '90px' : ''} 50px`.replace(/\s+/g, ' ').trim()
                         }}>
                           <div></div>
-                          {milestoneVisibleFields.node && <div className="truncate">节点</div>}
-                          {milestoneVisibleFields.preNode && <div className="truncate">前置节点</div>}
-                          {milestoneVisibleFields.originalPlan && <div className="truncate">原计划</div>}
-                          {milestoneVisibleFields.updatedPlan && <div className="truncate">更新计划</div>}
-                          {milestoneVisibleFields.actualComplete && <div className="truncate">实际完成</div>}
-                          {milestoneVisibleFields.nodeDelay && <div className="truncate">节点延期</div>}
-                          {milestoneVisibleFields.totalDelay && <div className="truncate">总延期</div>}
-                          {milestoneVisibleFields.delayCount && <div className="truncate">延期次数</div>}
-                          {milestoneVisibleFields.delayCategory && <div className="truncate">延期类别</div>}
+                          {milestoneVisibleFields.node && <div className="truncate">Node</div>}
+                          {milestoneVisibleFields.preNode && <div className="truncate">Predecessor</div>}
+                          {milestoneVisibleFields.originalPlan && <div className="truncate">Original Plan</div>}
+                          {milestoneVisibleFields.updatedPlan && <div className="truncate">Updated Plan</div>}
+                          {milestoneVisibleFields.actualComplete && <div className="truncate">Actual Completion</div>}
+                          {milestoneVisibleFields.nodeDelay && <div className="truncate">Node延期</div>}
+                          {milestoneVisibleFields.totalDelay && <div className="truncate">Total Delay</div>}
+                          {milestoneVisibleFields.delayCount && <div className="truncate">Delay Count</div>}
+                          {milestoneVisibleFields.delayCategory && <div className="truncate">Delay Category</div>}
                           {/* taskId and processNode fields are hidden - functionality not implemented yet
                           {milestoneVisibleFields.taskId && <div className="truncate">任务编号</div>}
-                          {milestoneVisibleFields.processNode && <div className="truncate">流程节点</div>}
+                          {milestoneVisibleFields.processNode && <div className="truncate">Process Node</div>}
                           */}
-                          <div className="text-center truncate">操作</div>
+                          <div className="text-center truncate">Action</div>
                         </div>
                       </div>
                       <DndProvider backend={HTML5Backend}>
@@ -1055,28 +1082,28 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                                   const result = await response.json();
                                   if (!result.success) {
                                     console.error('Failed to reorder milestones:', result.error);
-                                    toast.error('排序保存失败');
+                                    toast.error('Failed to save sort order');
                                   }
                                 } catch (error) {
                                   console.error('Error reordering milestones:', error);
-                                  toast.error('排序保存失败');
+                                  toast.error('Failed to save sort order');
                                 }
                               }
                             }}
                             onDelete={(id: number) => {
-                              toast.info('无可用 API，未支持');
+                              toast.info('No available API yet');
                             }}
                             onUpdate={(id: number, field: string, value: any) => {
                               setMilestones(milestones.map(m =>
                                 m.id === id ? { ...m, [field]: value } : m
                               ));
-                              toast.success('里程碑已更新');
+                              toast.success('Milestone updated');
                             }}
                             onEdit={(milestone: Milestone) => {
                               setEditingMilestone(milestone);
                               setIsAddMode(false); // Editing existing milestone
                               setIsEditPanelOpen(true);
-                              
+
                               // Parse existing delayCategory to extract team and reason
                               if (milestone.delayCategory && milestone.delayCategory !== '-') {
                                 const match = milestone.delayCategory.match(/^\((.+?)\)(.+)$/);
@@ -1102,19 +1129,19 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
             </div>
 
             {/* Progress Updates Section */}
-            <div>
+            <div className={cn(glassSectionClass, "rounded-2xl border border-white/60 bg-white/62 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/50")}>
               {isLoadingTimeline ? (
                 <div className="flex items-center justify-center gap-2 text-sm text-neutral-500 py-8">
                   <Loader2 className="h-5 w-5 animate-spin" />
-                  加载动态列表...
+                  Loading timeline...
                 </div>
               ) : (
                 <Timeline
-                  title="动态"
+                  title="Timeline"
                   cacheKey={`P${project.id}`}
                 items={progressUpdates}
-                emptyMessage="暂无动态，发布第一条动态吧"
-                addPlaceholder="分享项目进展、想法或更新..."
+                emptyMessage="暂NoneTimeline，发布第一条Timeline吧"
+                addPlaceholder="Share project progress, ideas, or updates..."
                 showAddInput={true}
                 onEdit={async (itemId: number | string, newContent: string) => {
                   const response = await fetch(`/api/projects/${project.id}/comment`, {
@@ -1128,13 +1155,13 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                     }),
                   });
                   const result = await response.json();
-                  
+
                   if (result.success) {
-                    setProgressUpdates(progressUpdates.map(u => 
+                    setProgressUpdates(progressUpdates.map(u =>
                       u.id === itemId ? { ...u, content: newContent } : u
                     ));
                   } else {
-                    throw new Error(result.error || '更新失败');
+                    throw new Error(result.error || 'Update failed');
                   }
                 }}
                 onDelete={async (itemId: number | string) => {
@@ -1148,11 +1175,11 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                     }),
                   });
                   const result = await response.json();
-                  
+
                   if (result.success) {
                     setProgressUpdates(progressUpdates.filter(u => u.id !== itemId));
                   } else {
-                    throw new Error(result.error || '删除失败');
+                    throw new Error(result.error || 'Delete failed');
                   }
                 }}
                 onAdd={async (content: string) => {
@@ -1165,11 +1192,11 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                     }),
                   });
                   const result = await response.json();
-                  
+
                   if (result.success) {
                     const newUpdate: ProgressUpdate = {
                       id: Math.max(0, ...progressUpdates.map(u => u.id)) + 1,
-                      author: '当前用户',
+                      author: 'Current user',
                       content: content,
                       timestamp: new Date().toLocaleString('zh-CN', {
                         year: 'numeric',
@@ -1181,7 +1208,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                     };
                     setProgressUpdates([newUpdate, ...progressUpdates]);
                   } else {
-                    throw new Error(result.error || '发送失败');
+                    throw new Error(result.error || 'Send failed');
                   }
                 }}
                 />
@@ -1195,34 +1222,34 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
           <div className="space-y-4">
             {/* Task Stats */}
             <div className="grid grid-cols-4 gap-3">
-              <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-3">
-                <p className="text-xs text-neutral-500">总任务</p>
+              <div className="rounded-2xl border border-white/60 bg-white/66 p-3 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/52">
+                <p className="text-xs text-neutral-500">Total Tasks</p>
                 <p className="text-2xl font-semibold text-neutral-900 mt-1">{kanbanTasks.length}</p>
               </div>
-              <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-3">
-                <p className="text-xs text-neutral-500">未开始</p>
+              <div className="rounded-2xl border border-white/60 bg-white/66 p-3 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/52">
+                <p className="text-xs text-neutral-500">Not Started</p>
                 <p className="text-2xl font-semibold text-amber-600 mt-1">
                   {kanbanTasks.filter(t => t.status === 'Waiting').length}
                 </p>
               </div>
-              <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-3">
-                <p className="text-xs text-neutral-500">进行中</p>
+              <div className="rounded-2xl border border-white/60 bg-white/66 p-3 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/52">
+                <p className="text-xs text-neutral-500">In Progress</p>
                 <p className="text-2xl font-semibold text-blue-600 mt-1">
                   {kanbanTasks.filter(t => t.status === 'In Progress').length}
                 </p>
               </div>
-              <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-3">
-                <p className="text-xs text-neutral-500">已完成</p>
+              <div className="rounded-2xl border border-white/60 bg-white/66 p-3 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/52">
+                <p className="text-xs text-neutral-500">Completed</p>
                 <p className="text-2xl font-semibold text-green-600 mt-1">
                   {kanbanTasks.filter(t => t.status === 'Completed').length}
                 </p>
               </div>
             </div>
-            
+
             {/* Filters and Search */}
-            <div className="space-y-3">
+            <div className={cn(glassSectionClass, "space-y-3 rounded-2xl border border-white/60 bg-white/62 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/50")}>
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-neutral-900">任务看板</h3>
+                <h3 className="text-sm font-semibold text-neutral-900">Task Board</h3>
                 <div className="flex items-center gap-2">
                   <Select
                     value={kanbanMemberFilter.length === 0 ? 'All' : kanbanMemberFilter[0]}
@@ -1234,14 +1261,14 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                       }
                     }}
                   >
-                    <SelectTrigger className="w-[140px] h-8 text-xs">
+                    <SelectTrigger className="h-8 w-[140px] rounded-xl border border-white/55 bg-white/72 text-xs shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-lg transition-all hover:border-sky-200/80 hover:bg-white/90">
                       <div className="flex items-center gap-2">
                         <Users className="h-3 w-3 opacity-50" />
-                        <SelectValue placeholder="所有成员" />
+                        <SelectValue placeholder="所有Members" />
                       </div>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="All" className="text-xs">所有成员</SelectItem>
+                      <SelectItem value="All" className="text-xs">所有Members</SelectItem>
                       {Array.from(new Set(kanbanTasks.map(t => t.assignee))).map(assignee => (
                         <SelectItem key={assignee} value={assignee} className="text-xs">
                           {assignee}
@@ -1254,57 +1281,46 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                     value={kanbanStatusFilter}
                     onValueChange={(value) => setKanbanStatusFilter(value)}
                   >
-                    <SelectTrigger className="w-[120px] h-8 text-xs">
+                    <SelectTrigger className="h-8 w-[120px] rounded-xl border border-white/55 bg-white/72 text-xs shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-lg transition-all hover:border-sky-200/80 hover:bg-white/90">
                       <div className="flex items-center gap-2">
                         <Filter className="h-3 w-3 opacity-50" />
-                        <SelectValue placeholder="所有状态" />
+                        <SelectValue placeholder="All Statuses" />
                       </div>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="All" className="text-xs">所有状态</SelectItem>
-                      <SelectItem value="Waiting" className="text-xs">待办</SelectItem>
-                      <SelectItem value="In Progress" className="text-xs">进行中</SelectItem>
-                      <SelectItem value="Completed" className="text-xs">已完成</SelectItem>
+                      <SelectItem value="All" className="text-xs">All Statuses</SelectItem>
+                      <SelectItem value="Waiting" className="text-xs">Waiting</SelectItem>
+                      <SelectItem value="In Progress" className="text-xs">In Progress</SelectItem>
+                      <SelectItem value="Completed" className="text-xs">Completed</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
-              
+
               {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
-                <input
-                  type="text"
-                  value={kanbanSearchQuery}
-                  onChange={(e) => setKanbanSearchQuery(e.target.value)}
-                  placeholder="搜索任务标题或ID..."
-                  className="w-full pl-9 pr-3 py-2 text-sm border border-neutral-300 rounded-lg focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition-all"
-                />
-                {kanbanSearchQuery && (
-                  <button
-                    onClick={() => setKanbanSearchQuery('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-neutral-100 rounded transition-colors"
-                  >
-                    <X className="h-3 w-3 text-neutral-500" />
-                  </button>
-                )}
-              </div>
+              <GlassSearchInput
+                value={kanbanSearchQuery}
+                onChange={(e) => setKanbanSearchQuery(e.target.value)}
+                placeholder="Search task title or ID..."
+                containerClassName="w-full"
+                inputClassName="h-9 text-sm"
+              />
             </div>
-            
+
             {/* Kanban Columns */}
             <div className="grid grid-cols-3 gap-4">
               {/* Waiting Column */}
-              <div className="bg-neutral-50 rounded-lg p-3 flex flex-col">
+              <div className="flex flex-col rounded-2xl border border-white/60 bg-white/62 p-3 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/50">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setCollapsedColumns({ ...collapsedColumns, waiting: !collapsedColumns.waiting })}
-                      className="p-0.5 hover:bg-neutral-200 rounded transition-colors"
+                      className="rounded-md p-0.5 transition-colors hover:bg-white/80"
                     >
                       <ChevronRight className={`h-3.5 w-3.5 text-neutral-600 transition-transform ${collapsedColumns.waiting ? '' : 'rotate-90'}`} />
                     </button>
                     <h4 className="text-xs font-semibold text-neutral-700">
-                      待办 ({kanbanTasks.filter(t => t.status === 'Waiting' && 
+                      Waiting ({kanbanTasks.filter(t => t.status === 'Waiting' &&
                         (kanbanMemberFilter.length === 0 || kanbanMemberFilter.includes(t.assignee)) &&
                         (!kanbanSearchQuery || t.title.toLowerCase().includes(kanbanSearchQuery.toLowerCase()) || t.id.toLowerCase().includes(kanbanSearchQuery.toLowerCase()))
                       ).length})
@@ -1312,58 +1328,58 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                   </div>
                   <button
                     onClick={() => setIsAddingKanbanTask(true)}
-                    className="p-1 hover:bg-neutral-200 rounded transition-colors"
+                    className="rounded-md p-1 transition-colors hover:bg-white/80"
                   >
                     <Plus className="h-3 w-3 text-neutral-600" />
                   </button>
                 </div>
-                
+
                 {!collapsedColumns.waiting && (
                   <div className="space-y-2 overflow-y-auto max-h-96">
                     {isAddingKanbanTask && (
-                      <div className="bg-neutral-50 border border-neutral-300 rounded p-2 mb-2">
+                      <div className="mb-2 rounded-xl border border-white/60 bg-white/72 p-2 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-lg supports-[backdrop-filter]:bg-white/58">
                         <input
                           type="text"
                           value={newKanbanTaskTitle}
                           onChange={(e) => setNewKanbanTaskTitle(e.target.value)}
-                          placeholder="输入任务标题..."
-                          className="w-full text-xs px-2 py-1 border border-neutral-300 rounded focus:outline-none focus:border-blue-500"
+                          placeholder="Enter task title..."
+                          className={cn(glassInputClass, "h-8 w-full rounded-lg border-white/55 bg-white/72 px-2 text-xs shadow-none")}
                           autoFocus
                         />
                         <div className="flex gap-1 mt-2">
                           <button
                             onClick={() => {
                               if (newKanbanTaskTitle.trim()) {
-                                toast.success('任务已添加');
+                                toast.success('Task added');
                                 setNewKanbanTaskTitle('');
                                 setIsAddingKanbanTask(false);
                               }
                             }}
-                            className="flex-1 px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                            className="flex-1 rounded-lg border border-sky-300/75 bg-sky-500 px-2 py-1 text-xs text-white transition-colors hover:bg-sky-600"
                           >
-                            添加
+                            Add
                           </button>
                           <button
                             onClick={() => {
                               setIsAddingKanbanTask(false);
                               setNewKanbanTaskTitle('');
                             }}
-                            className="px-2 py-1 text-neutral-600 text-xs hover:bg-neutral-100 rounded"
+                            className="rounded-lg px-2 py-1 text-xs text-neutral-600 transition-colors hover:bg-white/90"
                           >
-                            取消
+                            Cancel
                           </button>
                         </div>
                       </div>
                     )}
                     {kanbanTasks
-                      .filter(t => t.status === 'Waiting' && 
+                      .filter(t => t.status === 'Waiting' &&
                         (kanbanMemberFilter.length === 0 || kanbanMemberFilter.includes(t.assignee)) &&
                         (!kanbanSearchQuery || t.title.toLowerCase().includes(kanbanSearchQuery.toLowerCase()) || t.id.toLowerCase().includes(kanbanSearchQuery.toLowerCase()))
                       )
                       .map(task => (
-                        <div 
-                          key={task.id} 
-                          className="bg-white border border-neutral-200 rounded p-2 cursor-pointer hover:shadow-sm transition-shadow"
+                        <div
+                          key={task.id}
+                          className="cursor-pointer rounded-xl border border-white/60 bg-white/74 p-2 shadow-[0_8px_18px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-0.5 hover:border-sky-200/80"
                           onClick={() => {
                             setSelectedTaskForDialog({ id: task.taskId, fields: { name: task.title } });
                           }}
@@ -1377,35 +1393,35 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
               </div>
 
               {/* In Progress Column */}
-              <div className="bg-neutral-50 rounded-lg p-3 flex flex-col">
+              <div className="flex flex-col rounded-2xl border border-white/60 bg-white/62 p-3 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/50">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setCollapsedColumns({ ...collapsedColumns, inProgress: !collapsedColumns.inProgress })}
-                      className="p-0.5 hover:bg-neutral-200 rounded transition-colors"
+                      className="rounded-md p-0.5 transition-colors hover:bg-white/80"
                     >
                       <ChevronRight className={`h-3.5 w-3.5 text-neutral-600 transition-transform ${collapsedColumns.inProgress ? '' : 'rotate-90'}`} />
                     </button>
                     <h4 className="text-xs font-semibold text-neutral-700">
-                      进行中 ({kanbanTasks.filter(t => t.status === 'In Progress' && 
+                      In Progress ({kanbanTasks.filter(t => t.status === 'In Progress' &&
                         (kanbanMemberFilter.length === 0 || kanbanMemberFilter.includes(t.assignee)) &&
                         (!kanbanSearchQuery || t.title.toLowerCase().includes(kanbanSearchQuery.toLowerCase()) || t.id.toLowerCase().includes(kanbanSearchQuery.toLowerCase()))
                       ).length})
                     </h4>
                   </div>
                 </div>
-                
+
                 {!collapsedColumns.inProgress && (
                   <div className="space-y-2 overflow-y-auto max-h-96">
                     {kanbanTasks
-                      .filter(t => t.status === 'In Progress' && 
+                      .filter(t => t.status === 'In Progress' &&
                         (kanbanMemberFilter.length === 0 || kanbanMemberFilter.includes(t.assignee)) &&
                         (!kanbanSearchQuery || t.title.toLowerCase().includes(kanbanSearchQuery.toLowerCase()) || t.id.toLowerCase().includes(kanbanSearchQuery.toLowerCase()))
                       )
                       .map(task => (
-                        <div 
-                          key={task.id} 
-                          className="bg-white border border-blue-200 rounded p-2 cursor-pointer hover:shadow-sm transition-shadow"
+                        <div
+                          key={task.id}
+                          className="cursor-pointer rounded-xl border border-sky-200/80 bg-sky-50/58 p-2 shadow-[0_8px_18px_rgba(14,116,144,0.08)] transition-all hover:-translate-y-0.5 hover:border-sky-300/80"
                           onClick={() => setSelectedTaskForDialog({ id: task.taskId, fields: { name: task.title } })}
                         >
                           <p className="text-xs text-neutral-900 font-medium">{task.title}</p>
@@ -1417,35 +1433,35 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
               </div>
 
               {/* Completed Column */}
-              <div className="bg-neutral-50 rounded-lg p-3 flex flex-col">
+              <div className="flex flex-col rounded-2xl border border-white/60 bg-white/62 p-3 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/50">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setCollapsedColumns({ ...collapsedColumns, completed: !collapsedColumns.completed })}
-                      className="p-0.5 hover:bg-neutral-200 rounded transition-colors"
+                      className="rounded-md p-0.5 transition-colors hover:bg-white/80"
                     >
                       <ChevronRight className={`h-3.5 w-3.5 text-neutral-600 transition-transform ${collapsedColumns.completed ? '' : 'rotate-90'}`} />
                     </button>
                     <h4 className="text-xs font-semibold text-neutral-700">
-                      已完成 ({kanbanTasks.filter(t => t.status === 'Completed' && 
+                      Completed ({kanbanTasks.filter(t => t.status === 'Completed' &&
                         (kanbanMemberFilter.length === 0 || kanbanMemberFilter.includes(t.assignee)) &&
                         (!kanbanSearchQuery || t.title.toLowerCase().includes(kanbanSearchQuery.toLowerCase()) || t.id.toLowerCase().includes(kanbanSearchQuery.toLowerCase()))
                       ).length})
                     </h4>
                   </div>
                 </div>
-                
+
                 {!collapsedColumns.completed && (
                   <div className="space-y-2 overflow-y-auto max-h-96">
                     {kanbanTasks
-                      .filter(t => t.status === 'Completed' && 
+                      .filter(t => t.status === 'Completed' &&
                         (kanbanMemberFilter.length === 0 || kanbanMemberFilter.includes(t.assignee)) &&
                         (!kanbanSearchQuery || t.title.toLowerCase().includes(kanbanSearchQuery.toLowerCase()) || t.id.toLowerCase().includes(kanbanSearchQuery.toLowerCase()))
                       )
                       .map(task => (
-                        <div 
-                          key={task.id} 
-                          className="bg-white border border-neutral-200 rounded p-2 cursor-pointer hover:shadow-sm transition-shadow opacity-60"
+                        <div
+                          key={task.id}
+                          className="cursor-pointer rounded-xl border border-white/60 bg-white/72 p-2 opacity-70 shadow-[0_8px_18px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-0.5 hover:border-slate-200/80"
                           onClick={() => setSelectedTaskForDialog({ id: task.taskId, fields: { name: task.title } })}
                         >
                           <p className="text-xs text-neutral-900 font-medium line-through">{task.title}</p>
@@ -1463,45 +1479,45 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
         {activeTab?.id === 'docs' && (
           <div className="flex gap-4 h-[calc(100vh-300px)]">
             {/* Left: Document List */}
-            <div className="w-80 flex flex-col border-r border-neutral-200 pr-4 min-h-0">
+            <div className="min-h-0 w-80 flex flex-col rounded-2xl border border-white/60 bg-white/62 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/50">
               <div className="flex items-center justify-between mb-4 flex-shrink-0">
-                <h3 className="text-sm font-semibold text-neutral-900">文档列表</h3>
+                <h3 className="text-sm font-semibold text-slate-900">Documents</h3>
                 <button
                   onClick={() => setIsAddingDoc(true)}
-                  className="flex items-center gap-1 px-2 py-1 bg-neutral-900 text-white text-xs rounded hover:bg-neutral-800 transition-colors"
+                  className="flex items-center gap-1 rounded-xl border border-sky-300/75 bg-sky-500 px-2.5 py-1.5 text-xs text-white shadow-[0_8px_18px_rgba(14,116,144,0.2)] transition-all hover:-translate-y-0.5 hover:bg-sky-600"
                 >
                   <Plus className="h-3 w-3" />
-                  添加
+                  Add
                 </button>
               </div>
-            
+
               {/* Add Document Form */}
               {isAddingDoc && (
-                <div className="p-4 bg-neutral-50 border border-neutral-300 rounded-lg mb-4 flex-shrink-0">
-                  <h4 className="text-sm font-semibold text-neutral-900 mb-3">新增文档</h4>
+                <div className="mb-4 flex-shrink-0 rounded-2xl border border-white/60 bg-white/74 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-lg supports-[backdrop-filter]:bg-white/60">
+                  <h4 className="mb-3 text-sm font-semibold text-slate-900">New Document</h4>
                   <div className="space-y-3">
                     <div>
-                      <label className="text-xs text-neutral-600 mb-1 block">文档标题</label>
+                      <label className="text-xs text-neutral-600 mb-1 block">Document Title</label>
                       <input
                         type="text"
                         value={newDocTitle}
                         onChange={(e) => setNewDocTitle(e.target.value)}
-                        placeholder="输入文档标题..."
-                        className="w-full text-sm px-3 py-2 border border-neutral-300 rounded focus:outline-none focus:border-blue-600"
+                        placeholder="输入Document Title..."
+                        className={cn(glassInputClass, "h-9 w-full rounded-xl border-white/55 bg-white/72 px-3 text-sm shadow-none")}
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-neutral-600 mb-1 block">文档链接</label>
+                      <label className="text-xs text-neutral-600 mb-1 block">Document URL</label>
                       <input
                         type="url"
                         value={newDocLink}
                         onChange={(e) => setNewDocLink(e.target.value)}
                         placeholder="https://..."
-                        className="w-full text-sm px-3 py-2 border border-neutral-300 rounded focus:outline-none focus:border-blue-600"
+                        className={cn(glassInputClass, "h-9 w-full rounded-xl border-white/55 bg-white/72 px-3 text-sm shadow-none")}
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-neutral-600 mb-1 block">或上传本地文件</label>
+                      <label className="text-xs text-neutral-600 mb-1 block">Or upload local file</label>
                       <div className="flex items-center gap-2">
                         <input
                           type="file"
@@ -1521,10 +1537,10 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                         />
                         <label
                           htmlFor="file-upload"
-                          className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white border-2 border-dashed rounded cursor-pointer transition-colors ${
+                          className={`flex-1 flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed px-3 py-2 transition-all ${
                             isDraggingFile
-                              ? 'border-blue-500 bg-blue-50'
-                              : 'border-neutral-300 hover:border-neutral-400 hover:bg-neutral-50'
+                              ? 'border-sky-400 bg-sky-50/75'
+                              : 'border-white/70 bg-white/68 hover:border-sky-300/80 hover:bg-white/84'
                           }`}
                           onDragOver={(e) => {
                             e.preventDefault();
@@ -1540,7 +1556,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                             e.preventDefault();
                             e.stopPropagation();
                             setIsDraggingFile(false);
-                            
+
                             const file = e.dataTransfer.files?.[0];
                             if (file) {
                               const localURL = URL.createObjectURL(file);
@@ -1554,11 +1570,11 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                         >
                           <Upload className="h-4 w-4 text-neutral-600" />
                           <span className="text-sm text-neutral-600">
-                            {isDraggingFile ? '松开上传文件' : '点击或拖拽上传文件'}
+                            {isDraggingFile ? 'Drop to upload' : 'Click or drag file to upload'}
                           </span>
                         </label>
                       </div>
-                      <p className="text-xs text-neutral-500 mt-1">支持各种文档格式</p>
+                      <p className="text-xs text-neutral-500 mt-1">Supports common document formats</p>
                     </div>
                     <div className="flex gap-2">
                       <button
@@ -1574,14 +1590,14 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                             setNewDocTitle('');
                             setNewDocLink('');
                             setIsAddingDoc(false);
-                            toast.success('文档已添加');
+                            toast.success('Document added');
                           } else {
-                            toast.error('请填写完整信息');
+                            toast.error('Please complete all required fields');
                           }
                         }}
-                        className="flex-1 px-4 py-2 bg-neutral-900 text-white text-sm rounded hover:bg-neutral-800 transition-colors"
+                        className="flex-1 rounded-xl border border-sky-300/75 bg-sky-500 px-4 py-2 text-sm text-white transition-all hover:-translate-y-0.5 hover:bg-sky-600"
                       >
-                        添加
+                        Add
                       </button>
                       <button
                         onClick={() => {
@@ -1589,24 +1605,24 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                           setNewDocTitle('');
                           setNewDocLink('');
                         }}
-                        className="px-4 py-2 text-neutral-600 text-sm hover:bg-neutral-100 rounded transition-colors"
+                        className="rounded-xl border border-white/55 bg-white/70 px-4 py-2 text-sm text-neutral-600 transition-all hover:border-sky-200/70 hover:bg-white/90"
                       >
-                        取消
+                        Cancel
                       </button>
                     </div>
                   </div>
                 </div>
               )}
-            
+
               {/* Document List */}
               <div className="space-y-2 overflow-y-auto flex-1 min-h-0">
                 {projectDocs.map((doc) => (
-                  <div 
-                    key={doc.id} 
-                    className={`flex items-center gap-2 group p-2 rounded transition-colors cursor-pointer ${
-                      selectedDoc?.id === doc.id 
-                        ? 'bg-blue-50 border border-blue-200' 
-                        : 'hover:bg-neutral-50 border border-transparent'
+                  <div
+                    key={doc.id}
+                    className={`group flex cursor-pointer items-center gap-2 rounded-xl border p-2 transition-all ${
+                      selectedDoc?.id === doc.id
+                        ? 'border-sky-200/90 bg-sky-50/78 text-sky-700 shadow-[0_8px_18px_rgba(14,116,144,0.1)]'
+                        : 'border-white/60 bg-white/68 hover:-translate-y-0.5 hover:border-sky-200/80 hover:bg-white/84'
                     }`}
                     onClick={() => {
                       setSelectedDoc(doc);
@@ -1620,15 +1636,15 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (window.confirm('确定要删除这个文档吗？')) {
+                        if (window.confirm('Confirm要删除这个文档吗？')) {
                           setProjectDocs(projectDocs.filter(d => d.id !== doc.id));
                           if (selectedDoc?.id === doc.id) {
                             setSelectedDoc(null);
                           }
-                          toast.success('文档已删除');
+                          toast.success('Document deleted');
                         }
                       }}
-                      className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-100 rounded transition-all"
+                      className="rounded-md p-1 opacity-0 transition-all group-hover:opacity-100 hover:bg-red-100"
                       title="删除文档"
                     >
                       <Trash2 className="h-3 w-3 text-red-500" />
@@ -1636,26 +1652,26 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                   </div>
                 ))}
               </div>
-            
+
               {projectDocs.length === 0 && !isAddingDoc && (
-                <p className="text-sm text-neutral-500 text-center py-8">暂无文档，点击"添加"按钮添加</p>
+                <p className="text-sm text-neutral-500 text-center py-8">暂None文档，点击"Add"按钮Add</p>
               )}
             </div>
 
             {/* Right: Document Preview/Edit */}
-            <div className="flex-1 flex flex-col min-h-0">
+            <div className="min-h-0 flex-1 rounded-2xl border border-white/60 bg-white/62 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/50">
               {selectedDoc ? (
                 <>
                   {/* Document Header */}
-                  <div className="flex items-center justify-between mb-4 pb-3 border-b border-neutral-200 flex-shrink-0">
+                  <div className="mb-4 flex flex-shrink-0 items-center justify-between border-b border-white/60 pb-3">
                     <div className="flex-1">
                       {isEditingDoc ? (
                         <input
                           type="text"
                           value={editingDocContent}
                           onChange={(e) => setEditingDocContent(e.target.value)}
-                          className="w-full text-lg font-semibold px-2 py-1 border border-blue-300 rounded focus:outline-none focus:border-blue-500"
-                          placeholder="文档标题"
+                          className={cn(glassInputClass, "h-10 w-full rounded-xl border-white/55 bg-white/72 px-3 text-lg font-semibold shadow-none")}
+                          placeholder="Document Title"
                         />
                       ) : (
                         <h2 className="text-lg font-semibold text-neutral-900">{selectedDoc.title}</h2>
@@ -1667,31 +1683,31 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                           <button
                             onClick={() => {
                               if (editingDocContent.trim()) {
-                                setProjectDocs(projectDocs.map(doc => 
-                                  doc.id === selectedDoc.id 
+                                setProjectDocs(projectDocs.map(doc =>
+                                  doc.id === selectedDoc.id
                                     ? { ...doc, title: editingDocContent }
                                     : doc
                                 ));
                                 setSelectedDoc({ ...selectedDoc, title: editingDocContent });
                                 setIsEditingDoc(false);
-                                toast.success('文档已更新');
+                                toast.success('Document updated');
                               } else {
-                                toast.error('文档标题不能为空');
+                                toast.error('Document Title不能为空');
                               }
                             }}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-neutral-900 text-white text-xs rounded hover:bg-neutral-800 transition-colors"
+                            className="flex items-center gap-1 rounded-xl border border-sky-300/75 bg-sky-500 px-3 py-1.5 text-xs text-white transition-all hover:-translate-y-0.5 hover:bg-sky-600"
                           >
                             <Check className="h-3 w-3" />
-                            保存
+                            Save
                           </button>
                           <button
                             onClick={() => {
                               setIsEditingDoc(false);
                               setEditingDocContent(selectedDoc.title);
                             }}
-                            className="px-3 py-1.5 text-neutral-600 text-xs hover:bg-neutral-100 rounded transition-colors"
+                            className="rounded-xl border border-white/55 bg-white/72 px-3 py-1.5 text-xs text-neutral-600 transition-all hover:border-sky-200/70 hover:bg-white/90"
                           >
-                            取消
+                            Cancel
                           </button>
                         </>
                       ) : (
@@ -1701,19 +1717,19 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                               setIsEditingDoc(true);
                               setEditingDocContent(selectedDoc.title);
                             }}
-                            className="flex items-center gap-1 px-3 py-1.5 text-neutral-700 text-xs hover:bg-neutral-100 rounded transition-colors"
+                            className="flex items-center gap-1 rounded-xl border border-white/55 bg-white/72 px-3 py-1.5 text-xs text-neutral-700 transition-all hover:border-sky-200/70 hover:bg-white/90"
                           >
                             <Edit2 className="h-3 w-3" />
-                            编辑
+                            Edit
                           </button>
                           <a
                             href={selectedDoc.link}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-1 px-3 py-1.5 text-blue-600 text-xs hover:bg-blue-50 rounded transition-colors"
+                            className="flex items-center gap-1 rounded-xl border border-sky-200/70 bg-sky-50/75 px-3 py-1.5 text-xs text-sky-700 transition-all hover:border-sky-300/80 hover:bg-sky-100/75"
                           >
                             <ExternalLink className="h-3 w-3" />
-                            打开
+                            Open
                           </a>
                         </>
                       )}
@@ -1721,7 +1737,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                   </div>
 
                   {/* Document Content/Preview */}
-                  <div className="flex-1 overflow-hidden rounded-lg border border-neutral-200 bg-white min-h-0">
+                  <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/60 bg-white/74 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
                     {selectedDoc.content ? (
                       <div className="p-6 overflow-y-auto h-full">
                         <RemarkupRenderer content={selectedDoc.content} />
@@ -1734,7 +1750,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                           title={selectedDoc.title}
                           sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
                         />
-                        <div className="absolute top-4 right-4 bg-white border border-neutral-200 rounded px-3 py-1.5 shadow-sm">
+                        <div className="absolute right-4 top-4 rounded-xl border border-white/70 bg-white/88 px-3 py-1.5 shadow-[0_8px_20px_rgba(15,23,42,0.1)] backdrop-blur-lg">
                           <a
                             href={selectedDoc.link}
                             target="_blank"
@@ -1742,7 +1758,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                             className="flex items-center gap-2 text-xs text-blue-600 hover:underline"
                           >
                             <ExternalLink className="h-3 w-3" />
-                            在新窗口打开
+                            在新窗口Open
                           </a>
                         </div>
                       </div>
@@ -1750,15 +1766,15 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                       <div className="flex items-center justify-center h-full">
                         <div className="text-center">
                           <FileText className="h-16 w-16 text-neutral-300 mx-auto mb-4" />
-                          <p className="text-sm text-neutral-600 mb-2">无法预览此文档</p>
+                          <p className="text-sm text-neutral-600 mb-2">None法预览此文档</p>
                           <a
                             href={selectedDoc.link}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+                            className="inline-flex items-center gap-2 rounded-xl border border-sky-300/75 bg-sky-500 px-4 py-2 text-sm text-white transition-all hover:-translate-y-0.5 hover:bg-sky-600"
                           >
                             <ExternalLink className="h-4 w-4" />
-                            打开链接
+                            Open链接
                           </a>
                         </div>
                       </div>
@@ -1769,7 +1785,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center">
                     <FileText className="h-16 w-16 text-neutral-300 mx-auto mb-4" />
-                    <p className="text-sm text-neutral-500">从左侧选择一个文档进行查看</p>
+                    <p className="text-sm text-neutral-500">Select a document from the left to preview</p>
                   </div>
                 </div>
               )}
@@ -1794,29 +1810,29 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
       {/* Milestone Edit Panel */}
       {isEditPanelOpen && editingMilestone && (
         <Dialog open={isEditPanelOpen} onOpenChange={setIsEditPanelOpen}>
-          <DialogContent className="max-w-[600px] max-h-[90vh] overflow-y-auto z-[10100] flex flex-col gap-0 p-0">
-            <div className="p-6 space-y-6">
+          <DialogContent showCloseButton={false} className="z-[10100] flex max-h-[90vh] max-w-[600px] flex-col gap-0 overflow-y-auto rounded-3xl border border-white/70 bg-[#f8fbff]/92 p-0 shadow-[0_28px_66px_rgba(15,23,42,0.2)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[#f8fbff]/78">
+            <div className="space-y-6 p-6">
               <div className="flex items-center justify-between mb-2">
                 <DialogTitle className="text-lg font-semibold text-neutral-900">
-                  {isAddMode ? '创建里程碑' : '编辑里程碑'}
+                  {isAddMode ? 'Create Milestone' : 'Edit Milestone'}
                 </DialogTitle>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                   {/* Node Name */}
                   <div className="col-span-2">
-                    <label className="block text-xs font-medium text-neutral-600 mb-1.5">节点名称</label>
+                    <label className="block text-xs font-medium text-neutral-600 mb-1.5">Node Name</label>
                     <Input
                       type="text"
                       value={editingMilestone.node}
                       onChange={(e) => setEditingMilestone({ ...editingMilestone, node: e.target.value })}
-                      className="w-full text-sm"
+                      className={cn(glassInputClass, "h-9 w-full rounded-xl border-white/55 bg-white/72 text-sm shadow-none")}
                     />
                   </div>
 
-                  {/* Bind Node Pool Node - 绑定节点池节点 */}
+                  {/* Bind Node Pool Node - Bind Node Pool Item */}
                   <div className="col-span-2">
-                    <label className="block text-xs font-medium text-neutral-600 mb-1.5">绑定节点池节点</label>
+                    <label className="block text-xs font-medium text-neutral-600 mb-1.5">Bind Node Pool Item</label>
                     <NodePoolPicker
                       value={editingMilestone.bindItem || ''}
                       onChange={(phid) => setEditingMilestone({ ...editingMilestone, bindItem: phid })}
@@ -1826,22 +1842,22 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                         name: i.fields.itemName,
                       }))}
                       isLoading={isLoadingNodePoolItems}
-                      placeholder="选择节点池节点..."
+                      placeholder="Select a node pool item..."
                     />
                   </div>
 
                   {/* Pre Node */}
                   <div className="col-span-2">
-                    <label className="block text-xs font-medium text-neutral-600 mb-1.5">前置节点</label>
+                    <label className="block text-xs font-medium text-neutral-600 mb-1.5">Predecessor</label>
                     <Select
                       value={editingMilestone.preNode}
                       onValueChange={(value) => setEditingMilestone({ ...editingMilestone, preNode: value })}
                     >
-                      <SelectTrigger className="w-full text-sm">
-                        <SelectValue placeholder="选择前置节点" />
+                      <SelectTrigger className={cn(glassInputClass, "h-9 w-full rounded-xl border-white/55 bg-white/72 text-sm shadow-none")}>
+                        <SelectValue placeholder="选择Predecessor" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="-">无</SelectItem>
+                        <SelectItem value="-">None</SelectItem>
                         {milestones.filter(m => m.id !== editingMilestone.id).map(m => (
                           <SelectItem key={m.node} value={m.node}>
                             {m.node}
@@ -1853,11 +1869,11 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
 
                   {/* Original Plan */}
                   <div>
-                    <label className="block text-xs font-medium text-neutral-600 mb-1.5">原计划</label>
+                    <label className="block text-xs font-medium text-neutral-600 mb-1.5">Original Plan</label>
                     <DatePicker
                       value={editingMilestone.originalPlan}
                       onChange={(date) => setEditingMilestone({ ...editingMilestone, originalPlan: date })}
-                      placeholder="选择日期"
+                      placeholder="Select date"
                       className="w-full"
                     />
                   </div>
@@ -1865,11 +1881,11 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                   {/* Updated Plan - Only show in edit mode */}
                   {!isAddMode && (
                     <div>
-                      <label className="block text-xs font-medium text-neutral-600 mb-1.5">更新计划</label>
+                      <label className="block text-xs font-medium text-neutral-600 mb-1.5">Updated Plan</label>
                       <DatePicker
                         value={editingMilestone.updatedPlan}
                         onChange={(date) => setEditingMilestone({ ...editingMilestone, updatedPlan: date })}
-                        placeholder="选择日期"
+                        placeholder="Select date"
                         className="w-full"
                       />
                     </div>
@@ -1878,11 +1894,11 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                   {/* Actual Complete - Only show in edit mode */}
                   {!isAddMode && (
                     <div className="col-span-2">
-                      <label className="block text-xs font-medium text-neutral-600 mb-1.5">实际完成</label>
+                      <label className="block text-xs font-medium text-neutral-600 mb-1.5">Actual Completion</label>
                       <DatePicker
                         value={editingMilestone.actualComplete}
                         onChange={(date) => setEditingMilestone({ ...editingMilestone, actualComplete: date })}
-                        placeholder="选择日期"
+                        placeholder="Select date"
                         className="w-full"
                       />
                     </div>
@@ -1890,49 +1906,49 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
 
                   {/* Process Node and Task ID fields are hidden - functionality not implemented yet
                   <div>
-                    <label className="block text-xs font-medium text-neutral-600 mb-1.5">流程节点</label>
+                    <label className="block text-xs font-medium text-neutral-600 mb-1.5">Process Node</label>
                   {/* Delay-related fields - Only show in edit mode */}
                   {!isAddMode && (
                     <>
                       {/* Node Delay */}
                       <div>
-                        <label className="block text-xs font-medium text-neutral-600 mb-1.5">本节点延期</label>
+                        <label className="block text-xs font-medium text-neutral-600 mb-1.5">Node Delay</label>
                         <Input
                           type="text"
                           value={editingMilestone.nodeDelay}
                           onChange={(e) => setEditingMilestone({ ...editingMilestone, nodeDelay: e.target.value })}
-                          className="w-full text-sm"
-                          placeholder="3天"
+                          className={cn(glassInputClass, "h-9 w-full rounded-xl border-white/55 bg-white/72 text-sm shadow-none")}
+                          placeholder="3d"
                         />
                       </div>
 
                       {/* Total Delay */}
                       <div>
-                        <label className="block text-xs font-medium text-neutral-600 mb-1.5">总延期</label>
+                        <label className="block text-xs font-medium text-neutral-600 mb-1.5">Total Delay</label>
                         <Input
                           type="text"
                           value={editingMilestone.totalDelay}
                           onChange={(e) => setEditingMilestone({ ...editingMilestone, totalDelay: e.target.value })}
-                          className="w-full text-sm"
-                          placeholder="5天"
+                          className={cn(glassInputClass, "h-9 w-full rounded-xl border-white/55 bg-white/72 text-sm shadow-none")}
+                          placeholder="5d"
                         />
                       </div>
 
                       {/* Delay Count */}
                       <div>
-                        <label className="block text-xs font-medium text-neutral-600 mb-1.5">延期次数</label>
+                        <label className="block text-xs font-medium text-neutral-600 mb-1.5">Delay Count</label>
                         <Input
                           type="text"
                           value={editingMilestone.delayCount}
                           onChange={(e) => setEditingMilestone({ ...editingMilestone, delayCount: e.target.value })}
-                          className="w-full text-sm"
+                          className={cn(glassInputClass, "h-9 w-full rounded-xl border-white/55 bg-white/72 text-sm shadow-none")}
                           placeholder="2"
                         />
                       </div>
 
                       {/* Delay Team */}
                       <div>
-                        <label className="block text-xs font-medium text-neutral-600 mb-1.5">延期团队</label>
+                        <label className="block text-xs font-medium text-neutral-600 mb-1.5">Delay Team</label>
                         <Select
                           value={delayTeam}
                           onValueChange={(value) => {
@@ -1940,11 +1956,11 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                             setDelayReason('');
                           }}
                         >
-                          <SelectTrigger className="w-full text-sm">
-                            <SelectValue placeholder="选择延期团队" />
+                          <SelectTrigger className={cn(glassInputClass, "h-9 w-full rounded-xl border-white/55 bg-white/72 text-sm shadow-none")}>
+                            <SelectValue placeholder="选择Delay Team" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="null_option">请选择</SelectItem>
+                            <SelectItem value="null_option">Please select</SelectItem>
                             {['产品', '软件', '硬件', '测试', '结构', 'ISP', '算法', '采购', '生产', 'CAD', '其它', '历史存档'].map(team => (
                               <SelectItem key={team} value={team}>{team}</SelectItem>
                             ))}
@@ -1955,7 +1971,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                       {/* Delay Reason - Conditional based on team */}
                       {delayTeam && (
                         <div>
-                          <label className="block text-xs font-medium text-neutral-600 mb-1.5">延期原因</label>
+                          <label className="block text-xs font-medium text-neutral-600 mb-1.5">Delay Reason</label>
                           <Select
                             value={delayReason}
                             onValueChange={(value) => {
@@ -1963,8 +1979,8 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                               setEditingMilestone({ ...editingMilestone, delayCategory: `(${delayTeam})${value}` });
                             }}
                           >
-                            <SelectTrigger className="w-full text-sm">
-                              <SelectValue placeholder="选择延期原因" />
+                            <SelectTrigger className={cn(glassInputClass, "h-9 w-full rounded-xl border-white/55 bg-white/72 text-sm shadow-none")}>
+                              <SelectValue placeholder="选择Delay Reason" />
                             </SelectTrigger>
                             <SelectContent>
                               {getDelayReasonOptions(delayTeam).map(option => (
@@ -1980,12 +1996,12 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                       {/* Delay Description - Conditional based on team selection */}
                       {delayTeam && (
                         <div className="col-span-2">
-                          <label className="block text-xs font-medium text-neutral-600 mb-1.5">延期原因描述</label>
+                          <label className="block text-xs font-medium text-neutral-600 mb-1.5">Delay Reason描述</label>
                           <textarea
                             value={delayDesc}
                             onChange={(e) => setDelayDesc(e.target.value)}
-                            className="w-full text-sm border border-neutral-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                            placeholder="请输入详细的延期原因描述..."
+                            className={cn(glassInputClass, "w-full resize-none rounded-xl border-white/55 bg-white/72 px-3 py-2 text-sm shadow-none focus-visible:ring-0")}
+                            placeholder="请输入详细的Delay Reason描述..."
                             rows={3}
                           />
                         </div>
@@ -1995,23 +2011,23 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex gap-3 pt-4 border-t border-neutral-200">
+                <div className="flex gap-3 border-t border-white/60 pt-4">
                   <button
                     onClick={async () => {
                       // Handle Add Mode
                       if (isAddMode) {
                         if (!editingMilestone.node.trim()) {
-                          toast.error('请输入节点名称');
+                          toast.error('Please enter a node name');
                           return;
                         }
 
                         if (!editingMilestone.bindItem) {
-                          toast.error('请选择绑定节点池节点');
+                          toast.error('Please select a node pool item');
                           return;
                         }
 
                         if (!scheduleId) {
-                          toast.error('无法获取 Schedule ID，请刷新页面重试');
+                          toast.error('Cannot get schedule ID. Please refresh and retry');
                           return;
                         }
 
@@ -2048,7 +2064,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                           const result = await response.json();
 
                           if (!result.success) {
-                            toast.error(result.error || '创建里程碑失败');
+                            toast.error(result.error || 'Failed to create milestone');
                             return;
                           }
 
@@ -2061,14 +2077,14 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                           setMilestones(calculateMilestoneStatus(newMilestones));
                           setIsEditPanelOpen(false);
                           setIsAddMode(false);
-                          toast.success('里程碑已创建');
+                          toast.success('Milestone created');
                         } catch (error: any) {
                           console.error('Error creating milestone:', error);
-                          toast.error('创建里程碑失败: ' + (error.message || '未知错误'));
+                          toast.error('Failed to create milestone: ' + (error.message || '未知错误'));
                         }
                         return;
                       }
-                      
+
                       // Handle Edit Mode
                       const originalMilestone = milestones.find(m => m.id === editingMilestone.id);
                       if (!originalMilestone) return;
@@ -2080,7 +2096,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                       const capturedDelayReason = delayReason;
                       const capturedDelayDesc = delayDesc;
                       const capturedNodePoolItems = nodePoolItems;
-                      
+
                       // Parse original delay category to get original team/reason
                       let originalDelayTeam = '';
                       let originalDelayReason = '';
@@ -2093,7 +2109,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                       }
 
                       // Optimistic update with status recalculation
-                      const updatedMilestones = milestones.map(m => 
+                      const updatedMilestones = milestones.map(m =>
                         m.id === editingMilestone.id ? editingMilestone : m
                       );
                       // Recalculate status based on actualComplete field
@@ -2102,13 +2118,13 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
 
                       // Show toast with undo
                       toastWithUndo({
-                        message: '里程碑已更新',
+                        message: 'Milestone updated',
                         duration: 5000,
                         onConfirm: async () => {
                           try {
                             if (!capturedMilestone.milePHID) {
                               console.error('Missing milePHID for milestone:', capturedMilestone);
-                              toast.error('缺少里程碑 PHID，无法保存');
+                              toast.error('Missing milestone PHID, cannot save');
                               return;
                             }
 
@@ -2116,12 +2132,12 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                             const requestBody: any = {
                               milePHID: capturedMilestone.milePHID,
                             };
-                            
+
                             // Only include fields that have actually changed
                             if (capturedMilestone.node !== capturedOriginal.node) {
                               requestBody.milestoneName = capturedMilestone.node;
                             }
-                            
+
                             if (capturedMilestone.preNode !== capturedOriginal.preNode) {
                               requestBody.preMilestone = capturedMilestone.preNode !== '-' ? capturedMilestone.preNode : '';
                             }
@@ -2138,35 +2154,35 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                             if (newBindItem !== origBindItem) {
                               requestBody.bindItem = newBindItem;
                             }
-                            
+
                             // Compare dates (convert to timestamp for comparison)
                             const newUpdatedPlan = capturedMilestone.updatedPlan?.getTime();
                             const origUpdatedPlan = capturedOriginal.updatedPlan?.getTime();
                             if (newUpdatedPlan !== origUpdatedPlan) {
                               // Include the date if changed, or empty string to clear it
-                              requestBody.updateFinishDate = capturedMilestone.updatedPlan 
-                                ? capturedMilestone.updatedPlan.toISOString() 
+                              requestBody.updateFinishDate = capturedMilestone.updatedPlan
+                                ? capturedMilestone.updatedPlan.toISOString()
                                 : null; // null to clear the date
                             }
-                            
+
                             const newActualComplete = capturedMilestone.actualComplete?.getTime();
                             const origActualComplete = capturedOriginal.actualComplete?.getTime();
                             if (newActualComplete !== origActualComplete) {
                               // Include the date if changed, or null to clear it
-                              requestBody.actualFinishDate = capturedMilestone.actualComplete 
-                                ? capturedMilestone.actualComplete.toISOString() 
+                              requestBody.actualFinishDate = capturedMilestone.actualComplete
+                                ? capturedMilestone.actualComplete.toISOString()
                                 : null; // null to clear the date
                             }
-                            
+
                             // Compare delay info
                             if (capturedDelayTeam !== originalDelayTeam) {
                               requestBody.delayGroup = capturedDelayTeam || '';
                             }
-                            
+
                             if (capturedDelayReason !== originalDelayReason && capturedDelayTeam) {
                               requestBody.delayReason = capturedDelayReason || '';
                             }
-                            
+
                             // Include delay description if team is selected and description is provided
                             if (capturedDelayTeam && capturedDelayDesc) {
                               requestBody.delayDesc = capturedDelayDesc;
@@ -2175,7 +2191,7 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                             // Check if there are any changes to save
                             const hasChanges = Object.keys(requestBody).length > 1; // More than just milePHID
                             if (!hasChanges) {
-                              toast.info('没有检测到修改');
+                              toast.info('No changes detected');
                               return;
                             }
 
@@ -2184,19 +2200,19 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                               method: 'POST',
                               body: requestBody
                             });
-                            toast.success('里程碑已保存到服务器');
+                            toast.success('Milestone saved to server');
                           } catch (error: any) {
                             console.error('Failed to save milestone:', error);
-                            toast.error('保存失败: ' + (error.message || '未知错误'));
+                            toast.error('Save failed: ' + (error.message || '未知错误'));
                             // Revert on error
-                            setMilestones(milestones.map(m => 
+                            setMilestones(milestones.map(m =>
                               m.id === capturedOriginal.id ? capturedOriginal : m
                             ));
                           }
                         },
                         onUndo: () => {
                           // Revert changes
-                          setMilestones(milestones.map(m => 
+                          setMilestones(milestones.map(m =>
                             m.id === originalMilestone.id ? originalMilestone : m
                           ));
                         }
@@ -2204,13 +2220,13 @@ export function ProjectDetailPanel({ project, isModal = false, onClose }: Projec
                     }}
                     className="flex-1 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
                   >
-                    确定
+                    Confirm
                   </button>
                   <button
                     onClick={() => setIsEditPanelOpen(false)}
                     className="px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-100 rounded-md transition-colors font-medium"
                   >
-                    取消
+                    Cancel
                   </button>
                 </div>
               </div>

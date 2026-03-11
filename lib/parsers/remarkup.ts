@@ -8,6 +8,7 @@
  *   {T12345}                               → task links
  *   {D12345}                               → diff links
  *   [[url|label]]  [[url]]                 → links
+ *   ![alt](url)                            → markdown-style images
  *   @username                              → mention
  *   >>! ... (nested quote with attribution)
  *   > blockquote lines
@@ -26,6 +27,10 @@ function escapeHtml(str: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function escapeAttribute(str: string): string {
+  return escapeHtml(str).replace(/'/g, '&#39;');
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -88,13 +93,19 @@ export function remarkupToHtml(raw: string): string {
   text = text.replace(/\{D(\d+)\}/g, '<a href="/D$1" class="remarkup-object-ref">D$1</a>');
 
   // ── 5. Wiki-style links: [[url|label]] or [[url]]
-  text = text.replace(/\[\[([^|\]\n]+)\|([^\]\n]+)\]\]/g, '<a href="$1" class="remarkup-link">$2</a>');
-  text = text.replace(/\[\[([^\]\n]+)\]\]/g, '<a href="$1" class="remarkup-link">$1</a>');
+  text = text.replace(/\[\[([^|\]\n]+)\|([^\]\n]+)\]\]/g, '<a href="$1" class="remarkup-link" target="_blank" rel="noopener">$2</a>');
+  text = text.replace(/\[\[([^\]\n]+)\]\]/g, '<a href="$1" class="remarkup-link" target="_blank" rel="noopener">$1</a>');
 
-  // ── 5b. Markdown-style links: [label](url) — negative lookbehind avoids matching inside [[...]]
+  // ── 5b. Markdown-style images: ![alt](url)
+  text = text.replace(/!\[([^\]\n]*)\]\((https?:\/\/[^\s)]+)\)/g, (_m, alt: string, url: string) => {
+    const safeAlt = escapeAttribute(alt || 'Image');
+    return `<img src="${escapeAttribute(url)}" alt="${safeAlt}" class="remarkup-inline-image" loading="lazy" />`;
+  });
+
+  // ── 5c. Markdown-style links: [label](url) — negative lookbehind avoids matching inside [[...]] and image syntax
   text = text.replace(/(?<!\[)\[([^\[\]\n]+?)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" class="remarkup-link" target="_blank" rel="noopener">$1</a>');
 
-  // ── 5c. Bare URLs: http://... or https://... (not already inside href="..." or >...</a>)
+  // ── 5d. Bare URLs: http://... or https://... (not already inside href="..." or >...</a>)
   text = text.replace(/(?<!="|>)(https?:\/\/[^\s<>\])"]+)/g, '<a href="$1" class="remarkup-link" target="_blank" rel="noopener">$1</a>');
 
   // ── 6. @mentions

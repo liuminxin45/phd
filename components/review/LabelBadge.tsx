@@ -2,6 +2,7 @@ import { cn } from '@/lib/utils';
 import { getLabelScoreColor, getLabelScoreText, getLabelMaxScore } from '@/lib/gerrit/helpers';
 import type { GerritLabelInfo } from '@/lib/gerrit/types';
 import { Check, X, Minus } from 'lucide-react';
+import { LiquidTooltip } from '@/components/ui/liquid-tooltip';
 
 const LABEL_DISPLAY_NAMES: Record<string, string> = {
   'Code-Review': 'Code Review',
@@ -31,16 +32,17 @@ export function LabelBadge({ name, label, compact }: LabelBadgeProps) {
   if (compact) {
     const compactName = shortName === 'Code Review' ? 'CR' : shortName;
     return (
-      <span
-        className={cn(
-          'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] leading-none font-medium border',
-          colorClass
-        )}
-        title={`${shortName} ${scoreText}`}
-      >
-        {icon}
-        <span>{compactName} {scoreText}</span>
-      </span>
+      <LiquidTooltip content={`${shortName} ${scoreText}`}>
+        <span
+          className={cn(
+            'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] leading-none font-medium border',
+            colorClass
+          )}
+        >
+          {icon}
+          <span>{compactName} {scoreText}</span>
+        </span>
+      </LiquidTooltip>
     );
   }
 

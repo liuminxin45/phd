@@ -1,10 +1,20 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { ConduitClient } from '@/lib/conduit/client';
-import { extractLikeState, findLikeTokenPHID } from '@/lib/blog/tokenState';
+import { extractLikeState, findLikeTokenPHID, toConduitList } from '@/lib/blog/tokenState';
 
 // Cache current user PHID (won't change within process lifetime)
 let cachedUserPHID: string | null = null;
 let cachedLikeTokenPHID: string | null = null;
+
+interface TokenGivenEntry {
+  authorPHID?: string;
+}
+
+interface LikeUser {
+  phid: string;
+  name: string;
+  image: string | null;
+}
 
 async function resolveCurrentUserPHID(client: ConduitClient): Promise<string | null> {
   if (cachedUserPHID) return cachedUserPHID;
@@ -27,12 +37,47 @@ async function checkHasLiked(
   objectPHID: string,
   userPHID: string,
   likeTokenPHID: string
-): Promise<{ hasLiked: boolean; likeCount: number }> {
+): Promise<{ hasLiked: boolean; likeCount: number; likers: LikeUser[] }> {
   const tokensRaw = await client.call<any>('token.given', {
     objectPHIDs: [objectPHID],
     tokenPHIDs: [likeTokenPHID],
   });
-  return extractLikeState(tokensRaw, userPHID);
+  const { hasLiked, likeCount } = extractLikeState(tokensRaw, userPHID);
+  const tokenEntries = toConduitList<TokenGivenEntry>(tokensRaw);
+  const likerPHIDs = Array.from(
+    new Set(
+      tokenEntries
+        .map((entry) => entry?.authorPHID)
+        .filter((phid): phid is string => typeof phid === 'string' && phid.startsWith('PHID-USER-'))
+    )
+  );
+
+  let likers: LikeUser[] = [];
+  if (likerPHIDs.length > 0) {
+    try {
+      const usersResult = await client.call<any>('user.search', {
+        constraints: { phids: likerPHIDs },
+      });
+      const userList = toConduitList<any>(usersResult?.data ?? usersResult);
+      const userMap = new Map<string, LikeUser>();
+      for (const user of userList) {
+        const phid = user?.phid;
+        if (!phid) continue;
+        userMap.set(phid, {
+          phid,
+          name: user?.fields?.realName || user?.fields?.username || 'Unknown',
+          image: user?.fields?.image || null,
+        });
+      }
+      likers = likerPHIDs
+        .map((phid) => userMap.get(phid))
+        .filter((item): item is LikeUser => Boolean(item));
+    } catch {
+      likers = likerPHIDs.map((phid) => ({ phid, name: 'Unknown', image: null }));
+    }
+  }
+
+  return { hasLiked, likeCount, likers };
 }
 
 export default async function handler(
@@ -70,6 +115,7 @@ export default async function handler(
       return res.status(200).json({
         hasLiked: state.hasLiked,
         likeCount: state.likeCount,
+        likers: state.likers,
         likeTokenPHID,
       });
     } catch (error: any) {
@@ -139,6 +185,7 @@ export default async function handler(
         likeTokenPHID,
         likeCountBefore: before.likeCount,
         likeCountAfter: after.likeCount,
+        likers: after.likers,
         traceId,
       });
     } catch (error: any) {

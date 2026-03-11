@@ -3,16 +3,18 @@ import { Eye, EyeOff } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { glassInputClass } from '@/components/ui/glass';
 
 interface SecretInputProps {
   value: string;
   onChange?: (v: string) => void;
+  onBlur?: () => void;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
 }
 
-export function SecretInput({ value, onChange, placeholder, disabled, className }: SecretInputProps) {
+export function SecretInput({ value, onChange, onBlur, placeholder, disabled, className }: SecretInputProps) {
   const [visible, setVisible] = useState(false);
   return (
     <div className="relative">
@@ -20,10 +22,11 @@ export function SecretInput({ value, onChange, placeholder, disabled, className 
         type={visible ? 'text' : 'password'}
         value={value}
         onChange={onChange ? (e) => onChange(e.target.value) : undefined}
+        onBlur={onBlur}
         placeholder={placeholder}
         disabled={disabled}
         readOnly={!onChange}
-        className={cn("pr-9", className)}
+        className={cn(glassInputClass, "pr-9", className)}
       />
       <Button
         type="button"

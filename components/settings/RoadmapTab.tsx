@@ -1,10 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, GripVertical, Plus, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { GlassIconButton, glassSectionClass, glassToolbarClass } from '@/components/ui/glass';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+const glassInputClass = 'rounded-xl border border-white/58 bg-white/72 backdrop-blur-lg supports-[backdrop-filter]:bg-white/58';
+const glassSelectContentClass = 'rounded-xl border border-white/60 bg-white/88 shadow-[0_14px_34px_rgba(15,23,42,0.16)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/72';
 
 type RoadmapStage = 'now' | 'next' | 'later' | 'done';
-type RoadmapTag = '架构' | '业务' | '工具' | 'AI';
+type RoadmapTag = 'Architecture' | 'Business' | 'Tooling' | 'AI';
 
 type ViewMode = 'list' | 'timeline';
 
@@ -27,9 +38,9 @@ const DEFAULT_ITEMS: RoadmapItem[] = [
   {
     id: 'now-1',
     stage: 'now',
-    title: 'Utility 统一架构重构',
+    title: 'Utility 统一Architecture重构',
     note: '插件通信层重写 + RPC 整理',
-    tag: '架构',
+    tag: 'Architecture',
     cycle: '4 周',
     why: '为后续插件化打基础',
     progress: 65,
@@ -38,8 +49,8 @@ const DEFAULT_ITEMS: RoadmapItem[] = [
     id: 'next-1',
     stage: 'next',
     title: 'ROI Web 化',
-    note: '预计 3 月启动',
-    tag: '业务',
+    note: 'Estimate: 3 月启动',
+    tag: 'Business',
     cycle: '1 月',
     why: '让数据分析结果更容易被复用',
     progress: 0,
@@ -49,7 +60,7 @@ const DEFAULT_ITEMS: RoadmapItem[] = [
     stage: 'later',
     title: '多平台插件发布机制',
     note: '统一打包、签名与分发流程',
-    tag: '工具',
+    tag: 'Tooling',
     cycle: '2 月',
     why: '降低后续插件迭代成本',
     progress: 0,
@@ -59,7 +70,7 @@ const DEFAULT_ITEMS: RoadmapItem[] = [
     stage: 'done',
     title: 'RPC 服务端改造',
     note: '',
-    tag: '架构',
+    tag: 'Architecture',
     cycle: '3 周',
     why: '为后续服务分层铺路',
     progress: 100,
@@ -85,9 +96,9 @@ function createItem(stage: RoadmapStage): RoadmapItem {
   return {
     id: `${stage}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
     stage,
-    title: '新的 roadmap 项目',
+    title: '新的 roadmap items目',
     note: '',
-    tag: '工具',
+    tag: 'Tooling',
     cycle: '2 周',
     why: '',
     progress: stage === 'now' ? 20 : stage === 'done' ? 100 : 0,
@@ -281,8 +292,10 @@ export function RoadmapTab() {
         onDrop={() => reorderByDrop(item.id)}
         onDoubleClick={() => setEditingId(item.id)}
         className={cn(
-          'group rounded-md px-2 py-2 transition-colors',
-          isDone ? 'text-neutral-400 hover:bg-neutral-50' : 'hover:bg-neutral-50',
+          'group rounded-xl border px-3 py-2.5 transition-colors',
+          isDone
+            ? 'border-white/50 bg-white/34 text-slate-400 hover:bg-white/44'
+            : 'border-white/58 bg-white/52 text-slate-700 hover:bg-white/62',
         )}
       >
         <div className="flex items-start gap-2">
@@ -312,27 +325,28 @@ export function RoadmapTab() {
                   className="w-full bg-transparent border-0 border-b border-neutral-300 px-0 py-1 text-sm font-medium text-neutral-900 outline-none"
                 />
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                  <select
-                    value={item.tag}
-                    onChange={(e) => updateItem(item.id, { tag: e.target.value as RoadmapTag })}
-                    className="h-8 rounded-md border border-neutral-200 bg-white px-2 text-xs"
-                  >
-                    <option value="架构">架构</option>
-                    <option value="业务">业务</option>
-                    <option value="工具">工具</option>
-                    <option value="AI">AI</option>
-                  </select>
-                  <input
+                  <Select value={item.tag} onValueChange={(v) => updateItem(item.id, { tag: v as RoadmapTag })}>
+                    <SelectTrigger className={cn('h-8 text-xs', glassInputClass)}>
+                      <SelectValue placeholder="Tag" />
+                    </SelectTrigger>
+                    <SelectContent className={glassSelectContentClass}>
+                      <SelectItem value="Architecture">Architecture</SelectItem>
+                      <SelectItem value="Business">Business</SelectItem>
+                      <SelectItem value="Tooling">Tooling</SelectItem>
+                      <SelectItem value="AI">AI</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
                     value={item.cycle}
                     onChange={(e) => updateItem(item.id, { cycle: e.target.value })}
-                    placeholder="周期（如 2 周）"
-                    className="h-8 rounded-md border border-neutral-200 px-2 text-xs"
+                    placeholder="Cycle (e.g. 2w)"
+                    className={cn('h-8 text-xs', glassInputClass)}
                   />
-                  <input
+                  <Input
                     value={item.why}
                     onChange={(e) => updateItem(item.id, { why: e.target.value })}
-                    placeholder="目标：为什么做"
-                    className="h-8 rounded-md border border-neutral-200 px-2 text-xs"
+                    placeholder="Goal: 为什么做"
+                    className={cn('h-8 text-xs', glassInputClass)}
                   />
                 </div>
                 {item.stage === 'now' && (
@@ -358,22 +372,23 @@ export function RoadmapTab() {
                       {isDone ? '✓' : item.stage === 'now' ? '●' : '○'} {item.title}
                     </span>
                   </div>
-                  <button
+                  <GlassIconButton
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteItem(item.id);
                     }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-neutral-400 hover:text-red-500"
-                    aria-label="删除项目"
-                    title="删除"
+                    className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                    aria-label="Delete item"
+                    title="Delete"
+                    tone="warning"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  </GlassIconButton>
                 </div>
                 <p className={cn('text-xs mt-1.5', isDone ? 'text-neutral-400 line-through' : 'text-neutral-500')}>
-                  [{item.tag}] 预计 {item.cycle || '待定'}
-                  {item.why ? ` · 目标：${item.why}` : ''}
+                  [{item.tag}] Estimate: {item.cycle || '待定'}
+                  {item.why ? ` · Goal: ${item.why}` : ''}
                 </p>
                 {item.note && <p className="text-xs text-neutral-500 mt-1">{item.note}</p>}
                 {item.stage === 'now' && (
@@ -402,22 +417,20 @@ export function RoadmapTab() {
         <div className="flex items-center justify-between">
           <h3 className="text-xs tracking-[0.2em] text-neutral-500 font-semibold">{STAGE_LABEL[stage]}</h3>
           {stage !== 'done' && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs text-neutral-500"
+            <GlassIconButton
               onClick={() => addItem(stage)}
               disabled={stage === 'now' && nowCount >= MAX_NOW_ITEMS}
+              title={`添加到 ${STAGE_LABEL[stage]}`}
+              aria-label={`添加到 ${STAGE_LABEL[stage]}`}
             >
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              Add
-            </Button>
+              <Plus className="h-3.5 w-3.5" />
+            </GlassIconButton>
           )}
         </div>
 
         <div className="space-y-2">
           {list.map((item) => renderItem(item))}
-          {list.length === 0 && <p className="text-xs text-neutral-400 py-2">暂无内容，双击任意项目可编辑。</p>}
+          {list.length === 0 && <p className="text-xs text-neutral-400 py-2">No content yet. Double-click any item to edit.</p>}
         </div>
       </section>
     );
@@ -427,37 +440,36 @@ export function RoadmapTab() {
 
   return (
     <div className="space-y-8 pb-4">
-      <header className="flex items-start justify-between">
+      <header className={cn(glassSectionClass, 'flex items-start justify-between rounded-2xl p-5')}>
         <div>
-          <h2 className="text-3xl font-light tracking-tight text-neutral-900">🗺 Personal Roadmap</h2>
-          <p className="text-xs text-neutral-500 mt-2 tracking-wide">Last updated: {formatMonth(lastUpdated)}</p>
+          <h2 className="text-3xl font-light tracking-tight text-slate-900">🗺 Personal Roadmap</h2>
+          <p className="mt-2 text-xs tracking-wide text-slate-600">Last updated: {formatMonth(lastUpdated)}</p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-md border border-neutral-200 p-0.5 text-xs bg-white">
+          <div className={cn(glassToolbarClass, 'inline-flex rounded-xl p-0.5 text-xs')}>
             <button
               onClick={() => setViewMode('list')}
-              className={cn('px-2 py-1 rounded', viewMode === 'list' ? 'bg-neutral-900 text-white' : 'text-neutral-600')}
+              className={cn('rounded px-2 py-1', viewMode === 'list' ? 'bg-slate-900 text-white' : 'text-slate-600')}
             >
               List View
             </button>
             <button
               onClick={() => setViewMode('timeline')}
-              className={cn('px-2 py-1 rounded', viewMode === 'timeline' ? 'bg-neutral-900 text-white' : 'text-neutral-600')}
+              className={cn('rounded px-2 py-1', viewMode === 'timeline' ? 'bg-slate-900 text-white' : 'text-slate-600')}
             >
               Timeline View
             </button>
           </div>
-          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => addItem('next')}>
+          <GlassIconButton onClick={() => addItem('next')} title="Add item" aria-label="Add item">
             <Plus className="h-4 w-4" />
-            Add
-          </Button>
+          </GlassIconButton>
         </div>
       </header>
 
-      {nowCount > MAX_NOW_ITEMS && <p className="text-xs text-amber-600">Now 阶段建议保持 1~{MAX_NOW_ITEMS} 项，当前已超出，请适当收敛。</p>}
+      {nowCount > MAX_NOW_ITEMS && <p className="text-xs text-amber-600">Now 阶段建议保持 1~{MAX_NOW_ITEMS} items，当前已超出，请适当收敛。</p>}
 
       {viewMode === 'timeline' ? (
-        <section className="space-y-3 border-t border-neutral-100 pt-6">
+        <section className={cn(glassSectionClass, 'space-y-3 rounded-2xl border-white/60 pt-6')}>
           {timelineItems.map((item) => (
             <div key={item.id} className="flex items-center gap-3 text-sm">
               <span className="w-16 text-neutral-500">{item.month}</span>
@@ -473,26 +485,25 @@ export function RoadmapTab() {
           {renderStage('later')}
 
           <section className="space-y-3">
-            <button
-              className="inline-flex items-center gap-1 text-xs tracking-[0.2em] text-neutral-500 font-semibold"
-              onClick={() => setShowDone((prev) => !prev)}
-            >
-              {showDone ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-              DONE ({doneCount})
-            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-xs tracking-[0.2em] text-neutral-500 font-semibold">DONE ({doneCount})</span>
+              <GlassIconButton onClick={() => setShowDone((prev) => !prev)} title={showDone ? 'Collapse done' : 'Expand done'} aria-label={showDone ? 'Collapse done' : 'Expand done'}>
+                {showDone ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              </GlassIconButton>
+            </div>
             {showDone && (
               <div className="space-y-2">
                 {completedItems.map((item) => renderItem(item))}
-                {completedItems.length === 0 && <p className="text-xs text-neutral-400 py-2">还没有完成项。</p>}
+                {completedItems.length === 0 && <p className="text-xs text-neutral-400 py-2">No completed items yet.</p>}
               </div>
             )}
           </section>
         </div>
       )}
 
-      <footer className="pt-4 border-t border-neutral-200 text-sm text-neutral-500 flex flex-wrap gap-x-6 gap-y-1">
-        <span>今年已完成 {doneCount} 项</span>
-        <span>平均周期 18 天</span>
+      <footer className={cn(glassSectionClass, 'flex flex-wrap gap-x-6 gap-y-1 rounded-2xl border-white/60 pt-4 text-sm text-slate-600')}>
+        <span>Completed this year: {doneCount} items</span>
+        <span>Average cycle: 18 days</span>
       </footer>
     </div>
   );

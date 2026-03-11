@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Folder, Users, Loader2, ChevronRight, Archive, ArchiveRestore, Search, X } from 'lucide-react';
+import { Folder, Users, Loader2, ChevronRight, Archive, ArchiveRestore } from 'lucide-react';
 import { Project } from '@/lib/api';
 import { useUser } from '@/contexts/UserContext';
 import { httpClient } from '@/lib/httpClient';
 import { ProjectDetailPanel } from '@/components/project/ProjectDetailPanel';
 import { appStorage } from '@/lib/appStorage';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
+import { GlassSearchInput } from '@/components/ui/glass-search-input';
 import { cn } from '@/lib/utils';
+import { GlassIconButton, GlassPage, GlassPanel, GlassSection, glassPanelStrongClass } from '@/components/ui/glass';
+import { toast } from '@/lib/toast';
 
 const colorMap: Record<string, string> = {
   blue: 'bg-blue-500',
@@ -28,9 +29,9 @@ const colorMap: Record<string, string> = {
 
 interface ProjectStats {
   total: number;
-  waiting: number;      // 未开始: notbegin + spite
-  inProgress: number;   // 进行中: open + wontfix + stalled 等
-  completed: number;    // 已完成: resolved + excluded
+  waiting: number;      // Not started: notbegin + spite
+  inProgress: number;   // In progress: open + wontfix + stalled
+  completed: number;    // Completed: resolved + excluded
 }
 
 const PAGE_SIZE = 100;
@@ -57,7 +58,7 @@ export default function ProjectsPage() {
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
 
   const [archivedProjectIds, setArchivedProjectIds] = useState<Set<number>>(new Set());
-  const [showArchived, setShowArchived] = useState(false);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archiveStateLoaded, setArchiveStateLoaded] = useState(false);
 
   useEffect(() => {
@@ -84,9 +85,7 @@ export default function ProjectsPage() {
   }, [archivedProjectIds, archiveStateLoaded]);
 
   const displayedProjects = useMemo(() => {
-    let filtered = showArchived
-      ? projects.filter(p => archivedProjectIds.has(p.id))
-      : projects.filter(p => !archivedProjectIds.has(p.id));
+    let filtered = projects.filter(p => !archivedProjectIds.has(p.id));
       
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -94,7 +93,14 @@ export default function ProjectsPage() {
     }
     
     return filtered;
-  }, [projects, archivedProjectIds, showArchived, searchQuery]);
+  }, [projects, archivedProjectIds, searchQuery]);
+
+  const archivedProjects = useMemo(() => {
+    const projectMap = new Map(projects.map((project) => [project.id, project] as const));
+    return Array.from(archivedProjectIds)
+      .sort((a, b) => b - a)
+      .map((projectId) => ({ projectId, project: projectMap.get(projectId) }));
+  }, [projects, archivedProjectIds]);
 
   // Fetch projects for current user
   const fetchProjects = async (page: number = 1, append: boolean = false) => {
@@ -225,6 +231,7 @@ export default function ProjectsPage() {
       next.add(projectId);
       return next;
     });
+    toast.success(`Project P${projectId} archived`);
   };
 
   const unarchiveProject = (projectId: number) => {
@@ -234,10 +241,48 @@ export default function ProjectsPage() {
       next.delete(projectId);
       return next;
     });
+    toast.success(`Project P${projectId} restored from archive`);
   };
 
   return (
-    <div className="p-6 space-y-6 h-full flex flex-col overflow-hidden">
+    <GlassPage showOrbs={false} className="h-full">
+    <div className="h-full overflow-auto">
+    <div className="mx-auto flex h-full w-full max-w-6xl flex-col space-y-5 p-5">
+      <GlassPanel className={cn(glassPanelStrongClass, 'rounded-3xl p-4 md:p-5')}>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/55 bg-white/52 shadow-[0_12px_28px_rgba(37,99,235,0.14)] backdrop-blur-lg">
+              <Folder className="h-4.5 w-4.5 text-sky-700" />
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold tracking-tight text-slate-900">Projects</h1>
+            </div>
+          </div>
+          <GlassSearchInput
+            placeholder="Search projects..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            containerClassName="w-full md:w-[460px] lg:w-[560px]"
+            actions={
+              <GlassIconButton
+                onClick={() => setArchiveDialogOpen(true)}
+                title="Archived Projects"
+                tone="warning"
+                className="relative"
+                aria-label="Archived Projects"
+              >
+                <Archive className="h-3.5 w-3.5" />
+                {archivedProjectIds.size > 0 && (
+                  <span className="absolute -right-1 -top-1 min-w-4 h-4 px-1 rounded-full bg-amber-500 text-white text-[9px] leading-4 text-center">
+                    {archivedProjectIds.size > 99 ? '∞' : archivedProjectIds.size}
+                  </span>
+                )}
+              </GlassIconButton>
+            }
+          />
+        </div>
+      </GlassPanel>
+
       {/* Loading Spinner */}
       {loading && (
         <div className="flex-1 flex items-center justify-center">
@@ -247,40 +292,7 @@ export default function ProjectsPage() {
 
       {/* Projects Grid */}
       {!loading && (
-        <div className="flex-1 overflow-y-auto min-h-0 pr-2">
-          <div className="mb-6 flex items-center justify-between">
-            <div className="relative w-64">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="搜索项目..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 h-9"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowArchived(!showArchived)}
-              className={cn(
-                "h-9 gap-1.5",
-                showArchived ? "text-amber-600 hover:text-amber-700 hover:bg-amber-50" : "text-muted-foreground"
-              )}
-            >
-              <Archive className="h-4 w-4" />
-              {showArchived ? '显示活跃项目' : `已归档 (${archivedProjectIds.size})`}
-            </Button>
-          </div>
-
+        <GlassSection className="flex-1 overflow-y-auto min-h-0 p-4 md:p-5">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6 pb-6">
             {displayedProjects.map((project) => {
               const colorKey = project.fields.color?.key || 'blue';
@@ -293,7 +305,7 @@ export default function ProjectsPage() {
                 <Card 
                   key={project.id} 
                   onClick={() => handleProjectClick(project)}
-                  className="group relative overflow-hidden transition-all duration-200 hover:shadow-md cursor-pointer border-t-4"
+                  className="glass-interactive group relative cursor-pointer overflow-hidden border border-white/58 border-t-4 bg-white/62 shadow-[0_12px_28px_rgba(15,23,42,0.1)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/50 transition-all duration-200 hover:border-sky-200/80 hover:bg-white/72"
                   style={{ borderTopColor: 'transparent' }} // Reset to allow the color class to take effect if we applied it directly, but let's use a div instead
                 >
                   <div className={cn("absolute top-0 left-0 right-0 h-1", colorClass)} />
@@ -313,19 +325,15 @@ export default function ProjectsPage() {
                         size="icon"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (showArchived) {
-                            unarchiveProject(project.id);
-                          } else {
-                            archiveProject(project.id);
-                          }
+                          archiveProject(project.id);
                         }}
                         className={cn(
                           "h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity",
-                          showArchived ? "text-amber-600 hover:text-amber-700 hover:bg-amber-50" : "text-muted-foreground hover:text-foreground"
+                          "text-muted-foreground hover:text-amber-700 hover:bg-amber-50"
                         )}
-                        title={showArchived ? '取消归档' : '归档'}
+                        title="Archive"
                       >
-                        {showArchived ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
+                        <Archive className="h-4 w-4" />
                       </Button>
                     </div>
 
@@ -386,7 +394,7 @@ export default function ProjectsPage() {
                 className="w-full max-w-xs"
               >
                 {loadingMore ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ChevronRight className="mr-2 h-4 w-4" />}
-                加载更多
+                Load more
               </Button>
             </div>
           )}
@@ -395,15 +403,57 @@ export default function ProjectsPage() {
           {displayedProjects.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center text-muted-foreground/50">
               <Folder className="h-16 w-16 mb-4 opacity-20" />
-              <p className="text-lg font-medium">没有找到项目</p>
+              <p className="text-lg font-medium">No projects found</p>
             </div>
           )}
-        </div>
+        </GlassSection>
       )}
+
+      <Dialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>
+        <DialogContent className={cn("max-w-3xl rounded-3xl border border-white/70 bg-[#f8fbff]/92 p-5 shadow-[0_28px_66px_rgba(15,23,42,0.2)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[#f8fbff]/78")}>
+          <DialogHeader className="pb-1">
+            <DialogTitle className="text-slate-900">Archived Projects ({archivedProjectIds.size})</DialogTitle>
+          </DialogHeader>
+          {archivedProjects.length === 0 ? (
+            <GlassSection className="glass-interactive border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
+              No archived projects.
+            </GlassSection>
+          ) : (
+            <div className="max-h-[60vh] overflow-auto rounded-2xl border border-white/70 bg-white/48 p-2.5 backdrop-blur-xl supports-[backdrop-filter]:bg-white/34">
+              <div className="space-y-2.5 pr-1">
+                {archivedProjects.map(({ projectId, project }) => (
+                  <div
+                    key={`archived-project-${projectId}`}
+                    className="glass-interactive flex items-center justify-between gap-3 rounded-2xl border border-white/58 bg-white/62 px-3.5 py-3 shadow-[0_10px_24px_rgba(15,23,42,0.1)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/50"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-slate-900">
+                        {project?.fields.name || `Project #${projectId}`}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        P{projectId}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => unarchiveProject(projectId)}
+                      className="h-8 rounded-xl border border-amber-200/80 bg-white/70 px-3 text-xs text-amber-700 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"
+                    >
+                      <ArchiveRestore className="mr-1.5 h-3.5 w-3.5" />
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Project Detail Modal */}
       <Dialog open={!!selectedProject && isProjectModalOpen} onOpenChange={(open) => !open && handleCloseProjectModal()}>
-        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-5xl h-[85vh] p-0 flex flex-col gap-0 overflow-hidden">
+        <DialogContent showCloseButton={false} className="h-[88vh] max-w-[calc(100%-2rem)] sm:max-w-6xl rounded-3xl border border-white/70 bg-[#f8fbff]/92 p-0 shadow-[0_30px_70px_rgba(15,23,42,0.22)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[#f8fbff]/78 flex flex-col gap-0 overflow-hidden">
           {selectedProject && (
             <ProjectDetailPanel 
               project={selectedProject} 
@@ -414,5 +464,7 @@ export default function ProjectsPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </div>
+    </GlassPage>
   );
 }

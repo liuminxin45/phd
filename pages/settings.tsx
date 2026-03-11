@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { Settings, Bot, Server, Route } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { TabId } from '@/lib/settings/types';
 import { LlmTab } from '@/components/settings/LlmTab';
 import { EnvTab } from '@/components/settings/EnvTab';
 import { RoadmapTab } from '@/components/settings/RoadmapTab';
+import { GlassPage, GlassPanel, GlassToolbar, glassPanelStrongClass } from '@/components/ui/glass';
 
 const TABS: { id: TabId; label: string; icon: typeof Bot }[] = [
   { id: 'llm', label: 'AI / LLM', icon: Bot },
-  { id: 'env', label: '环境变量', icon: Server },
+  { id: 'env', label: 'Environment', icon: Server },
   { id: 'roadmap', label: 'Roadmap', icon: Route },
 ];
 
@@ -25,45 +27,51 @@ export default function SettingsPage() {
   }, [router.isReady, router.query.tab]);
 
   return (
-    <div className="h-full overflow-auto">
-      <div className="max-w-4xl mx-auto p-6 space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-neutral-100 flex items-center justify-center">
-            <Settings className="h-5 w-5 text-neutral-700" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-neutral-900">设置</h1>
-            <p className="text-sm text-neutral-500">管理 AI 模型配置与环境变量</p>
-          </div>
-        </div>
+    <GlassPage showOrbs={false} className="h-full">
+      <div className="h-full overflow-auto">
+        <div className="mx-auto max-w-4xl space-y-6 p-6">
+          <GlassPanel className={cn(glassPanelStrongClass, 'rounded-3xl p-5')}>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/60 bg-white/62 shadow-[0_12px_28px_rgba(37,99,235,0.14)]">
+                <Settings className="h-5 w-5 text-sky-700" />
+              </div>
+              <div>
+                <h1 className="text-xl font-semibold tracking-tight text-slate-900">Settings</h1>
+              </div>
+            </div>
+          </GlassPanel>
 
-        <div className="border-b border-neutral-200">
-          <nav className="flex gap-1">
-            {TABS.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
-                    isActive
-                      ? 'border-neutral-900 text-neutral-900'
-                      : 'border-transparent text-neutral-500 hover:text-neutral-700 hover:border-neutral-300'
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
+          <GlassToolbar className="rounded-2xl p-1.5">
+            <nav className="flex flex-wrap gap-1">
+              {TABS.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200',
+                      isActive
+                        ? 'border border-white/65 bg-white/82 text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.14)]'
+                        : 'border border-transparent text-slate-600 hover:border-white/50 hover:bg-white/56 hover:text-slate-900'
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </nav>
+          </GlassToolbar>
 
-        {activeTab === 'llm' && <LlmTab />}
-        {activeTab === 'env' && <EnvTab />}
-        {activeTab === 'roadmap' && <RoadmapTab />}
+          <GlassPanel className="rounded-3xl p-4 md:p-5">
+            {activeTab === 'llm' && <LlmTab />}
+            {activeTab === 'env' && <EnvTab />}
+            {activeTab === 'roadmap' && <RoadmapTab />}
+          </GlassPanel>
+        </div>
       </div>
-    </div>
+    </GlassPage>
   );
 }

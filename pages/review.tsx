@@ -8,7 +8,7 @@ import { ChangeCard } from '@/components/review/ChangeCard';
 import { ChangeDetail } from '@/components/review/ChangeDetail';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { GlassSearchInput } from '@/components/ui/glass-search-input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -17,13 +17,10 @@ import {
   GlassPage,
   GlassPanel,
   GlassSection,
-  GlassToolbar,
-  glassInputClass,
   glassPanelStrongClass,
 } from '@/components/ui/glass';
 import {
   GitPullRequest,
-  Search,
   RefreshCw,
   Loader2,
   Inbox,
@@ -397,20 +394,22 @@ export default function ReviewPage() {
   // Change detail view
   if (view === 'detail' && selectedChangeNumber) {
     return (
-      <div ref={scrollContainerRef} className="h-full overflow-auto bg-background">
-        <div className="max-w-[1600px] mx-auto p-6">
-          <ChangeDetail
-            key={selectedChangeNumber}
-            changeNumber={selectedChangeNumber}
-            gerritUrl={gerritUrl}
-            onBack={() => {
-              setView(hasSearched && searchResults.length > 0 ? 'search' : 'dashboard');
-              setSelectedChangeNumber(null);
-              router.replace('/review', undefined, { shallow: true }).catch(() => {});
-            }}
-          />
+      <GlassPage showOrbs={false} className="h-full">
+        <div ref={scrollContainerRef} className="h-full overflow-auto">
+          <div className="mx-auto max-w-[1600px] p-5 md:p-6">
+            <ChangeDetail
+              key={selectedChangeNumber}
+              changeNumber={selectedChangeNumber}
+              gerritUrl={gerritUrl}
+              onBack={() => {
+                setView(hasSearched && searchResults.length > 0 ? 'search' : 'dashboard');
+                setSelectedChangeNumber(null);
+                router.replace('/review', undefined, { shallow: true }).catch(() => {});
+              }}
+            />
+          </div>
         </div>
-      </div>
+      </GlassPage>
     );
   }
 
@@ -432,81 +431,68 @@ export default function ReviewPage() {
                   </div>
                 </div>
 
-                <GlassToolbar className="flex items-center gap-3">
-                  <div className="relative w-full md:w-72 lg:w-96">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-                    <Input
-                      data-review-search
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      onKeyDown={handleSearchKeyDown}
-                      className={cn('pl-9 h-9 text-sm shadow-none focus:border-sky-300', glassInputClass)}
-                    />
-                  </div>
+                <GlassSearchInput
+                  data-review-search
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
+                  loading={searchLoading}
+                  containerClassName="w-full md:w-[520px] lg:w-[640px]"
+                  actions={
+                    <>
+                      <GlassIconButton
+                        onClick={() => {
+                          void fetchDashboard();
+                        }}
+                        disabled={loadingDashboard}
+                        title="Refresh"
+                      >
+                        <RefreshCw className={cn('h-4 w-4', loadingDashboard && 'animate-spin')} />
+                      </GlassIconButton>
 
-                  <div className="flex items-center gap-2">
-                    <GlassIconButton
-                      onClick={handleSearch}
-                      disabled={searchLoading || !searchQuery.trim()}
-                      title="Search"
-                      tone="primary"
-                    >
-                      {searchLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                    </GlassIconButton>
-
-                    <GlassIconButton
-                      onClick={() => {
-                        void fetchDashboard();
-                      }}
-                      disabled={loadingDashboard}
-                      title="Refresh"
-                    >
-                      <RefreshCw className={cn('h-4 w-4', loadingDashboard && 'animate-spin')} />
-                    </GlassIconButton>
-
-                    <GlassIconButton
-                      onClick={() => {
-                        setAiReviewedDoneMap((prev) => {
-                          if (unreadAiDoneCount <= 0) return prev;
-                          const next = { ...prev };
-                          for (const [changeNumberRaw, latestDoneAt] of Object.entries(latestDoneByChange)) {
-                            const changeNumber = Number(changeNumberRaw);
-                            if (!next[changeNumber] || latestDoneAt > next[changeNumber]) {
-                              next[changeNumber] = latestDoneAt;
+                      <GlassIconButton
+                        onClick={() => {
+                          setAiReviewedDoneMap((prev) => {
+                            if (unreadAiDoneCount <= 0) return prev;
+                            const next = { ...prev };
+                            for (const [changeNumberRaw, latestDoneAt] of Object.entries(latestDoneByChange)) {
+                              const changeNumber = Number(changeNumberRaw);
+                              if (!next[changeNumber] || latestDoneAt > next[changeNumber]) {
+                                next[changeNumber] = latestDoneAt;
+                              }
                             }
-                          }
-                          return next;
-                        });
-                        void router.push('/review-auto-ai');
-                      }}
-                      className={cn('relative', autoAiEnabled ? 'text-sky-700' : 'text-slate-600')}
-                      title="AI Assistant"
-                      tone="primary"
-                    >
-                      <Sparkles className="h-3.5 w-3.5" />
-                      {unreadAiDoneCount > 0 && (
-                        <span className="absolute -right-1 -top-1 min-w-4 h-4 px-1 rounded-full bg-sky-500 text-white text-[9px] leading-4 text-center">
-                          {unreadAiDoneCount > 99 ? '99+' : unreadAiDoneCount}
-                        </span>
-                      )}
-                    </GlassIconButton>
+                            return next;
+                          });
+                          void router.push('/review-auto-ai');
+                        }}
+                        className={cn('relative', autoAiEnabled ? 'text-sky-700' : 'text-slate-600')}
+                        title="AI Assistant"
+                        tone="primary"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        {unreadAiDoneCount > 0 && (
+                          <span className="absolute -right-1 -top-1 min-w-4 h-4 px-1 rounded-full bg-sky-500 text-white text-[9px] leading-4 text-center">
+                            {unreadAiDoneCount > 99 ? '99+' : unreadAiDoneCount}
+                          </span>
+                        )}
+                      </GlassIconButton>
 
-                    <GlassIconButton
-                      onClick={() => setArchiveDialogOpen(true)}
-                      className="relative"
-                      title="Archived Changes"
-                      tone="warning"
-                    >
-                      <Archive className="h-3.5 w-3.5" />
-                      {archivedList.length > 0 && (
-                        <span className="absolute -right-1 -top-1 min-w-4 h-4 px-1 rounded-full bg-amber-500 text-white text-[9px] leading-4 text-center">
-                          {archivedList.length > 99 ? '99+' : archivedList.length}
-                        </span>
-                      )}
-                    </GlassIconButton>
-                  </div>
-                </GlassToolbar>
+                      <GlassIconButton
+                        onClick={() => setArchiveDialogOpen(true)}
+                        className="relative"
+                        title="Archived Changes"
+                        tone="warning"
+                      >
+                        <Archive className="h-3.5 w-3.5" />
+                        {archivedList.length > 0 && (
+                          <span className="absolute -right-1 -top-1 min-w-4 h-4 px-1 rounded-full bg-amber-500 text-white text-[9px] leading-4 text-center">
+                            {archivedList.length > 99 ? '99+' : archivedList.length}
+                          </span>
+                        )}
+                      </GlassIconButton>
+                    </>
+                  }
+                />
               </div>
             </div>
           </GlassPanel>

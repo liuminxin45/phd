@@ -9,6 +9,7 @@ import {
 import type { GerritChange } from '@/lib/gerrit/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { LiquidTooltip } from '@/components/ui/liquid-tooltip';
 import {
   ArrowLeft,
   Copy,
@@ -103,7 +104,7 @@ export function ChangeHeader({
           size="icon"
           className="h-9 w-9 rounded-xl text-muted-foreground hover:text-foreground" 
           onClick={onBack}
-          title="Back to Dashboard"
+          aria-label="Back to Dashboard"
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -117,60 +118,70 @@ export function ChangeHeader({
             animate={aiReviewRunning}
           />
           
-          <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none backdrop-blur supports-[backdrop-filter]:bg-background/70" onClick={handleRefresh} title="Refresh">
-            <RefreshCw className="h-4 w-4" />
-          </Button>
+          <LiquidTooltip content="Refresh">
+            <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none backdrop-blur supports-[backdrop-filter]:bg-background/70" onClick={handleRefresh} aria-label="Refresh">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </LiquidTooltip>
 
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none backdrop-blur supports-[backdrop-filter]:bg-background/70"
-            onClick={handleCopyGerritLink}
-            title="Copy Gerrit URL"
-          >
-            <Copy className="h-3.5 w-3.5" />
-          </Button>
-          
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none backdrop-blur supports-[backdrop-filter]:bg-background/70"
-            title="Open in Gerrit"
-            onClick={handleOpenGerrit}
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-          </Button>
-
-          <Button
-            variant="default"
-            size="icon"
-            className="h-9 w-9 rounded-xl shadow-none backdrop-blur supports-[backdrop-filter]:bg-primary/88"
-            onClick={handleOpenReview}
-            title="Review"
-          >
-            <MessageSquare className="h-3.5 w-3.5" />
-          </Button>
-
-          {canShowMerge && (
+          <LiquidTooltip content="Copy Gerrit URL">
             <Button
               variant="outline"
               size="icon"
-              className={cn(
-                "h-9 w-9 rounded-xl shadow-none border",
-                mergeReady
-                  ? "border-emerald-300 bg-emerald-500 text-white hover:bg-emerald-600"
-                  : "border-red-300 bg-red-500 text-white hover:bg-red-600"
-              )}
-              onClick={onSubmitMerge}
-              disabled={submittingMerge || submittingReview || change.status !== 'NEW'}
-              title={submittingMerge ? 'Merging...' : (mergeHint || 'Merge')}
+              className="h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none backdrop-blur supports-[backdrop-filter]:bg-background/70"
+              onClick={handleCopyGerritLink}
+              aria-label="Copy Gerrit URL"
             >
-              {submittingMerge ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <GitMerge className="h-3.5 w-3.5" />
-              )}
+              <Copy className="h-3.5 w-3.5" />
             </Button>
+          </LiquidTooltip>
+          
+          <LiquidTooltip content="Open in Gerrit">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none backdrop-blur supports-[backdrop-filter]:bg-background/70"
+              onClick={handleOpenGerrit}
+              aria-label="Open in Gerrit"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </Button>
+          </LiquidTooltip>
+
+          <LiquidTooltip content="Review">
+            <Button
+              variant="default"
+              size="icon"
+              className="h-9 w-9 rounded-xl shadow-none backdrop-blur supports-[backdrop-filter]:bg-primary/88"
+              onClick={handleOpenReview}
+              aria-label="Review"
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+            </Button>
+          </LiquidTooltip>
+
+          {canShowMerge && (
+            <LiquidTooltip content={submittingMerge ? 'Merging...' : (mergeHint || 'Merge')}>
+              <Button
+                variant="outline"
+                size="icon"
+                className={cn(
+                  "h-9 w-9 rounded-xl shadow-none border",
+                  mergeReady
+                    ? "border-emerald-300 bg-emerald-500 text-white hover:bg-emerald-600"
+                    : "border-red-300 bg-red-500 text-white hover:bg-red-600"
+                )}
+                onClick={onSubmitMerge}
+                disabled={submittingMerge || submittingReview || change.status !== 'NEW'}
+                aria-label={submittingMerge ? 'Merging...' : (mergeHint || 'Merge')}
+              >
+                {submittingMerge ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <GitMerge className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            </LiquidTooltip>
           )}
         </div>
       </div>
@@ -239,19 +250,21 @@ function HeaderActionButton({
   animate?: boolean;
 }) {
   return (
-    <Button
-      variant="outline"
-      size="icon"
-      className={cn(
-        'h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none backdrop-blur supports-[backdrop-filter]:bg-background/70',
-        animate && 'animate-pulse',
-        disabled && 'cursor-not-allowed opacity-70'
-      )}
-      onClick={onClick}
-      disabled={disabled}
-      title={label}
-    >
-      <Icon className={cn('h-3.5 w-3.5', animate && 'opacity-80')} />
-    </Button>
+    <LiquidTooltip content={label}>
+      <Button
+        variant="outline"
+        size="icon"
+        className={cn(
+          'h-9 w-9 rounded-xl border-border/60 bg-background/85 shadow-none backdrop-blur supports-[backdrop-filter]:bg-background/70',
+          animate && 'animate-pulse',
+          disabled && 'cursor-not-allowed opacity-70'
+        )}
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={label}
+      >
+        <Icon className={cn('h-3.5 w-3.5', animate && 'opacity-80')} />
+      </Button>
+    </LiquidTooltip>
   );
 }

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Plus, Loader2, ChevronDown, ChevronUp, User, Briefcase, Flag, Send, X } from 'lucide-react';
+import { Plus, Loader2, ChevronDown, ChevronUp, User, Briefcase, Send, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -18,7 +18,8 @@ import { httpClient } from '@/lib/httpClient';
 import { toast } from '@/lib/toast';
 import { Project } from '@/lib/api';
 import { Person } from '@/lib/types';
-import { PRIORITIES, getPriorityDotColor } from '@/lib/constants/priority';
+import { PRIORITIES } from '@/lib/constants/priority';
+import { glassInputClass, glassPanelStrongClass, glassToolbarClass } from '@/components/ui/glass';
 
 interface QuickAddTaskProps {
   defaultOwner?: Person | null;
@@ -145,11 +146,14 @@ export function QuickAddTask({ defaultOwner, projects, defaultProjectPHID, onTas
       return (
         <div
           onClick={handleCollapsedClick}
-          className="group flex items-center gap-3 px-4 py-2 rounded-full border border-border/40 bg-muted/20 hover:bg-muted/40 hover:border-border/60 transition-all cursor-text text-muted-foreground hover:text-foreground/80 select-none"
+          className={cn(
+            glassToolbarClass,
+            "group flex cursor-text select-none items-center gap-3 rounded-full px-4 py-2 text-slate-600 transition-all hover:text-slate-900"
+          )}
         >
-          <Plus className="h-4 w-4 opacity-50" />
+          <Plus className="h-4 w-4 opacity-65" />
           <span className="text-sm font-normal">快速添加任务...</span>
-          <kbd className="ml-auto hidden sm:inline-flex items-center gap-1 rounded bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground opacity-50 font-mono">
+          <kbd className="ml-auto hidden items-center gap-1 rounded bg-white/55 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 opacity-70 font-mono sm:inline-flex">
             Click
           </kbd>
         </div>
@@ -183,7 +187,7 @@ export function QuickAddTask({ defaultOwner, projects, defaultProjectPHID, onTas
       className={cn(
         "relative group",
         minimal 
-          ? "rounded-xl border bg-background shadow-lg shadow-black/5 animate-in fade-in-0 zoom-in-95 duration-200 z-50" 
+          ? cn(glassPanelStrongClass, "rounded-2xl border-white/65 animate-in fade-in-0 zoom-in-95 duration-200 z-50")
           : "rounded-lg shadow-sm border-primary/30 animate-in fade-in-0 slide-in-from-top-1 duration-200 border"
       )}
       onKeyDown={handleKeyDown}
@@ -192,7 +196,7 @@ export function QuickAddTask({ defaultOwner, projects, defaultProjectPHID, onTas
         <Button 
           variant="ghost" 
           size="icon" 
-          className="absolute right-2 top-2 h-6 w-6 rounded-full text-muted-foreground/50 hover:text-foreground"
+          className="absolute -right-2.5 -top-2.5 z-20 h-7 w-7 rounded-full border border-white/55 bg-white/72 text-slate-600 shadow-[0_10px_24px_rgba(15,23,42,0.12)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/58 transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-200/80 hover:bg-white/88 hover:text-slate-900"
           onClick={() => setIsExpanded(false)}
         >
           <X className="h-3.5 w-3.5" />
@@ -212,8 +216,9 @@ export function QuickAddTask({ defaultOwner, projects, defaultProjectPHID, onTas
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="输入任务标题..."
-            className={cn(
-              "flex-1 h-9 text-sm font-medium border-0 shadow-none focus-visible:ring-0 px-2 bg-transparent placeholder:text-muted-foreground/60",
+          className={cn(
+              "flex-1 h-9 px-2 text-sm font-medium placeholder:text-muted-foreground/60",
+              glassInputClass,
               minimal && "h-8 text-sm"
             )}
             disabled={isSubmitting}
@@ -223,7 +228,10 @@ export function QuickAddTask({ defaultOwner, projects, defaultProjectPHID, onTas
             size="sm"
             onClick={handleSubmit}
             disabled={isSubmitting || !title.trim()}
-            className={cn("h-8 px-3 gap-1.5 rounded-full", minimal && "h-7 text-xs")}
+            className={cn(
+              "h-8 gap-1.5 rounded-full border border-sky-300/75 bg-sky-500 px-3 text-white hover:bg-sky-600",
+              minimal && "h-7 text-xs"
+            )}
           >
             {isSubmitting ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -239,7 +247,7 @@ export function QuickAddTask({ defaultOwner, projects, defaultProjectPHID, onTas
           {/* Priority */}
           <div className="flex items-center gap-1.5">
             <Select value={priority} onValueChange={setPriority} disabled={isSubmitting}>
-              <SelectTrigger className="w-auto min-w-[80px] h-7 text-xs border-dashed rounded-full px-2.5 bg-transparent hover:bg-muted/50">
+              <SelectTrigger className="h-7 w-auto min-w-[80px] rounded-full border border-white/55 bg-white/68 px-2.5 text-xs shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/52 hover:border-sky-200/80 hover:bg-white/78">
                 <SelectValue placeholder="优先级" />
               </SelectTrigger>
               <SelectContent>
@@ -259,7 +267,7 @@ export function QuickAddTask({ defaultOwner, projects, defaultProjectPHID, onTas
           {projects.length > 0 && (
             <div className="flex items-center gap-1.5">
               <Select value={selectedProject} onValueChange={setSelectedProject} disabled={isSubmitting}>
-                <SelectTrigger className="w-auto min-w-[100px] max-w-[150px] h-7 text-xs border-dashed rounded-full px-2.5 bg-transparent hover:bg-muted/50">
+                <SelectTrigger className="h-7 w-auto min-w-[100px] max-w-[150px] rounded-full border border-white/55 bg-white/68 px-2.5 text-xs shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/52 hover:border-sky-200/80 hover:bg-white/78">
                    <div className="flex items-center gap-1.5 truncate">
                       <Briefcase className="h-3 w-3 text-muted-foreground" />
                       <span className="truncate">{selectedProject && selectedProject !== 'none' ? projects.find(p => p.phid === selectedProject)?.fields.name : '选择项目'}</span>
@@ -307,7 +315,7 @@ export function QuickAddTask({ defaultOwner, projects, defaultProjectPHID, onTas
                 placeholder="负责人"
                 className="w-auto"
                 maxSelections={1}
-                triggerClassName="rounded-full px-2.5 h-7 text-xs border-dashed bg-transparent hover:bg-muted/50"
+                triggerClassName="h-7 rounded-full border border-white/55 bg-white/68 px-2.5 text-xs shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/52 hover:border-sky-200/80 hover:bg-white/78"
               />
             )}
           </div>
@@ -316,7 +324,10 @@ export function QuickAddTask({ defaultOwner, projects, defaultProjectPHID, onTas
           <Button
             variant="ghost"
             size="sm"
-            className={cn("h-7 text-xs gap-1 text-muted-foreground hover:text-foreground rounded-full px-2", showDescription && "bg-muted/50 text-foreground")}
+            className={cn(
+              "h-7 rounded-full border border-white/55 bg-white/68 px-2 text-xs text-slate-700 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/52 hover:border-sky-200/80 hover:bg-white/78",
+              showDescription && "border-sky-200/90 bg-sky-50/82 text-sky-700"
+            )}
             onClick={() => setShowDescription(!showDescription)}
             type="button"
           >
@@ -338,7 +349,7 @@ export function QuickAddTask({ defaultOwner, projects, defaultProjectPHID, onTas
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="添加任务描述（支持 Remarkup 语法）..."
-              className="min-h-[80px] text-xs resize-none border-dashed bg-muted/10 focus:bg-background transition-colors"
+              className={cn("min-h-[80px] resize-none text-xs transition-colors", glassInputClass)}
               disabled={isSubmitting}
             />
           </div>

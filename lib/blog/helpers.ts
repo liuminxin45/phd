@@ -11,13 +11,13 @@ export const TAGS = [
 ];
 
 export const SORT_OPTIONS = [
-  { label: '最新', value: 'newest' },
-  { label: '最早', value: 'oldest' },
-  { label: '最多赞', value: 'tokenCount' },
-  { label: '推荐', value: 'recommended' },
+  { label: 'Newest', value: 'newest' },
+  { label: 'Oldest', value: 'oldest' },
+  { label: 'Most Liked', value: 'tokenCount' },
+  { label: 'Recommended', value: 'recommended' },
 ];
 
-const WEEKDAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 /** Known image file extensions for client-side MIME inference */
 export const IMAGE_EXTENSIONS = new Set([
@@ -46,7 +46,7 @@ export function getISOWeek(epoch: number): number {
 }
 
 /**
- * Returns a default weekly report title like "【工作周报】20260202-20260206"
+ * Returns a default weekly report title like "[Weekly Report] 20260202-20260206"
  * covering the most recent completed Mon–Fri work week.
  */
 export function getLastWeekRange(): string {
@@ -65,7 +65,7 @@ export function getLastWeekRange(): string {
     const dd = String(d.getDate()).padStart(2, '0');
     return `${y}${m}${dd}`;
   };
-  return `【工作周报】${fmt(lastMon)}-${fmt(lastFri)}`;
+  return `[Weekly Report] ${fmt(lastMon)}-${fmt(lastFri)}`;
 }
 
 // ─── Data transforms ─────────────────────────────────────────────────────────

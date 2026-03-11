@@ -1,13 +1,14 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Save, Loader2, AlertCircle, Link2 } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Loader2, AlertCircle, Link2, Link2Off } from 'lucide-react';
 import { httpDelete, httpGet, httpPost } from '@/lib/httpClient';
 import { type EnvEntry, SESSION_KEYS, SECRET_KEYS } from '@/lib/settings/types';
 import { SecretInput } from './SecretInput';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from '@/lib/toast';
+import { cn } from '@/lib/utils';
+import { GlassIconButton, glassInputClass, glassSectionClass } from '@/components/ui/glass';
 
 /** Keys removed from the env schema — hide from UI entirely. */
 const DEPRECATED_KEYS = new Set([
@@ -21,6 +22,7 @@ const HIDDEN_KEYS = new Set([
   'GERRIT_URL',
   'PHA_SESSION',
   'DINNER_SESSION',
+  'CONTACTS_SESSION',
   'GERRIT_SESSION',
   'PHA_USER',
   'BLOG_PHID_MAP',
@@ -63,6 +65,8 @@ export function EnvTab() {
   const [unbindingBlog, setUnbindingBlog] = useState(false);
   const [blogBound, setBlogBound] = useState(false);
   const [boundBlogLabel, setBoundBlogLabel] = useState('');
+  const dirtyRef = useRef(false);
+  const autosaveTimeoutRef = useRef<number | null>(null);
 
   const loadBlogBindingStatus = useCallback(async () => {
     try {
@@ -82,10 +86,11 @@ export function EnvTab() {
     try {
       const data = await httpGet<{ entries: EnvEntry[]; envLocalCreated?: boolean; needsSetup?: boolean; warnings?: string[] }>('/api/settings/env');
       setEntries(normalizeEnvEntries(data.entries || []));
+      dirtyRef.current = false;
       if (data.envLocalCreated) {
-        toast.info('检测到缺失 .env.local，已自动创建模板。请先填写必填项并点击保存。');
+        toast.info('检测到缺失 .env.local，已自动创建模板。请先填写必填项，失焦后会自动保存。');
       } else if (data.needsSetup) {
-        toast.info('当前环境变量尚未配置完整，请补全必填项后保存。');
+        toast.info('当前环境变量尚未配置完整，请补全必填项，失焦后会自动保存。');
       }
       const loadWarning = data.warnings?.[0];
       if (loadWarning) {
@@ -93,7 +98,7 @@ export function EnvTab() {
       }
       await loadBlogBindingStatus();
     } catch {
-      toast.error('加载环境变量失败');
+      toast.error('Failed to load environment variables');
     } finally {
       setLoading(false);
     }
@@ -104,10 +109,12 @@ export function EnvTab() {
   }, [loadEntries]);
 
   const updateEntry = (index: number, value: string) => {
+    dirtyRef.current = true;
     setEntries((prev) => prev.map((e, i) => (i === index ? { ...e, value } : e)));
   };
 
-  const save = useCallback(async () => {
+  const save = useCallback(async (options?: { silentSuccess?: boolean; force?: boolean }) => {
+    if (!options?.force && !dirtyRef.current) return;
     setSaving(true);
     try {
       const normalizedEntries = normalizeEnvEntries(entries);
@@ -120,13 +127,33 @@ export function EnvTab() {
       if (saveWarning) {
         toast.info(`部分自动刷新未完成：${saveWarning}`);
       }
-      toast.success('环境变量已保存');
+      dirtyRef.current = false;
+      if (!options?.silentSuccess) {
+        toast.success('Environment variables saved');
+      }
     } catch (err: any) {
-      toast.error(err.message || '保存失败');
+      toast.error(err.message || 'Save failed');
     } finally {
       setSaving(false);
     }
   }, [entries]);
+
+  const scheduleAutoSave = useCallback(() => {
+    if (autosaveTimeoutRef.current !== null) {
+      window.clearTimeout(autosaveTimeoutRef.current);
+    }
+    autosaveTimeoutRef.current = window.setTimeout(() => {
+      void save({ silentSuccess: true });
+    }, 120);
+  }, [save]);
+
+  useEffect(() => {
+    return () => {
+      if (autosaveTimeoutRef.current !== null) {
+        window.clearTimeout(autosaveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const autoBindCurrentUserBlog = useCallback(async () => {
     setBindingBlog(true);
@@ -135,9 +162,9 @@ export function EnvTab() {
       await loadEntries();
       const blogName = result?.data?.resolvedBlog?.name || '目标博客';
       const blogId = result?.data?.resolvedBlog?.id;
-      toast.success(`${result?.message || '自动绑定成功'} ${blogId ? `(${blogName} #${blogId})` : `(${blogName})`}`);
+      toast.success(`${result?.message || 'Auto-binding succeeded'} ${blogId ? `(${blogName} #${blogId})` : `(${blogName})`}`);
     } catch (err: any) {
-      toast.error(err.message || '自动绑定失败');
+      toast.error(err.message || 'Auto-binding failed');
     } finally {
       setBindingBlog(false);
     }
@@ -148,9 +175,9 @@ export function EnvTab() {
     try {
       const result = await httpDelete<{ message?: string }>('/api/settings/auto-bind-blog');
       await loadEntries();
-      toast.success(result?.message || '已解除博客绑定');
+      toast.success(result?.message || 'Blog unbound');
     } catch (err: any) {
-      toast.error(err.message || '解除绑定失败');
+      toast.error(err.message || 'Failed to unbind blog');
     } finally {
       setUnbindingBlog(false);
     }
@@ -167,7 +194,7 @@ export function EnvTab() {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        <span className="ml-2 text-sm text-muted-foreground">加载环境变量...</span>
+        <span className="ml-2 text-sm text-muted-foreground">Loading environment variables...</span>
       </div>
     );
   }
@@ -189,6 +216,7 @@ export function EnvTab() {
             <SecretInput
               value={entry.value}
               onChange={isSession ? undefined : (v) => updateEntry(entry._idx, v)}
+              onBlur={isSession ? undefined : scheduleAutoSave}
               disabled={isSession}
               placeholder={isSession ? '自动更新' : `输入 ${entry.key}`}
             />
@@ -197,10 +225,11 @@ export function EnvTab() {
               type="text"
               value={entry.value}
               onChange={(e) => updateEntry(entry._idx, e.target.value)}
+              onBlur={isSession ? undefined : scheduleAutoSave}
               disabled={isSession}
               readOnly={isSession}
               placeholder={isSession ? '自动更新' : `输入 ${entry.key}`}
-              className={isSession ? "bg-muted text-muted-foreground cursor-not-allowed" : ""}
+              className={cn(glassInputClass, isSession && "bg-muted text-muted-foreground cursor-not-allowed")}
             />
           )}
         </div>
@@ -210,45 +239,50 @@ export function EnvTab() {
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className={cn(glassSectionClass, 'rounded-2xl border-white/60')}>
         <CardContent className="p-5">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-sm font-semibold text-foreground">.env.local</h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                本地环境变量（不提交 Git）
-                {blogBound && boundBlogLabel ? ` · 已绑定：${boundBlogLabel}` : ' · 未绑定博客'}
+                Local environment variables (not committed to Git)
+                {blogBound && boundBlogLabel ? ` · Bound: ${boundBlogLabel}` : ' · No blog binding'}
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button onClick={autoBindCurrentUserBlog} disabled={bindingBlog || saving || unbindingBlog || blogBound} variant="outline" className="gap-1.5">
+              <GlassIconButton
+                onClick={autoBindCurrentUserBlog}
+                disabled={bindingBlog || saving || unbindingBlog || blogBound}
+                title={blogBound ? '已Bind blog' : 'Bind blog'}
+                aria-label="Bind blog"
+              >
                 {bindingBlog ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
-                绑定博客
-              </Button>
-              <Button onClick={unbindCurrentUserBlog} disabled={unbindingBlog || saving || bindingBlog || !blogBound} variant="outline" className="gap-1.5">
-                {unbindingBlog ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
-                解除绑定
-              </Button>
-              <Button onClick={save} disabled={saving || bindingBlog || unbindingBlog} className="gap-1.5">
-                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                保存
-              </Button>
+              </GlassIconButton>
+              <GlassIconButton
+                onClick={unbindCurrentUserBlog}
+                disabled={unbindingBlog || saving || bindingBlog || !blogBound}
+                title={!blogBound ? 'No blog binding' : 'Unbind'}
+                aria-label="Unbind"
+                tone="warning"
+              >
+                {unbindingBlog ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2Off className="h-3.5 w-3.5" />}
+              </GlassIconButton>
             </div>
           </div>
           <div className="space-y-3">
             {visibleEntries.map((entry) => renderEntryRow(entry))}
             {visibleEntries.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">.env.local 文件为空</p>
+              <p className="text-sm text-muted-foreground text-center py-4">.env.local is empty</p>
             )}
           </div>
         </CardContent>
       </Card>
 
-      <Alert variant="default" className="bg-amber-50 border-amber-200 text-amber-900">
+      <Alert variant="default" className="rounded-2xl border-amber-200/70 bg-amber-50/72 text-amber-900 backdrop-blur-lg supports-[backdrop-filter]:bg-amber-50/58">
         <AlertCircle className="h-4 w-4 text-amber-900" />
-        <AlertTitle className="text-amber-900">注意</AlertTitle>
+        <AlertTitle className="text-amber-900">Notice</AlertTitle>
         <AlertDescription className="text-amber-700">
-          部分环境变量已隐藏并由系统自动维护（如会话信息、固定地址与 PHA_USER）。修改环境变量后，可能需要重启开发服务器才能生效。
+          Some variables are hidden and maintained automatically (session info, fixed endpoints, and PHA_USER). You may need to restart the dev server after changes.
         </AlertDescription>
       </Alert>
     </div>

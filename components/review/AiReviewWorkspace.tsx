@@ -34,6 +34,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
+import { LiquidTooltip } from '@/components/ui/liquid-tooltip';
 import {
   AlertTriangle,
   ChevronDown,
@@ -667,9 +668,11 @@ function IssueItem({
 
           {issue.file && (
             <div className="mt-1 flex items-center gap-1.5">
-              <span className="max-w-[240px] truncate font-mono text-[11px] text-muted-foreground" title={issue.file}>
-                {issue.file}
-              </span>
+              <LiquidTooltip content={issue.file}>
+                <span className="max-w-[240px] truncate font-mono text-[11px] text-muted-foreground">
+                  {issue.file}
+                </span>
+              </LiquidTooltip>
               {issue.line && onJumpToLine && (
                 <button
                   onClick={() => onJumpToLine(issue.file as string, issue.line as number)}
@@ -755,15 +758,17 @@ function FeedbackButton({
   title: string;
 }) {
   return (
-    <button
-      onClick={onClick}
-      title={title}
-      className={cn(
-        'rounded-lg p-1.5 transition-colors',
-        active ? activeColor : 'text-muted-foreground/60 hover:bg-muted hover:text-muted-foreground'
-      )}
-    >
-      {icon}
-    </button>
+    <LiquidTooltip content={title}>
+      <button
+        onClick={onClick}
+        aria-label={title}
+        className={cn(
+          'rounded-lg p-1.5 transition-colors',
+          active ? activeColor : 'text-muted-foreground/60 hover:bg-muted hover:text-muted-foreground'
+        )}
+      >
+        {icon}
+      </button>
+    </LiquidTooltip>
   );
 }

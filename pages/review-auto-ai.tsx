@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { LiquidTooltip } from '@/components/ui/liquid-tooltip';
 import {
   Activity,
   AlertTriangle,
@@ -169,15 +170,17 @@ function JobCard({
             </Badge>
           )}
           {removable && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-red-600"
-              onClick={() => onRemove(job.key)}
-              title="Remove pending task"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <LiquidTooltip content="Remove pending task">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-red-600"
+                onClick={() => onRemove(job.key)}
+                aria-label="Remove pending task"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </LiquidTooltip>
           )}
         </div>
       </div>
@@ -449,16 +452,18 @@ export default function ReviewAutoAiPage() {
                             <span>{Math.max(0, (change.insertions || 0) + (change.deletions || 0))} lines</span>
                           </div>
                         </div>
-                        <Button
-                          variant={queued ? 'outline' : 'default'}
-                          disabled={queued}
-                          onClick={() => handleQueueOne(change)}
-                          size="icon"
-                          className="h-9 w-9 rounded-full shrink-0"
-                          title={queued ? 'Queued' : currentJob ? 'Queue again' : 'Add to queue'}
-                        >
-                          {queued ? <CheckCircle2 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                        </Button>
+                        <LiquidTooltip content={queued ? 'Queued' : currentJob ? 'Queue again' : 'Add to queue'}>
+                          <Button
+                            variant={queued ? 'outline' : 'default'}
+                            disabled={queued}
+                            onClick={() => handleQueueOne(change)}
+                            size="icon"
+                            className="h-9 w-9 rounded-full shrink-0"
+                            aria-label={queued ? 'Queued' : currentJob ? 'Queue again' : 'Add to queue'}
+                          >
+                            {queued ? <CheckCircle2 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                          </Button>
+                        </LiquidTooltip>
                       </div>
                     </div>
                   );

@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { GlassIconButton } from '@/components/ui/glass';
 import { cn } from '@/lib/utils';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -60,8 +61,10 @@ function StepStatusIcon({ status }: { status: StepStatus }) {
 
 export function AiReportWriter({
   onFill,
+  iconOnly = false,
 }: {
   onFill: (title: string, content: string) => void;
+  iconOnly?: boolean;
 }) {
   const { user } = useUser();
   const [open, setOpen] = useState(false);
@@ -155,16 +158,27 @@ export function AiReportWriter({
   return (
     <>
       {/* Trigger Button */}
-      <Button
-        variant="outline"
-        size="sm"
-        className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-        onClick={handleOpen}
-        title="AI 自动生成周报"
-      >
-        <Sparkles className="h-3.5 w-3.5" />
-        AI 周报
-      </Button>
+      {iconOnly ? (
+        <GlassIconButton
+          onClick={handleOpen}
+          tone="primary"
+          tooltip="AI Weekly Report"
+          aria-label="AI Weekly Report"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+        </GlassIconButton>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+          onClick={handleOpen}
+          title="AI 自动生成周报"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          AI 周报
+        </Button>
+      )}
 
       {/* Dialog */}
       <Dialog open={open} onOpenChange={(v) => { if (!running) setOpen(v); }}>

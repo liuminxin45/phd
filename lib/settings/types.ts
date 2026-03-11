@@ -52,12 +52,13 @@ export interface EnvEntry {
   comment?: string;
 }
 
-export const SESSION_KEYS = new Set(['PHA_SESSION', 'PHA_USER', 'DINNER_SESSION']);
+export const SESSION_KEYS = new Set(['PHA_SESSION', 'PHA_USER', 'DINNER_SESSION', 'CONTACTS_SESSION']);
 export const SECRET_KEYS = new Set([
   'PHA_TOKEN',
   'LOGIN_PASS',
   'PHA_SESSION',
   'DINNER_SESSION',
+  'CONTACTS_SESSION',
 ]);
 
 export type TabId = 'llm' | 'env' | 'roadmap';

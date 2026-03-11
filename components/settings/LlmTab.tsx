@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Save, Loader2, RefreshCw, Plus, Trash2 } from 'lucide-react';
+import { Loader2, RefreshCw, Plus, Trash2 } from 'lucide-react';
 import { httpGet, httpPost } from '@/lib/httpClient';
 import {
   type LlmConfig,
@@ -17,10 +17,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
+import { GlassIconButton, glassInputClass, glassSectionClass } from '@/components/ui/glass';
+const glassSelectContentClass = 'rounded-xl border border-white/60 bg-white/88 shadow-[0_14px_34px_rgba(15,23,42,0.16)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/72';
 
 function normalizeProfilesConfig(payload: unknown): LlmProfilesConfig {
   if (!payload || typeof payload !== 'object') {
@@ -35,7 +36,7 @@ function normalizeProfilesConfig(payload: unknown): LlmProfilesConfig {
     // Backward compatibility: old payload was a plain LlmConfig.
     return {
       activeProfileId: 'default',
-      profiles: [{ id: 'default', name: '默认配置', config: { ...DEFAULT_LLM_CONFIG, ...(raw as Partial<LlmConfig>) } }],
+      profiles: [{ id: 'default', name: 'Default Profile', config: { ...DEFAULT_LLM_CONFIG, ...(raw as Partial<LlmConfig>) } }],
     };
   }
 
@@ -44,7 +45,7 @@ function normalizeProfilesConfig(payload: unknown): LlmProfilesConfig {
       if (!p || typeof p !== 'object') return null;
       const item = p as Record<string, unknown>;
       const id = typeof item.id === 'string' && item.id.trim() ? item.id : `profile-${idx + 1}`;
-      const name = typeof item.name === 'string' && item.name.trim() ? item.name : `配置 ${idx + 1}`;
+      const name = typeof item.name === 'string' && item.name.trim() ? item.name : `Profile ${idx + 1}`;
       const cfg = (item.config && typeof item.config === 'object') ? (item.config as Record<string, unknown>) : {};
       return {
         id,
@@ -54,7 +55,7 @@ function normalizeProfilesConfig(payload: unknown): LlmProfilesConfig {
     })
     .filter((p): p is LlmProfile => !!p);
 
-  const safeProfiles = profiles.length > 0 ? profiles : [{ id: 'default', name: '默认配置', config: { ...DEFAULT_LLM_CONFIG } }];
+  const safeProfiles = profiles.length > 0 ? profiles : [{ id: 'default', name: 'Default Profile', config: { ...DEFAULT_LLM_CONFIG } }];
   const activeProfileIdRaw = raw.activeProfileId;
   const activeProfileId = typeof activeProfileIdRaw === 'string' && safeProfiles.some((p) => p.id === activeProfileIdRaw)
     ? activeProfileIdRaw
@@ -73,9 +74,10 @@ export function LlmTab() {
   const [showModelOptions, setShowModelOptions] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [loadingModels, setLoadingModels] = useState(false);
-  const [saving, setSaving] = useState(false);
   const modelBlurTimeoutRef = useRef<number | null>(null);
+  const autosaveTimeoutRef = useRef<number | null>(null);
   const lastValidModelRef = useRef<string>('');
+  const dirtyRef = useRef(false);
 
   const activeProfile = profilesConfig.profiles.find((p) => p.id === profilesConfig.activeProfileId) || profilesConfig.profiles[0];
   const config = activeProfile?.config || DEFAULT_LLM_CONFIG;
@@ -102,12 +104,45 @@ export function LlmTab() {
       if (modelBlurTimeoutRef.current !== null) {
         window.clearTimeout(modelBlurTimeoutRef.current);
       }
+      if (autosaveTimeoutRef.current !== null) {
+        window.clearTimeout(autosaveTimeoutRef.current);
+      }
     };
   }, []);
 
+  const markDirty = () => {
+    dirtyRef.current = true;
+  };
+
+  const saveConfig = useCallback(async (options?: { silentSuccess?: boolean; force?: boolean }) => {
+    if (!options?.force && !dirtyRef.current) return;
+    try {
+      if (models.length > 0 && !models.includes(config.model)) {
+        toast.error('Model must be selected from fetched list');
+        return;
+      }
+      await httpPost('/api/settings/llm', profilesConfig);
+      dirtyRef.current = false;
+      if (!options?.silentSuccess) {
+        toast.success('配置已保存');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Save failed');
+    }
+  }, [config.model, models, profilesConfig]);
+
+  const scheduleAutoSave = useCallback(() => {
+    if (autosaveTimeoutRef.current !== null) {
+      window.clearTimeout(autosaveTimeoutRef.current);
+    }
+    autosaveTimeoutRef.current = window.setTimeout(() => {
+      void saveConfig({ silentSuccess: true });
+    }, 120);
+  }, [saveConfig]);
+
   const fetchModels = useCallback(async () => {
     if (!config.baseUrl || !config.apiKey) {
-      toast.error('请先填写 Base URL 和 API Key');
+      toast.error('Please fill Base URL and API Key first');
       return;
     }
     setLoadingModels(true);
@@ -122,35 +157,19 @@ export function LlmTab() {
         lastValidModelRef.current = config.model;
       }
       if (res.models.length === 0) {
-        toast.info('未获取到任何模型');
+        toast.info('No models returned');
       } else {
-        toast.success(`成功获取 ${res.models.length} 个模型`);
+        toast.success(`Fetched ${res.models.length} models successfully`);
       }
     } catch (err: any) {
-      toast.error(err.message || '获取模型列表失败');
+      toast.error(err.message || 'Fetch model list失败');
     } finally {
       setLoadingModels(false);
     }
   }, [config.baseUrl, config.apiKey]);
 
-  const saveConfig = useCallback(async () => {
-    setSaving(true);
-    try {
-      if (models.length > 0 && !models.includes(config.model)) {
-        toast.error('Model 必须从已获取列表中选择');
-        setSaving(false);
-        return;
-      }
-      await httpPost('/api/settings/llm', profilesConfig);
-      toast.success('配置已保存');
-    } catch (err: any) {
-      toast.error(err.message || '保存失败');
-    } finally {
-      setSaving(false);
-    }
-  }, [config.model, models, profilesConfig]);
-
   const updateField = <K extends keyof LlmConfig>(key: K, value: LlmConfig[K]) => {
+    markDirty();
     setProfilesConfig((prev) => {
       const idx = prev.profiles.findIndex((p) => p.id === prev.activeProfileId);
       if (idx === -1) return prev;
@@ -168,18 +187,19 @@ export function LlmTab() {
 
   const createProfile = () => {
     const id = `profile-${Date.now()}`;
-    const name = `配置 ${profilesConfig.profiles.length + 1}`;
+    const name = `Profile ${profilesConfig.profiles.length + 1}`;
     setProfilesConfig((prev) => ({
       activeProfileId: id,
       profiles: [...prev.profiles, { id, name, config: { ...config } }],
     }));
+    markDirty();
     setModels([]);
-    toast.info('已创建新配置，请按需修改后保存');
+    toast.info('New profile created');
   };
 
   const deleteActiveProfile = () => {
     if (profilesConfig.profiles.length <= 1) {
-      toast.info('至少需要保留一套配置');
+      toast.info('At least one profile must be kept');
       return;
     }
     setProfilesConfig((prev) => {
@@ -192,17 +212,20 @@ export function LlmTab() {
         profiles: nextProfiles,
       };
     });
+    markDirty();
     setModels([]);
-    toast.info('已删除当前配置，请记得保存');
+    toast.info('Current profile deleted');
   };
 
   const switchProfile = (profileId: string) => {
+    markDirty();
     setProfilesConfig((prev) => ({ ...prev, activeProfileId: profileId }));
     setModels([]);
     setShowModelOptions(false);
   };
 
   const renameActiveProfile = (name: string) => {
+    markDirty();
     setProfilesConfig((prev) => {
       const idx = prev.profiles.findIndex((p) => p.id === prev.activeProfileId);
       if (idx === -1) return prev;
@@ -245,6 +268,7 @@ export function LlmTab() {
         setModelQuery(config.model);
       }
       setShowModelOptions(false);
+      scheduleAutoSave();
     }, 120);
   };
 
@@ -252,59 +276,60 @@ export function LlmTab() {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        <span className="ml-2 text-sm text-muted-foreground">加载配置...</span>
+        <span className="ml-2 text-sm text-muted-foreground">Loading configuration...</span>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <section className="bg-card border border-border rounded-lg p-5">
-        <h3 className="text-sm font-semibold text-foreground mb-4">配置方案</h3>
+      <section className={cn(glassSectionClass, 'rounded-2xl p-5')}>
+        <h3 className="text-sm font-semibold text-foreground mb-4">Profiles</h3>
         <div className="space-y-4">
           <div className="flex flex-col md:flex-row gap-2 md:items-center">
             <div className="md:w-64">
               <Select value={profilesConfig.activeProfileId} onValueChange={switchProfile}>
-                <SelectTrigger>
-                  <SelectValue placeholder="选择配置" />
+                <SelectTrigger className={cn(glassInputClass, 'rounded-xl')} onBlur={scheduleAutoSave}>
+                  <SelectValue placeholder="Select profile" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className={glassSelectContentClass}>
                   {profilesConfig.profiles.map((p) => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <Button type="button" variant="outline" onClick={createProfile} className="gap-1.5">
+            <GlassIconButton type="button" onClick={createProfile} title="Create profile" aria-label="Create profile">
               <Plus className="h-4 w-4" />
-              新建配置
-            </Button>
-            <Button
+            </GlassIconButton>
+            <GlassIconButton
               type="button"
-              variant="outline"
               onClick={deleteActiveProfile}
               disabled={profilesConfig.profiles.length <= 1}
-              className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50"
+              title="Delete当前配置"
+              aria-label="Delete当前配置"
+              tone="warning"
             >
               <Trash2 className="h-4 w-4" />
-              删除当前
-            </Button>
+            </GlassIconButton>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">当前配置名称</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Current profile name</label>
             <Input
               type="text"
               value={activeProfile?.name || ''}
               onChange={(e) => renameActiveProfile(e.target.value)}
-              placeholder="例如：OpenAI 生产 / DeepSeek 备用"
+              onBlur={scheduleAutoSave}
+              placeholder="e.g. OpenAI Prod / DeepSeek Backup"
+              className={glassInputClass}
             />
           </div>
         </div>
       </section>
 
-      <section className="bg-card border border-border rounded-lg p-5">
-        <h3 className="text-sm font-semibold text-foreground mb-4">连接配置</h3>
+      <section className={cn(glassSectionClass, 'rounded-2xl p-5')}>
+        <h3 className="text-sm font-semibold text-foreground mb-4">Connection</h3>
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Base URL</label>
@@ -312,7 +337,9 @@ export function LlmTab() {
               type="text"
               value={config.baseUrl}
               onChange={(e) => updateField('baseUrl', e.target.value)}
+              onBlur={scheduleAutoSave}
               placeholder="https://api.openai.com/v1"
+              className={glassInputClass}
             />
             <p className="mt-1 text-xs text-muted-foreground">OpenAI 兼容的 API 地址，如 https://api.openai.com/v1</p>
           </div>
@@ -322,6 +349,7 @@ export function LlmTab() {
             <SecretInput
               value={config.apiKey}
               onChange={(v) => updateField('apiKey', v)}
+              onBlur={scheduleAutoSave}
               placeholder="sk-..."
             />
           </div>
@@ -337,9 +365,10 @@ export function LlmTab() {
                   onFocus={() => models.length > 0 && setShowModelOptions(true)}
                   onBlur={handleModelBlur}
                   placeholder={models.length > 0 ? '输入模型名筛选并选择...' : 'gpt-4o / deepseek-chat / ...'}
+                  className={glassInputClass}
                 />
                 {showModelOptions && models.length > 0 && (
-                  <div className="absolute z-20 mt-1 w-full rounded-md border border-border bg-popover shadow-md max-h-56 overflow-y-auto">
+                  <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-white/60 bg-white/88 shadow-[0_14px_34px_rgba(15,23,42,0.16)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/72">
                     {filteredModels.length > 0 ? (
                       filteredModels.map((m) => (
                         <button
@@ -358,39 +387,37 @@ export function LlmTab() {
                         </button>
                       ))
                     ) : (
-                      <div className="px-3 py-2 text-sm text-muted-foreground">没有匹配模型</div>
+                      <div className="px-3 py-2 text-sm text-muted-foreground">No matching models</div>
                     )}
                   </div>
                 )}
               </div>
-              <Button
-                variant="outline"
+              <GlassIconButton
                 onClick={fetchModels}
                 disabled={loadingModels}
-                className="shrink-0"
-                title="从 API 获取模型列表"
+                title="Fetch model list from API"
+                aria-label="Fetch model list"
               >
                 {loadingModels ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <RefreshCw className="mr-2 h-4 w-4" />
+                  <RefreshCw className="h-4 w-4" />
                 )}
-                获取模型
-              </Button>
+              </GlassIconButton>
             </div>
             {models.length > 0 && (
               <p className="mt-1 text-xs text-muted-foreground">
-                仅允许使用列表中的模型。可手动输入筛选；若失焦时未选中有效模型，将自动回退到上次可用模型。
+                Only models in the list are allowed. You can type to filter; invalid entries on blur will be rolled back.
               </p>
             )}
           </div>
         </div>
       </section>
 
-      <section className="bg-card border border-border rounded-lg p-5">
-        <h3 className="text-sm font-semibold text-foreground mb-4">模型参数</h3>
+      <section className={cn(glassSectionClass, 'rounded-2xl p-5')}>
+        <h3 className="text-sm font-semibold text-foreground mb-4">Model Parameters</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <RangeField label="Temperature" value={config.temperature} min={0} max={2} step={0.1} labels={['精确 (0)', '创意 (2)']} onChange={(v) => updateField('temperature', v)} />
+          <RangeField label="Temperature" value={config.temperature} min={0} max={2} step={0.1} labels={['Precise (0)', 'Creative (2)']} onChange={(v) => updateField('temperature', v)} onBlur={scheduleAutoSave} />
 
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Max Tokens</label>
@@ -400,17 +427,22 @@ export function LlmTab() {
               max="128000"
               value={config.maxTokens}
               onChange={(e) => updateField('maxTokens', parseInt(e.target.value) || 4096)}
+              onBlur={scheduleAutoSave}
+              className={glassInputClass}
             />
           </div>
 
-          <RangeField label="Top P" value={config.topP} min={0} max={1} step={0.05} labels={['0', '1']} onChange={(v) => updateField('topP', v)} />
-          <RangeField label="Frequency Penalty" value={config.frequencyPenalty} min={0} max={2} step={0.1} labels={['0', '2']} onChange={(v) => updateField('frequencyPenalty', v)} />
-          <RangeField label="Presence Penalty" value={config.presencePenalty} min={0} max={2} step={0.1} labels={['0', '2']} onChange={(v) => updateField('presencePenalty', v)} />
+          <RangeField label="Top P" value={config.topP} min={0} max={1} step={0.05} labels={['0', '1']} onChange={(v) => updateField('topP', v)} onBlur={scheduleAutoSave} />
+          <RangeField label="Frequency Penalty" value={config.frequencyPenalty} min={0} max={2} step={0.1} labels={['0', '2']} onChange={(v) => updateField('frequencyPenalty', v)} onBlur={scheduleAutoSave} />
+          <RangeField label="Presence Penalty" value={config.presencePenalty} min={0} max={2} step={0.1} labels={['0', '2']} onChange={(v) => updateField('presencePenalty', v)} onBlur={scheduleAutoSave} />
 
           <div className="flex items-center gap-3">
             <label className="text-sm font-medium text-foreground">Stream</label>
             <button
-              onClick={() => updateField('stream', !config.stream)}
+              onClick={() => {
+                updateField('stream', !config.stream);
+                scheduleAutoSave();
+              }}
               className={cn(
                 "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
                 config.stream ? 'bg-primary' : 'bg-muted'
@@ -421,39 +453,29 @@ export function LlmTab() {
                 config.stream ? 'translate-x-[20px]' : 'translate-x-[2px]'
               )} />
             </button>
-            <span className="text-xs text-muted-foreground">{config.stream ? '开启' : '关闭'}</span>
+            <span className="text-xs text-muted-foreground">{config.stream ? 'On' : 'Off'}</span>
           </div>
 
         </div>
       </section>
 
-      <section className="bg-card border border-border rounded-lg p-5">
+      <section className={cn(glassSectionClass, 'rounded-2xl p-5')}>
         <h3 className="text-sm font-semibold text-foreground mb-4">System Prompt</h3>
         <Textarea
           value={config.systemPrompt}
           onChange={(e) => updateField('systemPrompt', e.target.value)}
-          placeholder="你是一个有帮助的AI助手..."
+          onBlur={scheduleAutoSave}
+          placeholder="You are a helpful AI assistant..."
           rows={4}
-          className="resize-y font-mono"
+          className={cn('resize-y font-mono', glassInputClass)}
         />
       </section>
-
-      <div className="flex items-center justify-end">
-        <Button
-          onClick={saveConfig}
-          disabled={saving}
-          className="ml-auto"
-        >
-          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-          {saving ? '保存中...' : '保存配置'}
-        </Button>
-      </div>
     </div>
   );
 }
 
 /** Reusable range slider field to eliminate repetition across parameter controls. */
-function RangeField({ label, value, min, max, step, labels, onChange }: {
+function RangeField({ label, value, min, max, step, labels, onChange, onBlur }: {
   label: string;
   value: number;
   min: number;
@@ -461,6 +483,7 @@ function RangeField({ label, value, min, max, step, labels, onChange }: {
   step: number;
   labels: [string, string];
   onChange: (v: number) => void;
+  onBlur?: () => void;
 }) {
   return (
     <div>
@@ -474,6 +497,7 @@ function RangeField({ label, value, min, max, step, labels, onChange }: {
         step={step}
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
+        onBlur={onBlur}
         className="w-full accent-primary"
       />
       <div className="flex justify-between text-xs text-muted-foreground mt-0.5">

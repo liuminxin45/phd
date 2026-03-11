@@ -24,7 +24,7 @@ import { AiReviewWorkspace } from './AiReviewWorkspace';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
+import { GlassSearchInput } from '@/components/ui/glass-search-input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -59,6 +59,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { glassSectionClass } from '@/components/ui/glass';
+import { LiquidTooltip } from '@/components/ui/liquid-tooltip';
 import {
   buildCommitMessageDiff,
   COMMIT_MESSAGE_FILE_PATH,
@@ -408,6 +410,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const pendingDetailRef = useRef<ChangeDetailResponse | null>(null);
   const detailSignatureRef = useRef<string | null>(null);
+  const pendingJumpKeyRef = useRef<string | null>(null);
   const pendingDraftPersistTimerRef = useRef<number | null>(null);
 
   // Inline comments state (accumulated per file before submission)
@@ -639,7 +642,6 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     if (!change?.revisions) return;
     if (
       !baseRevisionId ||
-      baseRevisionId !== PARENT_PATCHSET_ID ||
       (baseRevisionId !== PARENT_PATCHSET_ID && !change.revisions[baseRevisionId])
     ) {
       setBaseRevisionId(PARENT_PATCHSET_ID);
@@ -840,10 +842,12 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     await loadDiffForFile(path);
   }, [loadDiffForFile, selectedFile]);
 
-  const ensureFileOpen = useCallback(async (rawPath: string) => {
+  const ensureFileOpen = useCallback(async (rawPath: string, options?: { silentNotFound?: boolean }) => {
     const resolvedPath = resolveFilePath(rawPath);
     if (!resolvedPath) {
-      toast.error(`File not found: ${rawPath}`);
+      if (!options?.silentNotFound) {
+        toast.error(`File not found: ${rawPath}`);
+      }
       return null;
     }
 
@@ -1260,6 +1264,16 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
 
   useEffect(() => {
     if (!pendingCommentJump) return;
+    if (loading) return;
+
+    const jumpKey = [
+      pendingCommentJump.rootId || '',
+      pendingCommentJump.path || '',
+      String(pendingCommentJump.line || ''),
+      String(pendingCommentJump.patchSet || ''),
+    ].join('|');
+    if (pendingJumpKeyRef.current === jumpKey) return;
+    pendingJumpKeyRef.current = jumpKey;
 
     const desiredRevisionId = pendingCommentJump.patchSet
       ? Object.entries(change?.revisions || {}).find(([, rev]) => rev._number === pendingCommentJump.patchSet)?.[0]
@@ -1267,14 +1281,27 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
 
     if (desiredRevisionId && desiredRevisionId !== selectedRevisionId) {
       setSelectedRevisionId(desiredRevisionId);
+      pendingJumpKeyRef.current = null;
+      return;
+    }
+
+    if (pendingCommentJump.patchSet && !desiredRevisionId) {
+      pendingJumpKeyRef.current = null;
+      setPendingCommentJump(null);
       return;
     }
 
     let cancelled = false;
 
     const run = async () => {
-      const openedFile = await ensureFileOpen(pendingCommentJump.path);
-      if (!openedFile || cancelled) return;
+      const openedFile = await ensureFileOpen(pendingCommentJump.path, { silentNotFound: true });
+      if (!openedFile || cancelled) {
+        pendingJumpKeyRef.current = null;
+        if (!cancelled) {
+          setPendingCommentJump(null);
+        }
+        return;
+      }
 
       if (pendingCommentJump.rootId) {
         const threadSelector = `[data-comment-thread="${pendingCommentJump.rootId}"]`;
@@ -1283,12 +1310,14 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
           threadEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
           threadEl.classList.add('ring-2', 'ring-amber-400', 'ring-offset-1');
           window.setTimeout(() => threadEl.classList.remove('ring-2', 'ring-amber-400', 'ring-offset-1'), 2500);
+          pendingJumpKeyRef.current = null;
           setPendingCommentJump(null);
           return;
         }
       }
 
       if (!pendingCommentJump.line) {
+        pendingJumpKeyRef.current = null;
         setPendingCommentJump(null);
         return;
       }
@@ -1296,6 +1325,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
       const lineSelector = `[data-diff-line="${openedFile}:${pendingCommentJump.line}"]`;
       const lineEl = await waitForElement(lineSelector, 3200);
       if (!lineEl || cancelled) {
+        pendingJumpKeyRef.current = null;
         setPendingCommentJump(null);
         return;
       }
@@ -1306,6 +1336,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
       window.setTimeout(() => lineEl.classList.remove('ring-2', lineRingColor, 'ring-offset-1'), 2500);
 
       if (!cancelled) {
+        pendingJumpKeyRef.current = null;
         setPendingCommentJump(null);
       }
     };
@@ -1315,7 +1346,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     return () => {
       cancelled = true;
     };
-  }, [change?.revisions, ensureFileOpen, pendingCommentJump, selectedRevisionId]);
+  }, [change?.revisions, ensureFileOpen, loading, pendingCommentJump, selectedRevisionId]);
 
   // Add reviewer or CC (accepts GerritAccount from search)
   const handleAddReviewer = useCallback(async (account: { _account_id: number; email?: string; name?: string }, state: 'REVIEWER' | 'CC') => {
@@ -1400,7 +1431,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
           latestId: latest.id,
           path,
           line: root?.line ?? latest?.line,
-          patchSet: latest.patch_set || root?.patch_set,
+          patchSet: root?.patch_set || latest.patch_set,
           updated: latest.updated || root?.updated || '',
           message: latest.message || root?.message || '',
           authorName: getAccountName(latest.author || root?.author),
@@ -1419,11 +1450,34 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     return result.sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || '')));
   }, [comments, pendingComments]);
 
+  const scopedHistoryMessages = useMemo(() => {
+    const messages = change?.messages || [];
+    if (!change?.revisions || !selectedRevisionId) {
+      return [...messages].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    }
+
+    const selectedPatchsetNumber = change.revisions[selectedRevisionId]?._number;
+    if (!selectedPatchsetNumber) {
+      return [...messages].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    }
+
+    const basePatchsetNumber = effectiveBaseRevisionId && change.revisions[effectiveBaseRevisionId]
+      ? change.revisions[effectiveBaseRevisionId]._number
+      : 0;
+
+    return messages
+      .filter((msg) => {
+        const revisionNumber = msg._revision_number;
+        if (typeof revisionNumber !== 'number') return false;
+        return revisionNumber > basePatchsetNumber && revisionNumber <= selectedPatchsetNumber;
+      })
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  }, [change?.messages, change?.revisions, effectiveBaseRevisionId, selectedRevisionId]);
+
   const filteredMessages = useMemo(() => {
     const keyword = historyQuery.trim().toLowerCase();
-    const messages = [...(change?.messages || [])].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-    if (!keyword) return messages;
-    return messages.filter((msg) => {
+    if (!keyword) return scopedHistoryMessages;
+    return scopedHistoryMessages.filter((msg) => {
       const author = getAccountName(msg.author || msg.real_author).toLowerCase();
       const messageText = String(msg.message || '').toLowerCase();
       const tag = String(msg.tag || '').toLowerCase();
@@ -1435,7 +1489,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
         patch.includes(keyword)
       );
     });
-  }, [change?.messages, historyQuery]);
+  }, [historyQuery, scopedHistoryMessages]);
 
   const filteredCommentEntries = useMemo(() => {
     const keyword = locatorQuery.trim().toLowerCase();
@@ -1457,8 +1511,8 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   ), [commentLocatorEntries]);
 
   const autogeneratedMessageCount = useMemo(() => (
-    (change?.messages || []).reduce((sum, msg) => sum + (msg.tag?.startsWith('autogenerated:') ? 1 : 0), 0)
-  ), [change?.messages]);
+    scopedHistoryMessages.reduce((sum, msg) => sum + (msg.tag?.startsWith('autogenerated:') ? 1 : 0), 0)
+  ), [scopedHistoryMessages]);
 
   const mergeGuard = useMemo(() => computeMergeGuard(change), [change]);
 
@@ -1510,18 +1564,24 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     });
   }, [activeUnresolvedIndex, unresolvedThreadTargets]);
 
+  useEffect(() => {
+    if (!pendingCommentJump) {
+      pendingJumpKeyRef.current = null;
+    }
+  }, [pendingCommentJump]);
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        <span className="ml-2 text-sm text-muted-foreground">Loading change details...</span>
+      <div className={cn('mx-auto flex max-w-xl items-center justify-center gap-2 rounded-2xl px-5 py-10 text-sm text-muted-foreground', glassSectionClass)}>
+        <Loader2 className="h-6 w-6 animate-spin text-sky-600" />
+        <span>Loading change details...</span>
       </div>
     );
   }
 
   if (error || !change) {
     return (
-      <div className="text-center py-20 space-y-3">
+      <div className={cn('mx-auto max-w-xl space-y-3 rounded-2xl px-5 py-10 text-center', glassSectionClass)}>
         <p className="text-sm text-red-600">{error || 'Change not found'}</p>
         <Button variant="outline" size="sm" onClick={onBack}>Back</Button>
       </div>
@@ -1598,7 +1658,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   const relatedAllChecked = relatedSelectableTotal > 0 && relatedSelectedTotal === relatedSelectableTotal;
   const relatedSomeChecked = relatedSelectedTotal > 0 && relatedSelectedTotal < relatedSelectableTotal;
   return (
-    <div className="mx-auto max-w-[1560px] space-y-5">
+    <div className="mx-auto max-w-[1560px] space-y-5 animate-in fade-in duration-300">
       {/* Top Section */}
       <div className="space-y-4">
         <Card className="glass-panel-strong overflow-hidden rounded-[30px] border-white/60 bg-white/76 shadow-[0_18px_46px_rgba(15,23,42,0.13)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/64">
@@ -1840,11 +1900,12 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
                 <div className="border-t">
                   <div className="sticky top-0 z-10 border-b border-border/50 bg-background/95 px-4 py-3 backdrop-blur">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Input
+                      <GlassSearchInput
                         value={locatorQuery}
                         onChange={(event) => setLocatorQuery(event.target.value)}
                         placeholder="Search path / comment / line / author"
-                        className="h-8 max-w-sm text-xs shadow-none"
+                        containerClassName="max-w-sm"
+                        inputClassName="h-8 text-xs"
                       />
                       <Button
                         type="button"
@@ -1881,7 +1942,9 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
                       >
                       <div className="mb-1.5 flex items-center gap-2 text-[11px]">
                         <Badge variant="outline" className="text-[10px] bg-background">PS{c.patchSet || '?'}</Badge>
-                        <span className="font-mono text-foreground font-medium truncate max-w-[300px]" title={c.path}>{c.path}</span>
+                        <LiquidTooltip content={c.path}>
+                          <span className="font-mono text-foreground font-medium truncate max-w-[300px]">{c.path}</span>
+                        </LiquidTooltip>
                         {c.unresolved && (
                           <Badge variant="secondary" className="h-5 border border-amber-300/70 bg-amber-100 text-[10px] text-amber-800">
                             unresolved
@@ -1889,12 +1952,11 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
                         )}
                         <span className="text-muted-foreground ml-auto">{relativeTime(c.updated)}</span>
                       </div>
-                      <p
-                        className="truncate text-xs text-muted-foreground transition-colors group-hover:text-foreground"
-                        title={`${c.authorName || 'Unknown'}: ${c.message || ''}`}
-                      >
-                        {`${c.authorName || 'Unknown'}: ${c.message || ''}`}
-                      </p>
+                      <LiquidTooltip content={`${c.authorName || 'Unknown'}: ${c.message || ''}`}>
+                        <p className="truncate text-xs text-muted-foreground transition-colors group-hover:text-foreground">
+                          {`${c.authorName || 'Unknown'}: ${c.message || ''}`}
+                        </p>
+                      </LiquidTooltip>
                     </button>
                     )) : (
                       <div className="px-4 py-10 text-center text-xs text-muted-foreground">
@@ -1917,7 +1979,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
               >
                 <span className="flex items-center gap-2">
                   <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                  Review History ({change.messages.length})
+                  Review History ({scopedHistoryMessages.length})
                 </span>
                 {showMessages ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
               </button>
@@ -1925,14 +1987,15 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
                 <div className="border-t">
                   <div className="sticky top-0 z-10 border-b border-border/50 bg-background/95 px-4 py-3 backdrop-blur">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Input
+                      <GlassSearchInput
                         value={historyQuery}
                         onChange={(event) => setHistoryQuery(event.target.value)}
                         placeholder="Search author / message / patchset"
-                        className="h-8 max-w-sm text-xs shadow-none"
+                        containerClassName="max-w-sm"
+                        inputClassName="h-8 text-xs"
                       />
                       <Badge variant="outline" className="h-6 text-[10px]">
-                        {filteredMessages.length}/{change.messages.length} visible
+                        {filteredMessages.length}/{scopedHistoryMessages.length} visible
                       </Badge>
                       <Badge variant="secondary" className="h-6 text-[10px]">
                         {autogeneratedMessageCount} autogenerated
@@ -1984,7 +2047,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
       </Dialog>
 
       <AlertDialog open={showMergeConfirmDialog} onOpenChange={setShowMergeConfirmDialog}>
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-xl rounded-3xl">
           <AlertDialogHeader>
             <AlertDialogTitle>{mergeDialogMode === 'warning' ? '暂不建议 Merge' : '确认 Merge'}</AlertDialogTitle>
             <AlertDialogDescription>
@@ -2038,22 +2101,23 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
 
       {unresolvedThreadTargets.length > 0 && (
         <div className="fixed bottom-20 right-6 z-40">
-          <Button
-            type="button"
-            onClick={handleJumpToNextUnresolved}
-            className="h-11 w-11 rounded-full border border-amber-200/80 bg-white/96 text-amber-700 shadow-[0_14px_40px_rgba(245,158,11,0.18)] backdrop-blur supports-[backdrop-filter]:bg-white/86"
-            variant="outline"
-            size="icon"
-            title={`Next unresolved (${unresolvedThreadTargets.length})`}
-            aria-label={`Jump to next unresolved comment. ${unresolvedThreadTargets.length} unresolved threads.`}
-          >
-            <div className="relative">
-              <ArrowDown className="h-4 w-4" />
-              <span className="absolute -right-2.5 -top-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-semibold text-white">
-                {unresolvedThreadTargets.length}
-              </span>
-            </div>
-          </Button>
+          <LiquidTooltip content={`Next unresolved (${unresolvedThreadTargets.length})`}>
+            <Button
+              type="button"
+              onClick={handleJumpToNextUnresolved}
+              className="h-11 w-11 rounded-full border border-amber-200/80 bg-white/96 text-amber-700 shadow-[0_14px_40px_rgba(245,158,11,0.18)] backdrop-blur supports-[backdrop-filter]:bg-white/86"
+              variant="outline"
+              size="icon"
+              aria-label={`Jump to next unresolved comment. ${unresolvedThreadTargets.length} unresolved threads.`}
+            >
+              <div className="relative">
+                <ArrowDown className="h-4 w-4" />
+                <span className="absolute -right-2.5 -top-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-semibold text-white">
+                  {unresolvedThreadTargets.length}
+                </span>
+              </div>
+            </Button>
+          </LiquidTooltip>
         </div>
       )}
     </div>
@@ -2091,9 +2155,11 @@ function MessageItem({ message, gerritUrl }: { message: GerritMessage; gerritUrl
                 </Badge>
               )}
             </div>
-            <span className="text-xs text-muted-foreground whitespace-nowrap" title={new Date(message.date).toLocaleString()}>
-              {relativeTime(message.date)}
-            </span>
+            <LiquidTooltip content={new Date(message.date).toLocaleString()}>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                {relativeTime(message.date)}
+              </span>
+            </LiquidTooltip>
           </div>
           <div className={cn("text-foreground/90 whitespace-pre-wrap leading-relaxed break-words", isAutogenerated && "text-muted-foreground font-mono text-xs")}>
             {message.message}

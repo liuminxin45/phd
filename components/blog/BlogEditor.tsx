@@ -1,18 +1,16 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  User,
-  Calendar,
   ArrowLeft,
   Save,
   Send,
   X,
-  Info,
   Tag,
   Check,
   Loader2,
   Search,
+  FileText,
 } from 'lucide-react';
-import { CATEGORIES, getLastWeekRange } from '@/lib/blog/helpers';
+import { getLastWeekRange } from '@/lib/blog/helpers';
 import type { ApiBlogPost } from '@/lib/blog/types';
 import { httpGet, httpPost } from '@/lib/httpClient';
 import { AiBlogWriter } from './AiBlogWriter';
@@ -23,17 +21,18 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { RemarkupEditor } from '@/components/ui/RemarkupEditor';
+import { GlassIconButton, GlassPanel, glassPanelStrongClass, glassToolbarClass } from '@/components/ui/glass';
 import { cn } from '@/lib/utils';
 
 const REPORT_PROJECT_PHID = 'PHID-PROJ-5r2wcb3ptiy7lmdawmbg';
-const REPORT_PROJECT_NAME = '工作周报/日报';
+const REPORT_PROJECT_NAME = 'Weekly Reports';
 
 function handlePublishErrorWithBindingGuide(rawMessage: string | undefined): boolean {
   const msg = rawMessage || '';
-  const needBinding = msg.includes('BLOG_NOT_BOUND') || msg.includes('绑定博客') || msg.includes('未在 BLOG_PHID_MAP');
+  const needBinding = msg.includes('BLOG_NOT_BOUND') || msg.includes('BLOG_PHID_MAP');
   if (!needBinding) return false;
 
-  toast.error('当前账号尚未绑定博客，正在跳转到“设置 -> 环境变量”执行绑定。');
+  toast.error('Current account is not blog-bound. Redirecting to Settings -> Environment.');
   if (typeof window !== 'undefined') {
     window.setTimeout(() => {
       window.location.href = '/settings';
@@ -156,13 +155,13 @@ function BlogTagSelector({
       {selected.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {selected.map((item) => (
-            <Badge key={item.phid} variant="outline" className="gap-1 pr-1 font-normal bg-purple-50 text-purple-700 border-purple-200">
+            <Badge key={item.phid} variant="outline" className="gap-1 pr-1 font-normal rounded-full border border-white/65 bg-white/72 text-slate-700 backdrop-blur-md">
               <Tag className="h-3 w-3" />
               <span>{item.name}</span>
               <button
                 type="button"
                 onClick={() => removeTag(item.phid)}
-                className="rounded-full p-0.5 hover:bg-purple-100"
+                className="rounded-full p-0.5 transition-colors hover:bg-white/80"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -178,21 +177,21 @@ function BlogTagSelector({
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={placeholder || '搜索并添加标签'}
-          className="h-8 pl-8 pr-8 text-xs"
+          placeholder={placeholder || 'Search and add tags'}
+          className="glass-input h-9 rounded-xl border-white/60 bg-white/70 pl-8 pr-8 text-xs shadow-none focus-visible:ring-0 focus-visible:outline-none"
         />
         {isSearching && <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-muted-foreground" />}
 
         {showDropdown && searchResults.length > 0 && (
-          <div className="absolute top-full left-0 right-0 mt-1 max-h-56 overflow-auto rounded-md border bg-popover p-1 shadow-md z-50">
+          <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-56 overflow-auto rounded-xl border border-white/65 bg-white/82 p-1 shadow-[0_12px_28px_rgba(15,23,42,0.12)] backdrop-blur-xl">
             {searchResults.map((item, index) => (
               <button
                 key={item.phid}
                 type="button"
                 onClick={() => addTag(item)}
                 className={cn(
-                  'w-full rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent hover:text-accent-foreground flex items-center gap-2',
-                  index === selectedIndex && 'bg-accent text-accent-foreground',
+                  'flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-white/75',
+                  index === selectedIndex && 'bg-white/82',
                 )}
               >
                 <Tag className="h-3 w-3 text-purple-600" />
@@ -207,37 +206,164 @@ function BlogTagSelector({
   );
 }
 
-// ─── Author & Time Sidebar (shared) ──────────────────────────────────────────
-
-function AuthorTimeSidebar() {
+function EditorHero({
+  title,
+  description,
+  icon,
+}: {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+}) {
   return (
-    <>
-      <Card>
-        <CardContent className="p-4">
-          <p className="text-sm font-medium text-foreground mb-3">作者信息</p>
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center">
-              <User className="h-4 w-4 text-muted-foreground" />
+    <div className={cn(glassPanelStrongClass, 'rounded-[28px] border border-white/60 p-5 md:p-6')}>
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="flex items-start gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/60 bg-white/70 text-sky-700 shadow-[0_12px_24px_rgba(14,116,144,0.12)] backdrop-blur-xl">
+            {icon}
+          </div>
+          <div className="space-y-1">
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900 md:text-2xl">{title}</h1>
+            <p className="max-w-2xl text-sm leading-6 text-slate-600">{description}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditorTopBar({
+  onBack,
+  actions,
+}: {
+  onBack: () => void;
+  actions: React.ReactNode;
+}) {
+  return (
+    <div className={cn(glassToolbarClass, 'flex items-center justify-between rounded-2xl px-4 py-3 md:px-5')}>
+      <Button
+        onClick={onBack}
+        variant="ghost"
+        size="icon"
+        className="h-9 w-9 rounded-xl border border-white/45 bg-white/42 text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.12)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/28 transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-200/80 hover:bg-white/66 hover:text-slate-900 hover:shadow-[0_14px_30px_rgba(15,23,42,0.16)]"
+        aria-label="Back"
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </Button>
+      <div className="flex items-center gap-2">{actions}</div>
+    </div>
+  );
+}
+
+function EditorTitleBlock({
+  title,
+  setTitle,
+  titlePlaceholder,
+  selectedProjectTags,
+  setSelectedProjectTags,
+  tagPlaceholder,
+}: {
+  title: string;
+  setTitle: (value: string) => void;
+  titlePlaceholder: string;
+  selectedProjectTags: BlogTagItem[];
+  setSelectedProjectTags: (items: BlogTagItem[]) => void;
+  tagPlaceholder: string;
+}) {
+  return (
+    <GlassPanel className="rounded-[28px] border border-white/60 bg-white/72 p-5 shadow-[0_16px_36px_rgba(15,23,42,0.10)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/56 md:p-6">
+      <div className="space-y-5">
+        <div className="relative">
+          <input
+            type="text"
+            placeholder={titlePlaceholder}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="w-full border-none bg-transparent py-1 text-3xl font-semibold tracking-tight text-slate-900 outline-none placeholder:text-slate-400 md:text-4xl"
+          />
+        </div>
+        <div className="rounded-2xl border border-white/60 bg-white/65 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]">
+          <div className="mb-3 flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/60 bg-white/72 text-sky-700">
+              <Tag className="h-3.5 w-3.5" />
             </div>
             <div>
-              <p className="text-sm font-medium text-foreground">当前用户</p>
-              <p className="text-xs text-muted-foreground">作者（只读）</p>
+              <p className="text-sm font-medium text-slate-900">Blog Tag Selector</p>
+              <p className="text-xs text-slate-500">Attach one or more related projects for better context.</p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+          <BlogTagSelector
+            selected={selectedProjectTags}
+            onChange={setSelectedProjectTags}
+            placeholder={tagPlaceholder}
+          />
+        </div>
+      </div>
+    </GlassPanel>
+  );
+}
 
-      <Card>
-        <CardContent className="p-4">
-          <p className="text-sm font-medium text-foreground mb-3">发布时间</p>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/30 p-2 rounded-md">
-            <Calendar className="h-4 w-4 shrink-0" />
-            <span>{new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })}</span>
-            <span className="text-xs ml-auto">（当前）</span>
+function DraftPanel({
+  loadingDrafts,
+  draftPosts,
+  editingDraftId,
+  onReset,
+  onApplyDraft,
+}: {
+  loadingDrafts: boolean;
+  draftPosts: ApiBlogPost[];
+  editingDraftId: number | null;
+  onReset: () => void;
+  onApplyDraft: (draft: ApiBlogPost) => void;
+}) {
+  return (
+    <GlassPanel className="rounded-[28px] border border-white/60 bg-white/72 p-5 shadow-[0_16px_36px_rgba(15,23,42,0.10)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/56">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">My Drafts</h2>
+            <p className="text-xs text-slate-500">Continue editing from a previous draft or start fresh.</p>
           </div>
-        </CardContent>
-      </Card>
-    </>
+          <GlassIconButton onClick={onReset} tone="primary" tooltip="New Draft" aria-label="New Draft">
+            <FileText className="h-3.5 w-3.5" />
+          </GlassIconButton>
+        </div>
+
+        {loadingDrafts ? (
+          <div className="flex items-center gap-2 rounded-2xl border border-white/55 bg-white/60 px-3 py-4 text-xs text-slate-500">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Loading drafts...
+          </div>
+        ) : draftPosts.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-white/60 bg-white/54 px-3 py-5 text-xs text-slate-500">
+            No drafts yet. Save once and it will appear here.
+          </div>
+        ) : (
+          <div className="grid gap-2">
+            {draftPosts.map((draft) => (
+              <button
+                key={draft.id}
+                type="button"
+                onClick={() => onApplyDraft(draft)}
+                className={cn(
+                  'w-full rounded-2xl border px-4 py-3 text-left transition-all duration-200',
+                  editingDraftId === draft.id
+                    ? 'border-sky-200/90 bg-sky-50/76 shadow-[0_12px_22px_rgba(14,116,144,0.10)]'
+                    : 'border-white/55 bg-white/58 hover:-translate-y-0.5 hover:border-sky-200/70 hover:bg-white/80',
+                )}
+              >
+                <div className="truncate text-sm font-medium text-slate-900">
+                  {draft.title || `Untitled Draft #${draft.id}`}
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  Updated at {new Date((draft.dateModified || draft.dateCreated) * 1000).toLocaleString('en-US')}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </GlassPanel>
   );
 }
 
@@ -246,7 +372,6 @@ function AuthorTimeSidebar() {
 export function CreateBlogView({ onBack, onPublished }: { onBack: () => void; onPublished?: () => Promise<void> | void }) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedProjectTags, setSelectedProjectTags] = useState<BlogTagItem[]>([]);
   const [publishing, setPublishing] = useState(false);
   const [draftPosts, setDraftPosts] = useState<ApiBlogPost[]>([]);
@@ -279,31 +404,29 @@ export function CreateBlogView({ onBack, onPublished }: { onBack: () => void; on
     setEditingDraftId(draft.id);
     setTitle(draft.title || '');
     setContent(draft.body || '');
-    setSelectedCategory(draft.category || null);
     setSelectedProjectTags(
       (draft.projectPHIDs || []).map((phid, idx) => ({
         phid,
         name: draft.projectTags?.[idx] || phid,
       }))
     );
-    toast.success(`已载入草稿 #${draft.id}，可继续编辑`);
+    toast.success(`Draft #${draft.id} loaded`);
   };
 
   const resetEditorAsNewDraft = () => {
     setEditingDraftId(null);
     setTitle('');
     setContent('');
-    setSelectedCategory(null);
     setSelectedProjectTags([]);
   };
 
   const handlePublish = async (status: 'draft' | 'published') => {
     if (!title.trim()) {
-      toast.error('请先输入博客标题');
+      toast.error('Please enter a title first');
       return;
     }
     if (!content.trim()) {
-      toast.error('请先输入博客正文');
+      toast.error('Please enter the blog content first');
       return;
     }
 
@@ -314,11 +437,10 @@ export function CreateBlogView({ onBack, onPublished }: { onBack: () => void; on
         title,
         body: content,
         status,
-        category: selectedCategory,
         projectPHIDs: selectedProjectTags.map((item) => item.phid),
         objectIdentifier: editingDraftId,
       });
-      toast.success(status === 'draft' ? '博客草稿已保存' : '博客发布成功');
+      toast.success(status === 'draft' ? 'Draft saved' : 'Blog published');
       await fetchDrafts();
       await onPublished?.();
       if (status === 'published') {
@@ -329,129 +451,74 @@ export function CreateBlogView({ onBack, onPublished }: { onBack: () => void; on
       if (handlePublishErrorWithBindingGuide(err?.message)) {
         return;
       }
-      toast.error(err.message || '发布博客失败');
+      toast.error(err.message || 'Failed to publish blog');
     } finally {
       setPublishing(false);
     }
   };
 
   return (
-    <div className="space-y-6 py-6 max-w-7xl mx-auto">
-      {/* Action Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <Button onClick={onBack} variant="ghost" className="pl-0 hover:bg-transparent">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          返回博客首页
-        </Button>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <AiBlogWriter onFill={(t, c) => { setTitle(t); setContent(c); }} />
-          <Button variant="outline" className="flex-1 sm:flex-none" onClick={() => handlePublish('draft')} disabled={publishing}>
-            <Save className="h-4 w-4 mr-2" />
-            保存草稿
-          </Button>
-          <Button className="flex-1 sm:flex-none" onClick={() => handlePublish('published')} disabled={publishing}>
-            <Send className="h-4 w-4 mr-2" />
-            {publishing ? '提交中...' : '发布博客'}
-          </Button>
-        </div>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-5 py-5">
+      <EditorTopBar
+        onBack={onBack}
+        actions={
+          <>
+            <AiBlogWriter iconOnly onFill={(t, c) => { setTitle(t); setContent(c); }} />
+            <GlassIconButton
+              onClick={() => handlePublish('draft')}
+              tone="primary"
+              tooltip="Save Draft"
+              aria-label="Save Draft"
+              disabled={publishing}
+            >
+              <Save className="h-3.5 w-3.5" />
+            </GlassIconButton>
+            <GlassIconButton
+              onClick={() => handlePublish('published')}
+              tone="primary"
+              tooltip={publishing ? 'Submitting...' : 'Publish'}
+              aria-label="Publish"
+              disabled={publishing}
+            >
+              {publishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            </GlassIconButton>
+          </>
+        }
+      />
 
-      <div className="flex flex-col lg:flex-row gap-6">
-        {/* Editor */}
-        <div className="flex-1 min-w-0 space-y-6">
-          <Card>
-            <CardContent className="p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-foreground">我的草稿</p>
-                <Button type="button" variant="outline" size="sm" onClick={resetEditorAsNewDraft}>
-                  新建空白
-                </Button>
-              </div>
+      <EditorHero
+        title="Tech Blog Editor"
+        description="Draft long-form technical posts in a cleaner, focused workspace. Tags stay near the title so structure and context are decided before writing."
+        icon={<FileText className="h-5 w-5" />}
+      />
 
-              {loadingDrafts ? (
-                <div className="text-xs text-muted-foreground flex items-center gap-2">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  加载草稿中...
-                </div>
-              ) : draftPosts.length === 0 ? (
-                <p className="text-xs text-muted-foreground">暂无草稿，点击“保存草稿”后会出现在这里。</p>
-              ) : (
-                <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-                  {draftPosts.map((draft) => (
-                    <button
-                      key={draft.id}
-                      type="button"
-                      onClick={() => applyDraftToEditor(draft)}
-                      className={cn(
-                        'w-full text-left rounded-md border px-3 py-2 transition-colors',
-                        editingDraftId === draft.id
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:bg-muted/30'
-                      )}
-                    >
-                      <div className="text-sm font-medium text-foreground truncate">{draft.title || `未命名草稿 #${draft.id}`}</div>
-                      <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
-                        <Calendar className="h-3 w-3" />
-                        更新于 {new Date((draft.dateModified || draft.dateCreated) * 1000).toLocaleString('zh-CN')}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+      <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
+        <DraftPanel
+          loadingDrafts={loadingDrafts}
+          draftPosts={draftPosts}
+          editingDraftId={editingDraftId}
+          onReset={resetEditorAsNewDraft}
+          onApplyDraft={applyDraftToEditor}
+        />
 
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="请输入博客标题"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full text-3xl font-bold text-foreground placeholder:text-muted-foreground/50 bg-transparent border-none outline-none py-2"
-            />
-          </div>
-          <RemarkupEditor
-            value={content}
-            onChange={setContent}
-            placeholder="在此撰写博客正文…支持 Markdown 格式"
-            minHeight="500px"
+        <div className="space-y-5">
+          <EditorTitleBlock
+            title={title}
+            setTitle={setTitle}
+            titlePlaceholder="Enter blog title"
+            selectedProjectTags={selectedProjectTags}
+            setSelectedProjectTags={setSelectedProjectTags}
+            tagPlaceholder="Search project tags (multi-select)"
           />
+          <GlassPanel className="rounded-[28px] border border-white/60 bg-white/72 p-3 shadow-[0_18px_42px_rgba(15,23,42,0.10)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/56 md:p-4">
+            <RemarkupEditor
+              value={content}
+              onChange={setContent}
+              placeholder="Write blog content here... Markdown is supported"
+              minHeight="620px"
+            />
+          </GlassPanel>
         </div>
-
-        {/* Sidebar */}
-        <aside className="w-full lg:w-80 flex-shrink-0 space-y-6">
-          {/* Category */}
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-sm font-medium text-foreground mb-3">分类</p>
-              <div className="flex flex-wrap gap-2">
-                {CATEGORIES.map((cat) => (
-                  <Badge
-                    key={cat}
-                    variant={selectedCategory === cat ? 'default' : 'outline'}
-                    className="cursor-pointer hover:bg-primary/20 hover:text-primary transition-colors"
-                    onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
-                  >
-                    {cat}
-                  </Badge>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-sm font-medium text-foreground mb-3">博客标签筛选器</p>
-              <BlogTagSelector
-                selected={selectedProjectTags}
-                onChange={setSelectedProjectTags}
-                placeholder="搜索项目标签（可多选）"
-              />
-            </CardContent>
-          </Card>
-
-          <AuthorTimeSidebar />
-        </aside>
       </div>
     </div>
   );
@@ -469,11 +536,11 @@ export function CreateReportView({ onBack, onPublished }: { onBack: () => void; 
 
   const handlePublish = async (status: 'draft' | 'published') => {
     if (!title.trim()) {
-      toast.error('请先输入周报标题');
+      toast.error('Please enter a weekly report title first');
       return;
     }
     if (!content.trim()) {
-      toast.error('请先输入周报正文');
+      toast.error('Please enter weekly report content first');
       return;
     }
 
@@ -487,86 +554,71 @@ export function CreateReportView({ onBack, onPublished }: { onBack: () => void; 
         projectPHIDs: selectedProjectTags.map((item) => item.phid),
       });
 
-      toast.success(status === 'draft' ? '周报草稿已保存' : '周报发布成功');
+      toast.success(status === 'draft' ? 'Weekly report draft saved' : 'Weekly report published');
       await onPublished?.();
       onBack();
     } catch (err: any) {
       if (handlePublishErrorWithBindingGuide(err?.message)) {
         return;
       }
-      toast.error(err.message || '发布周报失败');
+      toast.error(err.message || 'Failed to publish weekly report');
     } finally {
       setPublishing(false);
     }
   };
 
   return (
-    <div className="space-y-6 py-6 max-w-7xl mx-auto">
-      {/* Action Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <Button onClick={onBack} variant="ghost" className="pl-0 hover:bg-transparent">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          返回周报列表
-        </Button>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <AiReportWriter onFill={(t, c) => { setTitle(t); setContent(c); }} />
-          <Button variant="outline" className="flex-1 sm:flex-none" onClick={() => handlePublish('draft')} disabled={publishing}>
-            <Save className="h-4 w-4 mr-2" />
-            保存草稿
-          </Button>
-          <Button className="flex-1 sm:flex-none" onClick={() => handlePublish('published')} disabled={publishing}>
-            <Send className="h-4 w-4 mr-2" />
-            {publishing ? '提交中...' : '发布博客'}
-          </Button>
-        </div>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-5 py-5">
+      <EditorTopBar
+        onBack={onBack}
+        actions={
+          <>
+            <AiReportWriter iconOnly onFill={(t, c) => { setTitle(t); setContent(c); }} />
+            <GlassIconButton
+              onClick={() => handlePublish('draft')}
+              tone="primary"
+              tooltip="Save Draft"
+              aria-label="Save Draft"
+              disabled={publishing}
+            >
+              <Save className="h-3.5 w-3.5" />
+            </GlassIconButton>
+            <GlassIconButton
+              onClick={() => handlePublish('published')}
+              tone="primary"
+              tooltip={publishing ? 'Submitting...' : 'Publish'}
+              aria-label="Publish"
+              disabled={publishing}
+            >
+              {publishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            </GlassIconButton>
+          </>
+        }
+      />
 
-      <div className="flex flex-col lg:flex-row gap-6">
-        {/* Editor */}
-        <div className="flex-1 min-w-0 space-y-6">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="请输入周报标题"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full text-3xl font-bold text-foreground placeholder:text-muted-foreground/50 bg-transparent border-none outline-none py-2"
-            />
-          </div>
+      <EditorHero
+        title="Weekly Report Editor"
+        description="Capture progress, blockers, and deliverables in a calmer writing flow. The page keeps title, tags, and content in one vertical path for faster weekly updates."
+        icon={<FileText className="h-5 w-5" />}
+      />
+
+      <div className="space-y-5">
+        <EditorTitleBlock
+          title={title}
+          setTitle={setTitle}
+          titlePlaceholder="Enter weekly report title"
+          selectedProjectTags={selectedProjectTags}
+          setSelectedProjectTags={setSelectedProjectTags}
+          tagPlaceholder='Default tag "Weekly Reports" is selected. You can add more.'
+        />
+        <GlassPanel className="rounded-[28px] border border-white/60 bg-white/72 p-3 shadow-[0_18px_42px_rgba(15,23,42,0.10)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/56 md:p-4">
           <RemarkupEditor
             value={content}
             onChange={setContent}
-            placeholder="在此撰写周报正文…支持 Markdown 格式"
-            minHeight="500px"
+            placeholder="Write weekly report content here... Markdown is supported"
+            minHeight="620px"
           />
-        </div>
-
-        {/* Sidebar */}
-        <aside className="w-full lg:w-80 flex-shrink-0 space-y-6">
-          <AuthorTimeSidebar />
-
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-sm font-medium text-foreground mb-3">博客标签筛选器</p>
-              <BlogTagSelector
-                selected={selectedProjectTags}
-                onChange={setSelectedProjectTags}
-                placeholder="默认已选“工作周报/日报”，可继续添加"
-              />
-            </CardContent>
-          </Card>
-
-          {/* Week range info */}
-          <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-4">
-            <p className="text-sm font-medium text-blue-900 mb-2 flex items-center gap-1.5">
-              <Info className="h-3.5 w-3.5" />
-              自动填充说明
-            </p>
-            <p className="text-xs text-blue-700 leading-relaxed">
-              标题已自动填充为最近过去的工作周（周一至周五）。如需调整日期范围，可直接编辑标题。
-            </p>
-          </div>
-        </aside>
+        </GlassPanel>
       </div>
     </div>
   );

@@ -22,11 +22,17 @@ import { DailyDetailModal } from './dinner/DailyDetailModal';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { glassInputClass, glassPanelStrongClass, glassSectionClass, glassToolbarClass } from '@/components/ui/glass';
 
 interface DinnerWidgetProps {
   className?: string;
 }
+
+const STAT_CARD_CLASS = 'glass-interactive rounded-xl border border-white/58 bg-white/62 p-3 shadow-[0_10px_24px_rgba(15,23,42,0.1)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/50 transition-all duration-200 hover:border-sky-200/80 hover:bg-white/74';
+const ICON_BUTTON_CLASS = 'h-9 w-9 rounded-xl border border-white/45 bg-white/42 shadow-[0_10px_24px_rgba(15,23,42,0.12)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/28 transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-200/80 hover:bg-white/66';
+const GLASS_SELECT_TRIGGER_CLASS = 'h-9 w-full rounded-xl border border-white/55 bg-white/72 px-3 text-sm shadow-none';
 
 interface AutoApplyTask {
   id: string;
@@ -36,6 +42,15 @@ interface AutoApplyTask {
 }
 
 const AUTO_APPLY_TIME_MIN = '19:00';
+
+function parseDinnerName(name: string): { rawName: string; displayName: string; isFlagged: boolean } {
+  const isFlagged = name.startsWith('*');
+  return {
+    rawName: name,
+    displayName: isFlagged ? name.replace(/^\*+/, '') : name,
+    isFlagged,
+  };
+}
 
 function formatLocalDateKey(date: Date): string {
   const year = date.getFullYear();
@@ -155,7 +170,10 @@ function mergeMonthsData(months: ParsedDinnerData[], currentUserName?: string): 
   const rankMap = new Map<string, number>();
   sorted.forEach((u, i) => rankMap.set(u.employeeNo, i + 1));
 
-  const currentUser = currentUserName ? allUsers.find(u => u.name === currentUserName) || null : null;
+  const normalizedCurrentUserName = currentUserName ? parseDinnerName(currentUserName).displayName : '';
+  const currentUser = currentUserName
+    ? allUsers.find(u => parseDinnerName(u.name).displayName === normalizedCurrentUserName) || null
+    : null;
   const currentUserRank = currentUser ? (rankMap.get(currentUser.employeeNo) || null) : null;
   const totals = allUsers.map(u => u.monthTotal);
   const grandTotal = totals.reduce((a, b) => a + b, 0);
@@ -303,11 +321,11 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
         method: 'POST',
         body: { date, times },
       });
-      toast.success(`申报成功: ${date === 0 ? '今天' : '昨天'} ${times}次`);
+      toast.success(`Apply succeeded: ${date === 0 ? 'Today' : 'Yesterday'} x${times}`);
       const n = new Date();
       fetchMonth(n.getFullYear(), n.getMonth() + 1);
     } catch (err: any) {
-      toast.error(`申报失败: ${err.message}`);
+      toast.error(`Apply failed: ${err.message}`);
     } finally {
       setApplying(false);
     }
@@ -315,23 +333,23 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
 
   const handleAddAutoApplyTask = () => {
     if (!autoApplyDraftDate || !autoApplyDraftTime) {
-      toast.error('请先选日期和时间');
+      toast.error('Please select date and time first');
       return;
     }
 
     if (autoApplyDraftDate < todayKey || (autoApplyDraftDate === todayKey && autoApplyDraftTime <= currentTimeKey)) {
-      toast.error('今天的自动申报必须晚于当前分钟，避免立即触发');
+      toast.error('Today auto-apply time must be later than current minute');
       return;
     }
 
     if (!isAllowedAutoApplyWindow(autoApplyDraftDate, autoApplyDraftTime)) {
-      toast.error('工作日自动申报只能设置在 19:00 及之后');
+      toast.error('Auto-apply on workdays is allowed only after 19:00');
       return;
     }
 
     const taskId = `${autoApplyDraftDate} ${autoApplyDraftTime}`;
     if (autoApplyTasks.some(task => task.id === taskId)) {
-      toast.error('同一日期和时间只能保留一个待执行任务');
+      toast.error('Only one pending task is allowed for the same date and time');
       return;
     }
 
@@ -344,7 +362,7 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
 
     setAutoApplyTasks(prev => sortAutoApplyTasks([...prev, nextTask]));
     setAutoApplyDraftDate('');
-    toast.success('已添加到待执行任务');
+    toast.success('Added to pending tasks');
   };
 
   const handleDeleteAutoApplyTask = (taskId: string) => {
@@ -426,11 +444,16 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
 
   // Bar chart data
   const barChartData = data && data.allUsers.length > 0
-    ? [...data.allUsers].sort((a, b) => b.monthTotal - a.monthTotal).map(u => ({
-        name: u.name,
-        total: u.monthTotal,
-        isCurrentUser: data.currentUser?.employeeNo === u.employeeNo,
-      }))
+    ? [...data.allUsers].sort((a, b) => b.monthTotal - a.monthTotal).map(u => {
+        const parsedName = parseDinnerName(u.name);
+        return {
+          name: parsedName.displayName,
+          rawName: parsedName.rawName,
+          total: u.monthTotal,
+          isFlagged: parsedName.isFlagged,
+          isCurrentUser: data.currentUser?.employeeNo === u.employeeNo,
+        };
+      })
     : [];
 
   // Available months for multi-select (from cache keys)
@@ -441,26 +464,25 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
   }
 
   return (
-    <Card className={cn("overflow-hidden", className)}>
+    <Card className={cn(glassPanelStrongClass, "overflow-hidden border-white/65 bg-white/62 shadow-[0_22px_52px_rgba(15,23,42,0.16)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/56", className)}>
       {/* Header */}
-      <div className="flex items-center justify-between border-b p-4">
+      <div className="flex items-center justify-between border-b border-white/50 p-4">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-orange-100 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-orange-200/70 bg-orange-50/82 text-orange-600">
             <UtensilsCrossed className="h-4 w-4" />
           </div>
           <h3 className="text-base font-semibold leading-none">Dinner Subsidy</h3>
         </div>
         <Button
           type="button"
-          variant="outline"
-          size="sm"
-          className="h-9 gap-2 px-3 text-xs"
+          variant="ghost"
+          size="icon"
+          className={ICON_BUTTON_CLASS}
           onClick={() => setDetailsExpanded(prev => !prev)}
           aria-expanded={detailsExpanded}
-          aria-label={detailsExpanded ? '收起 Dinner Subsidy 详情' : '展开 Dinner Subsidy 详情'}
+          aria-label={detailsExpanded ? 'Collapse Dinner Subsidy details' : 'Expand Dinner Subsidy details'}
         >
           {detailsExpanded ? <ChevronsDownUp className="h-4 w-4" /> : <ChevronsUpDown className="h-4 w-4" />}
-          {detailsExpanded ? '收起详情' : '展开详情'}
         </Button>
       </div>
 
@@ -483,7 +505,7 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
           <div className="space-y-6">
             {/* Stats Cards */}
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-              <div className="rounded-lg border bg-card p-3 shadow-sm transition-all hover:shadow-md">
+              <div className={STAT_CARD_CLASS}>
                 <div className="mb-1 flex items-center gap-2">
                   <UtensilsCrossed className="h-4 w-4 text-orange-500" />
                   <span className="text-xs font-medium text-muted-foreground">My Count</span>
@@ -491,7 +513,7 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
                 <p className="text-2xl font-bold tracking-tight">{data.currentUser?.monthTotal ?? '-'}</p>
                 <p className="text-[10px] text-muted-foreground truncate">{data.currentUser?.employeeNo || 'Not found'}</p>
               </div>
-              <div className="rounded-lg border bg-card p-3 shadow-sm transition-all hover:shadow-md">
+              <div className={STAT_CARD_CLASS}>
                 <div className="mb-1 flex items-center gap-2">
                   <Award className="h-4 w-4 text-blue-500" />
                   <span className="text-xs font-medium text-muted-foreground">My Rank</span>
@@ -501,7 +523,7 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
                 </p>
                 <p className="text-[10px] text-muted-foreground">of {data.totalUsers} people</p>
               </div>
-              <div className="rounded-lg border bg-card p-3 shadow-sm transition-all hover:shadow-md">
+              <div className={STAT_CARD_CLASS}>
                 <div className="mb-1 flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-green-500" />
                   <span className="text-xs font-medium text-muted-foreground">Average</span>
@@ -512,7 +534,7 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
                   <span>Med: {data.statistics.medianTotal}</span>
                 </div>
               </div>
-              <div className="rounded-lg border bg-card p-3 shadow-sm transition-all hover:shadow-md">
+              <div className={STAT_CARD_CLASS}>
                 <div className="mb-1 flex items-center gap-2">
                   <Users className="h-4 w-4 text-purple-500" />
                   <span className="text-xs font-medium text-muted-foreground">Team Total</span>
@@ -524,32 +546,32 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
 
             {detailsExpanded && (
               <>
-                <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className={cn(glassSectionClass, "flex flex-col gap-3 rounded-2xl p-3 sm:flex-row sm:items-center sm:justify-between")}>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span className="font-medium text-foreground">当前月份</span>
-                    <span className="rounded-md bg-background px-2 py-1 font-mono text-xs">
+                    <span className="font-medium text-foreground">Current Month</span>
+                    <span className="rounded-lg border border-white/55 bg-white/72 px-2 py-1 font-mono text-xs text-slate-700 backdrop-blur-lg">
                       {selectedYear}-{String(selectedMonth).padStart(2, '0')}
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-1">
-                    <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => goMonth(-1)}>
+                    <Button variant="ghost" size="icon" className={ICON_BUTTON_CLASS} onClick={() => goMonth(-1)}>
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => goMonth(1)} disabled={isCurrentMonth}>
+                    <Button variant="ghost" size="icon" className={ICON_BUTTON_CLASS} onClick={() => goMonth(1)} disabled={isCurrentMonth}>
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                     <Button
                       variant={multiMode ? "secondary" : "ghost"}
                       size="sm"
                       onClick={() => { setMultiMode(!multiMode); setSelectedMonths(new Set()); }}
-                      className={cn("h-9 text-xs", multiMode && "text-primary")}
+                      className={cn("h-9 rounded-xl border border-white/50 bg-white/65 px-3 text-xs text-slate-700 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-xl hover:bg-white/78", multiMode && "border-sky-200/90 bg-sky-50/82 text-sky-700")}
                     >
                       Multi
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-9 w-9 text-muted-foreground"
+                      className={cn(ICON_BUTTON_CLASS, "text-slate-700")}
                       onClick={() => setShowDailyDetail(true)}
                       title="Daily Detail"
                     >
@@ -558,7 +580,7 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-9 w-9 text-muted-foreground"
+                      className={cn(ICON_BUTTON_CLASS, "text-slate-700")}
                       onClick={() => fetchMonth(selectedYear, selectedMonth)}
                     >
                       <RefreshCw className="h-4 w-4" />
@@ -567,7 +589,7 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
                 </div>
 
                 {multiMode && (
-                  <div className="rounded-lg border bg-muted/30 p-2">
+                  <div className={cn(glassToolbarClass, "rounded-xl p-2")}>
                     <div className="flex flex-wrap gap-1">
                       {availableMonths.map(key => (
                         <Badge
@@ -575,7 +597,7 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
                           variant={selectedMonths.has(key) ? "default" : "outline"}
                           className={cn(
                             "cursor-pointer hover:bg-primary/20",
-                            !selectedMonths.has(key) && "bg-background hover:text-primary"
+                            !selectedMonths.has(key) && "border-white/55 bg-white/78 text-slate-700 hover:bg-white/90 hover:text-primary"
                           )}
                           onClick={() => {
                             toggleMonth(key);
@@ -592,7 +614,7 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
 
                 {/* Apply Section - only current month + time restrictions */}
                 {isCurrentMonth && canApplyNow && (
-                  <div className="flex items-center gap-3 rounded-lg border bg-muted/30 p-3">
+                  <div className={cn(glassSectionClass, "flex items-center gap-3 rounded-2xl p-3")}>
                     <span className="text-sm font-medium text-muted-foreground">Apply:</span>
                     <div className="flex-1">
                       <ApplyButtons onApply={handleApply} disabled={applying} />
@@ -602,45 +624,60 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
 
             {/* Bar Chart */}
             {barChartData.length > 0 && (
-              <div className="rounded-lg border p-4">
-                <h4 className="mb-4 text-sm font-medium text-muted-foreground">
-                  {multiMode && selectedMonths.size > 1 ? 'Cumulative Ranking' : 'Monthly Ranking'}
-                </h4>
-                <div className="h-64 w-full">
+              <div className={cn(glassSectionClass, "rounded-[24px] border border-white/60 bg-white/66 p-5 shadow-[0_16px_36px_rgba(15,23,42,0.10)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/52")}>
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-900">
+                      {multiMode && selectedMonths.size > 1 ? 'Cumulative Ranking' : 'Monthly Ranking'}
+                    </h4>
+                    <p className="mt-1 text-xs text-slate-500">Compare dinner counts at a glance without axis clutter.</p>
+                  </div>
+                  <Badge variant="outline" className="rounded-full border-white/60 bg-white/70 px-2.5 py-1 text-[11px] text-slate-600">
+                    {barChartData.length} people
+                  </Badge>
+                </div>
+                <div className="h-56 w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={barChartData} margin={{ bottom: 60, top: 10 }}>
+                    <BarChart data={barChartData} margin={{ bottom: 8, top: 8, left: -12, right: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                      <XAxis 
-                        dataKey="name" 
-                        tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} 
-                        angle={-45} 
-                        textAnchor="end" 
-                        interval={0} 
-                        height={60} 
+                      <XAxis
+                        dataKey="name"
+                        hide
                         axisLine={false}
                         tickLine={false}
                       />
-                      <YAxis 
-                        tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} 
-                        allowDecimals={false} 
+                      <YAxis
+                        tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                        allowDecimals={false}
                         axisLine={false}
                         tickLine={false}
+                        width={28}
                       />
-                      <Tooltip 
+                      <Tooltip
                         cursor={{ fill: "hsl(var(--muted)/0.3)" }}
-                        contentStyle={{ 
-                          backgroundColor: "hsl(var(--popover))", 
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--popover))",
                           borderColor: "hsl(var(--border))",
                           borderRadius: "var(--radius)",
                           fontSize: "12px"
                         }}
-                        formatter={(value: number) => [`${value} times`, 'Count']} 
+                        formatter={(value: number) => [`${value} times`, 'Count']}
+                        labelFormatter={(label, payload) => {
+                          const entry = payload?.[0]?.payload as { isFlagged?: boolean } | undefined;
+                          return entry?.isFlagged ? `${label} (Key)` : label;
+                        }}
                       />
-                      <Bar dataKey="total" radius={[4, 4, 0, 0]}>
+                      <Bar dataKey="total" radius={[6, 6, 0, 0]} maxBarSize={18}>
                         {barChartData.map((entry, index) => (
-                          <Cell 
-                            key={`cell-${index}`} 
-                            fill={entry.isCurrentUser ? "hsl(var(--primary))" : "hsl(var(--muted))"} 
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={
+                              entry.isCurrentUser
+                                ? "hsl(var(--primary))"
+                                : entry.isFlagged
+                                  ? "hsl(24 95% 45%)"
+                                  : "hsl(var(--muted))"
+                            }
                           />
                         ))}
                       </Bar>
@@ -659,8 +696,8 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
                     <div
                       key={`${u.name}-${index}`}
                       className={cn(
-                        "flex items-center justify-between rounded-md border p-2 transition-colors",
-                        u.isCurrentUser ? "border-primary/30 bg-primary/5" : "bg-card hover:bg-muted/50"
+                        "flex items-center justify-between rounded-xl border p-2 transition-colors backdrop-blur-lg",
+                        u.isCurrentUser ? "border-primary/30 bg-primary/8" : "border-white/55 bg-white/66 hover:bg-white/78"
                       )}
                     >
                       <div className="flex items-center gap-3">
@@ -676,9 +713,18 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
                         <div className="flex flex-col">
                           <span className={cn(
                             "text-sm font-medium",
-                            u.isCurrentUser ? "text-primary" : "text-foreground"
+                            u.isCurrentUser
+                              ? "text-primary"
+                              : u.isFlagged
+                                ? "font-bold text-orange-600"
+                                : "text-foreground"
                           )}>
                             {u.name}
+                            {u.isFlagged && (
+                              <span className="ml-1 rounded bg-orange-100 px-1 py-0.5 text-[10px] font-semibold text-orange-700">
+                                Key
+                              </span>
+                            )}
                             {u.isCurrentUser && <span className="ml-1 text-[10px] font-normal text-muted-foreground">(You)</span>}
                           </span>
                         </div>
@@ -697,7 +743,7 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
 
             {/* Hidden Auto-Apply Section */}
             {showSecret && (
-              <div className="mt-4 rounded-lg border border-dashed border-destructive/50 bg-destructive/5 p-4">
+              <div className="mt-4 rounded-2xl border border-dashed border-destructive/50 bg-destructive/6 p-4 backdrop-blur-lg">
                 <div className="mb-3 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-destructive">
                     <Clock className="h-4 w-4" />
@@ -710,34 +756,35 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
 
                 <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr_1fr_auto]">
                   <label className="space-y-2 text-xs font-medium text-foreground">
-                    <span className="block">日期</span>
+                    <span className="block">Date</span>
                     <input
                       type="date"
                       min={todayKey}
                       value={autoApplyDraftDate}
                       onChange={e => setAutoApplyDraftDate(e.target.value)}
-                      className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none transition focus:border-destructive focus:ring-2 focus:ring-destructive/20"
+                      className={cn("h-9 w-full rounded-xl px-3 text-sm outline-none transition focus:border-destructive focus:ring-2 focus:ring-destructive/20", glassInputClass)}
                     />
                   </label>
                   <label className="space-y-2 text-xs font-medium text-foreground">
-                    <span className="block">时间</span>
+                    <span className="block">Time</span>
                     <input
                       type="time"
                       value={autoApplyDraftTime}
                       onChange={e => setAutoApplyDraftTime(e.target.value)}
-                      className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none transition focus:border-destructive focus:ring-2 focus:ring-destructive/20"
+                      className={cn("h-9 w-full rounded-xl px-3 text-sm outline-none transition focus:border-destructive focus:ring-2 focus:ring-destructive/20", glassInputClass)}
                     />
                   </label>
                   <label className="space-y-2 text-xs font-medium text-foreground">
-                    <span className="block">次数</span>
-                    <select
-                      value={autoApplyDraftTimes}
-                      onChange={e => setAutoApplyDraftTimes(Number(e.target.value))}
-                      className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    >
-                      <option value={1}>1 次</option>
-                      <option value={2}>2 次</option>
-                    </select>
+                    <span className="block">Count</span>
+                    <Select value={String(autoApplyDraftTimes)} onValueChange={(value) => setAutoApplyDraftTimes(Number(value))}>
+                      <SelectTrigger className={GLASS_SELECT_TRIGGER_CLASS}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1 time</SelectItem>
+                        <SelectItem value="2">2 times</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </label>
                   <div className="flex items-end">
                     <Button
@@ -746,14 +793,14 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
                       className="h-9 w-full bg-destructive text-destructive-foreground hover:bg-destructive/90 lg:w-auto"
                       onClick={handleAddAutoApplyTask}
                     >
-                      确认添加
+                      Add Task
                     </Button>
                   </div>
                 </div>
 
-                <div className="mt-4 rounded-md border border-destructive/20 bg-background/80 p-3">
+                <div className="mt-4 rounded-xl border border-destructive/20 bg-white/78 p-3 backdrop-blur-lg">
                   <div className="mb-3 flex items-center justify-between">
-                    <span className="text-sm font-semibold text-foreground">待执行任务</span>
+                    <span className="text-sm font-semibold text-foreground">Pending Tasks</span>
                     <Badge variant="outline" className="text-xs">
                       {autoApplyTasks.length}
                     </Badge>
@@ -764,13 +811,13 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
                       {autoApplyTasks.map(task => (
                         <div
                           key={task.id}
-                          className="flex items-center justify-between rounded-md border border-border/70 bg-background px-3 py-2"
+                          className="flex items-center justify-between rounded-xl border border-white/55 bg-white/76 px-3 py-2 backdrop-blur-lg"
                         >
                           <div className="min-w-0">
                             <p className="truncate text-sm font-medium text-foreground">
                               {task.scheduleDate} {task.time}
                             </p>
-                            <p className="text-xs text-muted-foreground">今天 {task.times} 次</p>
+                            <p className="text-xs text-muted-foreground">Today x{task.times}</p>
                           </div>
                           <Button
                             type="button"
@@ -778,7 +825,7 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
                             size="icon"
                             className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                             onClick={() => handleDeleteAutoApplyTask(task.id)}
-                            aria-label={`删除任务 ${task.scheduleDate} ${task.time}`}
+                            aria-label={`Delete task ${task.scheduleDate} ${task.time}`}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -786,7 +833,7 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">暂无待执行任务</p>
+                    <p className="text-sm text-muted-foreground">No pending tasks</p>
                   )}
                 </div>
               </div>

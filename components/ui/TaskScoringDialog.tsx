@@ -16,6 +16,7 @@ import {
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { glassInputClass, glassPanelStrongClass, glassToolbarClass } from '@/components/ui/glass';
 
 interface TaskScoringDialogProps {
   isOpen: boolean;
@@ -157,7 +158,12 @@ export function TaskScoringDialog({ isOpen, onClose, onConfirm, currentValues, a
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent 
-        className="max-w-lg p-0 border-border/40 shadow-2xl overflow-hidden z-[10300] bg-card gap-0"
+        showCloseButton={false}
+        className={cn(
+          "max-w-xl overflow-hidden p-0 gap-0 z-[10300] rounded-3xl border border-white/70",
+          "shadow-[0_28px_66px_rgba(15,23,42,0.2)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[#f8fbff]/78",
+          glassPanelStrongClass
+        )}
         onEscapeKeyDown={(event) => {
           event.stopPropagation();
         }}
@@ -169,42 +175,42 @@ export function TaskScoringDialog({ isOpen, onClose, onConfirm, currentValues, a
           <DialogTitle>任务评分</DialogTitle>
         </DialogHeader>
         
-        <div className="p-6 md:p-8 space-y-8">
+        <div className="space-y-0 p-0">
           {/* Header */}
-          <div className="flex items-start justify-between">
-            <div className="flex gap-4">
-              <div className="p-3 bg-amber-500/10 rounded-xl text-amber-600 dark:text-amber-500 flex-shrink-0">
+          <div className={cn(glassToolbarClass, "m-3 flex items-start justify-between rounded-2xl border border-white/55 px-5 py-4")}>
+            <div className="flex gap-3">
+              <div className="rounded-xl border border-amber-200/70 bg-amber-50/78 p-2.5 text-amber-700 shadow-[0_10px_24px_rgba(217,119,6,0.12)]">
                 <Award className="h-6 w-6" />
               </div>
               <div className="space-y-1">
-                <h2 className="text-xl font-semibold tracking-tight">任务评分</h2>
-                <p className="text-sm text-muted-foreground">对任务的复杂度与完成质量进行评估</p>
+                <h2 className="text-lg font-semibold tracking-tight text-slate-900">任务评分</h2>
+                <p className="text-xs text-slate-600">对任务复杂度与完成质量进行评估</p>
               </div>
             </div>
-            {/* Close button is handled by DialogContent's default X or we can keep this custom one if we hide the default */}
             <Button
               variant="ghost"
               size="icon"
               onClick={onClose}
-              className="text-muted-foreground/50 hover:text-foreground -mr-2 -mt-2 rounded-full"
+              className="h-8 w-8 rounded-xl border border-white/55 bg-white/72 text-slate-500 shadow-[0_8px_20px_rgba(15,23,42,0.1)] backdrop-blur-lg transition-all hover:-translate-y-0.5 hover:border-sky-200/80 hover:bg-white/90 hover:text-slate-800"
+              aria-label="关闭评分弹窗"
             >
               <X className="h-5 w-5" />
             </Button>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-6 px-6 pb-6 pt-2 md:px-8 md:pb-8">
             {/* Recommendation Card */}
             {recommendedWorkClass && (
-              <div className="bg-primary/5 border border-primary/10 rounded-xl p-4 relative overflow-hidden group">
-                <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-50" />
+              <div className="relative overflow-hidden rounded-2xl border border-sky-200/70 bg-sky-50/72 p-4 shadow-[0_12px_28px_rgba(14,116,144,0.12)] backdrop-blur-xl supports-[backdrop-filter]:bg-sky-50/58">
+                <div className="absolute inset-0 bg-gradient-to-r from-sky-100/35 via-sky-50/20 to-transparent" />
                 <div className="relative z-10 flex items-center justify-between gap-4">
                   <div className="space-y-1.5">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-sky-700">
                       <Sparkles className="h-3.5 w-3.5" />
                       AI 智能推荐
                     </div>
-                    <div className="text-sm text-foreground/90">
-                      基于工时估算，建议定级 <span className="font-semibold text-primary">{recommendedWorkClass.split('，')[0]}</span>
+                    <div className="text-sm text-slate-700">
+                      基于工时估算，建议定级 <span className="font-semibold text-sky-700">{recommendedWorkClass.split('，')[0]}</span>
                     </div>
                   </div>
                   <Button
@@ -215,7 +221,7 @@ export function TaskScoringDialog({ isOpen, onClose, onConfirm, currentValues, a
                       setWorkScore('7分：按期标准完成');
                       toast.success('已采用推荐评分');
                     }}
-                    className="h-8 text-xs font-medium bg-background/80 hover:bg-background shadow-sm border-transparent hover:border-primary/20 transition-all"
+                    className="h-8 rounded-full border border-white/60 bg-white/78 px-3 text-xs font-medium text-slate-700 shadow-[0_8px_18px_rgba(15,23,42,0.08)] transition-all hover:-translate-y-0.5 hover:border-sky-200/80 hover:bg-white/95"
                   >
                     一键采纳
                   </Button>
@@ -234,10 +240,10 @@ export function TaskScoringDialog({ isOpen, onClose, onConfirm, currentValues, a
                     setWorkClass(displayText);
                   }}
                 >
-                  <SelectTrigger className="w-full h-11 bg-muted/30 hover:bg-muted/50 border-transparent hover:border-border/50 focus:ring-1 focus:ring-primary/20 rounded-lg transition-all">
+                  <SelectTrigger className={cn(glassInputClass, "h-11 w-full rounded-xl border-white/55 bg-white/72 text-sm shadow-none transition-all hover:border-sky-200/80 hover:bg-white/92 focus-visible:ring-0")}>
                     <SelectValue placeholder="选择任务分类..." />
                   </SelectTrigger>
-                  <SelectContent className="max-h-[300px] p-1 z-[10310]">
+                  <SelectContent className="z-[10310] max-h-[300px] rounded-2xl border border-white/65 bg-white/85 p-1 shadow-[0_18px_38px_rgba(15,23,42,0.16)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/72">
                     {WORK_CLASSES.map(cls => (
                       <SelectItem 
                         key={extractWorkClassValue(cls)} 
@@ -265,10 +271,10 @@ export function TaskScoringDialog({ isOpen, onClose, onConfirm, currentValues, a
                     setWorkScore(displayText);
                   }}
                 >
-                  <SelectTrigger className="w-full h-11 bg-muted/30 hover:bg-muted/50 border-transparent hover:border-border/50 focus:ring-1 focus:ring-primary/20 rounded-lg transition-all">
+                  <SelectTrigger className={cn(glassInputClass, "h-11 w-full rounded-xl border-white/55 bg-white/72 text-sm shadow-none transition-all hover:border-sky-200/80 hover:bg-white/92 focus-visible:ring-0")}>
                     <SelectValue placeholder="选择质量评分..." />
                   </SelectTrigger>
-                  <SelectContent className="p-1 z-[10310]">
+                  <SelectContent className="z-[10310] rounded-2xl border border-white/65 bg-white/85 p-1 shadow-[0_18px_38px_rgba(15,23,42,0.16)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/72">
                     {WORK_SCORES.map(score => (
                       <SelectItem 
                         key={extractWorkScoreValue(score)} 
@@ -294,11 +300,11 @@ export function TaskScoringDialog({ isOpen, onClose, onConfirm, currentValues, a
           </div>
 
           {/* Footer */}
-          <div className="flex items-center gap-3 pt-2">
+          <div className="flex items-center gap-3 border-t border-white/60 px-6 pb-6 pt-4 md:px-8 md:pb-8">
             <Button
               variant="ghost"
               onClick={onClose}
-              className="flex-1 h-11 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-lg"
+              className="h-11 flex-1 rounded-xl border border-white/60 bg-white/70 text-slate-600 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-lg transition-all hover:border-sky-200/80 hover:bg-white/92 hover:text-slate-900"
             >
               取消
             </Button>
@@ -315,7 +321,7 @@ export function TaskScoringDialog({ isOpen, onClose, onConfirm, currentValues, a
                   description: `总分: ${Number(actualWorkClass) + Number(actualWorkScore)}分`
                 });
               }}
-              className="flex-[2] h-11 rounded-lg bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 text-primary-foreground font-medium transition-all hover:scale-[1.02] active:scale-[0.98]"
+              className="h-11 flex-[2] rounded-xl border border-sky-300/75 bg-sky-500 text-white shadow-[0_12px_26px_rgba(14,116,144,0.28)] transition-all hover:-translate-y-0.5 hover:bg-sky-600 active:scale-[0.98]"
               disabled={!workClass || !workScore}
             >
               <Check className="w-4 h-4 mr-2" />

@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import type { EnvEntry } from '@/lib/settings/types';
 import { refreshPhabricatorSession } from '@/lib/auto-refresh-session';
+import { refreshContactsSession } from '@/lib/contacts-session';
 import { refreshDinnerSession } from '@/lib/dinner-session';
 import { refreshGerritSession } from '@/lib/gerrit/session';
 import { ConduitClient } from '@/lib/conduit/client';
@@ -21,6 +22,7 @@ const DEFAULT_ENV_ENTRIES: EnvEntry[] = [
   { key: 'PHA_USER', value: '' },
   { key: 'PHA_SESSION', value: '' },
   { key: 'DINNER_SESSION', value: '' },
+  { key: 'CONTACTS_SESSION', value: '' },
   { key: 'GERRIT_SESSION', value: '' },
   { key: 'BLOG_PHID_MAP', value: '{}' },
 ];
@@ -266,6 +268,22 @@ async function enrichComputedEntries(entries: EnvEntry[]): Promise<{ entries: En
       }
     } catch (error: any) {
       warnings.push(`DINNER_SESSION 自动刷新失败: ${error?.message || 'unknown error'}`);
+    }
+  }
+
+  if (!getEntryValue(next, 'CONTACTS_SESSION').trim() && hasLoginCreds) {
+    try {
+      const refreshed = await refreshContactsSession();
+      const session = Object.entries(refreshed)
+        .filter(([, value]) => value)
+        .map(([key, value]) => `${key}=${value}`)
+        .join('; ');
+      if (session) {
+        next = setEntryValue(next, 'CONTACTS_SESSION', session);
+        applyEntriesToProcessEnv(next);
+      }
+    } catch (error: any) {
+      warnings.push(`CONTACTS_SESSION 自动刷新失败: ${error?.message || 'unknown error'}`);
     }
   }
 
