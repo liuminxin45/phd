@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils';
 import {
   AUTO_AI_STATE_EVENT,
   DEFAULT_AUTO_AI_MAX_LINES,
+  hydrateAutoAiStateFromDisk,
   loadAutoAiEnabled,
   loadAutoAiJobs,
   loadAutoAiMaxLines,
@@ -254,6 +255,9 @@ export default function ReviewAutoAiPage() {
 
   useEffect(() => {
     syncFromStorage();
+    void hydrateAutoAiStateFromDisk(true).finally(() => {
+      syncFromStorage();
+    });
     void loadDashboard();
 
     const onStorage = (event: StorageEvent) => {
@@ -298,6 +302,13 @@ export default function ReviewAutoAiPage() {
   }, [allReadableChanges]);
   const queuedKeys = useMemo(() => new Set(Object.keys(jobs)), [jobs]);
   const queuedChangeNumbers = useMemo(() => new Set(Object.values(jobs).map((job) => job.changeNumber)), [jobs]);
+  const queuedJobMap = useMemo(() => {
+    const map = new Map<string, AutoAiJob>();
+    for (const job of Object.values(jobs)) {
+      map.set(job.key, job);
+    }
+    return map;
+  }, [jobs]);
 
   const grouped = useMemo(() => {
     const all = Object.values(jobs)
@@ -324,7 +335,12 @@ export default function ReviewAutoAiPage() {
   }, [jobs, readableChangeMap, riskMap]);
 
   const handleQueueOne = useCallback((change: GerritChange) => {
-    upsertAutoAiJobs([change], { source: 'manual', maxLines, preserveFinished: true });
+    upsertAutoAiJobs([change], {
+      source: 'manual',
+      maxLines,
+      ignoreMaxLines: true,
+      preserveFinished: false,
+    });
     setJobs(loadAutoAiJobs());
   }, [maxLines]);
 
@@ -408,7 +424,8 @@ export default function ReviewAutoAiPage() {
                 </div>
               ) : (
                 allReadableChanges.map((change) => {
-                  const queued = queuedChangeNumbers.has(change._number) && queuedKeys.has(`${change._number}:${String(change.current_revision)}`);
+                  const currentJob = queuedJobMap.get(`${change._number}:${String(change.current_revision)}`);
+                  const queued = currentJob?.status === 'pending' || currentJob?.status === 'running';
                   return (
                     <div key={`${change._number}:${change.current_revision}`} className="rounded-2xl border border-border/60 bg-background/95 p-4">
                       <div className="flex items-start justify-between gap-3">
@@ -432,7 +449,7 @@ export default function ReviewAutoAiPage() {
                           onClick={() => handleQueueOne(change)}
                           size="icon"
                           className="h-9 w-9 rounded-full shrink-0"
-                          title={queued ? 'Queued' : 'Add to queue'}
+                          title={queued ? 'Queued' : currentJob ? 'Queue again' : 'Add to queue'}
                         >
                           {queued ? <CheckCircle2 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                         </Button>

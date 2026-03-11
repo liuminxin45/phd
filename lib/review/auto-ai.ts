@@ -8,6 +8,8 @@ export const AUTO_AI_ENABLED_AT_KEY = 'review-auto-ai-enabled-at';
 export const AUTO_AI_MAX_CONCURRENCY = 2;
 export const DEFAULT_AUTO_AI_MAX_LINES = 2000;
 export const AUTO_AI_STATE_EVENT = 'review-auto-ai-state-change';
+const AUTO_AI_DISK_SYNC_LOCK_KEY = 'review-auto-ai-sync-lock';
+const AUTO_AI_DISK_SYNC_MARK_KEY = 'review-auto-ai-sync-mark';
 
 export type AutoAiJobStatus = 'pending' | 'running' | 'done' | 'error' | 'skipped';
 export type AutoAiJobSource = 'auto' | 'manual';
@@ -58,6 +60,20 @@ export interface PersistedAutoAiReviewResult {
   generatedAt: string;
 }
 
+interface PersistedAutoAiSnapshot {
+  enabled?: boolean;
+  enabledAt?: number | null;
+  maxLines?: number;
+  pauseUntil?: number | null;
+  jobs?: Record<string, AutoAiJob>;
+  riskMap?: Record<number, PersistedAutoAiRiskSummary>;
+  resultCache?: Record<string, PersistedAutoAiReviewResult>;
+  updatedAt?: string;
+}
+
+let persistTimer: number | null = null;
+let hydratePromise: Promise<void> | null = null;
+
 function dispatchAutoAiStateChange(keys?: string[]) {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent(AUTO_AI_STATE_EVENT, { detail: { keys: keys || [] } }));
@@ -83,6 +99,137 @@ function writeLocalStorage(key: string, value: string | null) {
 function hasLocalStorageValueChanged(key: string, nextValue: string | null): boolean {
   const currentValue = readLocalStorage(key);
   return currentValue !== nextValue;
+}
+
+function queuePersistToDisk() {
+  if (typeof window === 'undefined') return;
+  if (persistTimer) window.clearTimeout(persistTimer);
+  persistTimer = window.setTimeout(() => {
+    persistTimer = null;
+    void persistAutoAiStateToDisk();
+  }, 120);
+}
+
+function applySnapshotToLocalStorage(snapshot: PersistedAutoAiSnapshot): boolean {
+  let changed = false;
+
+  const enabledValue = typeof snapshot.enabled === 'boolean' ? (snapshot.enabled ? '1' : '0') : null;
+  if (enabledValue !== null && hasLocalStorageValueChanged(AUTO_AI_ENABLED_KEY, enabledValue)) {
+    writeLocalStorage(AUTO_AI_ENABLED_KEY, enabledValue);
+    changed = true;
+  }
+
+  const enabledAtValue = Number.isFinite(snapshot.enabledAt as number) && (snapshot.enabledAt as number) > 0
+    ? String(snapshot.enabledAt)
+    : null;
+  if (snapshot.enabledAt !== undefined && hasLocalStorageValueChanged(AUTO_AI_ENABLED_AT_KEY, enabledAtValue)) {
+    writeLocalStorage(AUTO_AI_ENABLED_AT_KEY, enabledAtValue);
+    changed = true;
+  }
+
+  const maxLinesValue = Number.isFinite(snapshot.maxLines as number) && (snapshot.maxLines as number) > 0
+    ? String(Math.floor(snapshot.maxLines as number))
+    : null;
+  if (snapshot.maxLines !== undefined && hasLocalStorageValueChanged(AUTO_AI_MAX_LINES_KEY, maxLinesValue)) {
+    writeLocalStorage(AUTO_AI_MAX_LINES_KEY, maxLinesValue);
+    changed = true;
+  }
+
+  const pauseUntilValue = Number.isFinite(snapshot.pauseUntil as number) && (snapshot.pauseUntil as number) > 0
+    ? String(snapshot.pauseUntil)
+    : null;
+  if (snapshot.pauseUntil !== undefined && hasLocalStorageValueChanged(AUTO_AI_PAUSE_UNTIL_KEY, pauseUntilValue)) {
+    writeLocalStorage(AUTO_AI_PAUSE_UNTIL_KEY, pauseUntilValue);
+    changed = true;
+  }
+
+  if (snapshot.jobs && hasLocalStorageValueChanged(AUTO_AI_JOBS_KEY, JSON.stringify(snapshot.jobs))) {
+    writeLocalStorage(AUTO_AI_JOBS_KEY, JSON.stringify(snapshot.jobs));
+    changed = true;
+  }
+
+  if (snapshot.riskMap && hasLocalStorageValueChanged(AUTO_AI_RISK_MAP_KEY, JSON.stringify(snapshot.riskMap))) {
+    writeLocalStorage(AUTO_AI_RISK_MAP_KEY, JSON.stringify(snapshot.riskMap));
+    changed = true;
+  }
+
+  if (snapshot.resultCache && hasLocalStorageValueChanged(AUTO_AI_RESULT_CACHE_KEY, JSON.stringify(snapshot.resultCache))) {
+    writeLocalStorage(AUTO_AI_RESULT_CACHE_KEY, JSON.stringify(snapshot.resultCache));
+    changed = true;
+  }
+
+  if (changed) {
+    writeLocalStorage(AUTO_AI_DISK_SYNC_MARK_KEY, String(Date.now()));
+    dispatchAutoAiStateChange([
+      AUTO_AI_ENABLED_KEY,
+      AUTO_AI_ENABLED_AT_KEY,
+      AUTO_AI_MAX_LINES_KEY,
+      AUTO_AI_PAUSE_UNTIL_KEY,
+      AUTO_AI_JOBS_KEY,
+      AUTO_AI_RISK_MAP_KEY,
+      AUTO_AI_RESULT_CACHE_KEY,
+    ]);
+  }
+
+  return changed;
+}
+
+export async function hydrateAutoAiStateFromDisk(force = false): Promise<void> {
+  if (typeof window === 'undefined') return;
+  if (hydratePromise && !force) return hydratePromise;
+
+  hydratePromise = fetch('/api/gerrit/ai-monitor-state')
+    .then(async (response) => {
+      if (!response.ok) throw new Error('Failed to load AI monitor state');
+      const payload = await response.json();
+      const snapshot = payload?.state as PersistedAutoAiSnapshot | null | undefined;
+      if (!snapshot || typeof snapshot !== 'object') return;
+
+      const hasLocalState =
+        !!readLocalStorage(AUTO_AI_JOBS_KEY) ||
+        !!readLocalStorage(AUTO_AI_RISK_MAP_KEY) ||
+        !!readLocalStorage(AUTO_AI_RESULT_CACHE_KEY);
+
+      if (!force && hasLocalState) return;
+      applySnapshotToLocalStorage(snapshot);
+    })
+    .catch(() => {})
+    .finally(() => {
+      hydratePromise = null;
+    });
+
+  return hydratePromise;
+}
+
+export async function persistAutoAiStateToDisk(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  if (readLocalStorage(AUTO_AI_DISK_SYNC_LOCK_KEY) === '1') return;
+
+  writeLocalStorage(AUTO_AI_DISK_SYNC_LOCK_KEY, '1');
+  try {
+    await fetch('/api/gerrit/ai-monitor-state', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        state: {
+          enabled: loadAutoAiEnabled(),
+          enabledAt: loadAutoAiEnabledAt(),
+          maxLines: loadAutoAiMaxLines(),
+          pauseUntil: loadAutoAiPauseUntil(),
+          jobs: loadAutoAiJobs(),
+          riskMap: loadAutoAiRiskMap(),
+          resultCache: loadAutoAiResultCache(),
+          updatedAt: new Date().toISOString(),
+        },
+      }),
+    });
+  } catch {
+    // Keep local state even if disk sync fails.
+  } finally {
+    writeLocalStorage(AUTO_AI_DISK_SYNC_LOCK_KEY, null);
+  }
 }
 
 export function getAutoAiJobKey(changeNumber: number, revisionId: string): string {
@@ -161,6 +308,7 @@ export function setAutoAiEnabled(enabled: boolean): number | null {
   }
   if (enabledChanged || enabledAtChanged) {
     dispatchAutoAiStateChange([AUTO_AI_ENABLED_KEY, AUTO_AI_ENABLED_AT_KEY]);
+    queuePersistToDisk();
   }
   return enabled ? now : loadAutoAiEnabledAt();
 }
@@ -173,6 +321,7 @@ export function ensureAutoAiEnabledAt(): number | null {
   const now = Date.now();
   writeLocalStorage(AUTO_AI_ENABLED_AT_KEY, String(now));
   dispatchAutoAiStateChange([AUTO_AI_ENABLED_AT_KEY]);
+  queuePersistToDisk();
   return now;
 }
 
@@ -182,6 +331,7 @@ export function setAutoAiMaxLines(value: number) {
   if (!hasLocalStorageValueChanged(AUTO_AI_MAX_LINES_KEY, nextValue)) return;
   writeLocalStorage(AUTO_AI_MAX_LINES_KEY, nextValue);
   dispatchAutoAiStateChange([AUTO_AI_MAX_LINES_KEY]);
+  queuePersistToDisk();
 }
 
 export function setAutoAiPauseUntil(value: number | null) {
@@ -189,6 +339,7 @@ export function setAutoAiPauseUntil(value: number | null) {
   if (!hasLocalStorageValueChanged(AUTO_AI_PAUSE_UNTIL_KEY, nextValue)) return;
   writeLocalStorage(AUTO_AI_PAUSE_UNTIL_KEY, nextValue);
   dispatchAutoAiStateChange([AUTO_AI_PAUSE_UNTIL_KEY]);
+  queuePersistToDisk();
 }
 
 export function setAutoAiJobs(jobs: Record<string, AutoAiJob>) {
@@ -196,6 +347,7 @@ export function setAutoAiJobs(jobs: Record<string, AutoAiJob>) {
   if (!hasLocalStorageValueChanged(AUTO_AI_JOBS_KEY, nextValue)) return;
   writeLocalStorage(AUTO_AI_JOBS_KEY, nextValue);
   dispatchAutoAiStateChange([AUTO_AI_JOBS_KEY]);
+  queuePersistToDisk();
 }
 
 export function setAutoAiRiskMap(riskMap: Record<number, PersistedAutoAiRiskSummary>) {
@@ -203,6 +355,7 @@ export function setAutoAiRiskMap(riskMap: Record<number, PersistedAutoAiRiskSumm
   if (!hasLocalStorageValueChanged(AUTO_AI_RISK_MAP_KEY, nextValue)) return;
   writeLocalStorage(AUTO_AI_RISK_MAP_KEY, nextValue);
   dispatchAutoAiStateChange([AUTO_AI_RISK_MAP_KEY]);
+  queuePersistToDisk();
 }
 
 export function setAutoAiResultCache(cache: Record<string, PersistedAutoAiReviewResult>) {
@@ -210,6 +363,7 @@ export function setAutoAiResultCache(cache: Record<string, PersistedAutoAiReview
   if (!hasLocalStorageValueChanged(AUTO_AI_RESULT_CACHE_KEY, nextValue)) return;
   writeLocalStorage(AUTO_AI_RESULT_CACHE_KEY, nextValue);
   dispatchAutoAiStateChange([AUTO_AI_RESULT_CACHE_KEY]);
+  queuePersistToDisk();
 }
 
 export function saveAutoAiResultCacheEntry(
@@ -231,14 +385,14 @@ function pickOwnerName(change: AutoAiCandidateChange): string | undefined {
 
 export function buildAutoAiJobFromChange(
   change: AutoAiCandidateChange,
-  options?: { maxLines?: number; source?: AutoAiJobSource; now?: string }
+  options?: { maxLines?: number; source?: AutoAiJobSource; now?: string; ignoreMaxLines?: boolean }
 ): AutoAiJob | null {
   const revisionId = change.current_revision ? String(change.current_revision) : '';
   if (!change._number || !revisionId) return null;
   const totalChangedLines = Math.max(0, (change.insertions || 0) + (change.deletions || 0));
   const maxLines = options?.maxLines ?? loadAutoAiMaxLines();
   const now = options?.now || new Date().toISOString();
-  const shouldSkip = totalChangedLines > maxLines;
+  const shouldSkip = options?.ignoreMaxLines ? false : totalChangedLines > maxLines;
 
   return {
     key: getAutoAiJobKey(change._number, revisionId),
@@ -258,7 +412,7 @@ export function buildAutoAiJobFromChange(
 
 export function upsertAutoAiJobs(
   changes: AutoAiCandidateChange[],
-  options?: { source?: AutoAiJobSource; maxLines?: number; preserveFinished?: boolean }
+  options?: { source?: AutoAiJobSource; maxLines?: number; preserveFinished?: boolean; ignoreMaxLines?: boolean }
 ): Record<string, AutoAiJob> {
   const prev = loadAutoAiJobs();
   const next: Record<string, AutoAiJob> = { ...prev };
@@ -269,6 +423,7 @@ export function upsertAutoAiJobs(
       source: options?.source,
       maxLines: options?.maxLines,
       now,
+      ignoreMaxLines: options?.ignoreMaxLines,
     });
     if (!built) continue;
 

@@ -25,7 +25,48 @@ export function parseJsonContent(rawContent: string): any {
     .replace(/^\s*```(?:json)?\s*\r?\n?/i, '')
     .replace(/\r?\n?```\s*$/i, '')
     .trim();
-  return JSON.parse(cleaned);
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const startIndex = cleaned.search(/[\[{]/);
+    if (startIndex < 0) throw new Error('LLM output does not contain JSON');
+
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    const opening = cleaned[startIndex];
+    const closing = opening === '[' ? ']' : '}';
+
+    for (let i = startIndex; i < cleaned.length; i++) {
+      const char = cleaned[i];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (char === '\\') {
+          escaped = true;
+        } else if (char === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (char === '"') {
+        inString = true;
+        continue;
+      }
+
+      if (char === opening) depth += 1;
+      if (char === closing) {
+        depth -= 1;
+        if (depth === 0) {
+          return JSON.parse(cleaned.slice(startIndex, i + 1));
+        }
+      }
+    }
+
+    throw new Error('Unable to recover JSON from LLM output');
+  }
 }
 
 /**

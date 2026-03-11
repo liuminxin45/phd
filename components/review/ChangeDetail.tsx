@@ -32,6 +32,7 @@ import {
   AUTO_AI_STATE_EVENT,
   getAutoAiJobKey,
   getAutoAiResultCacheKey,
+  hydrateAutoAiStateFromDisk,
   loadAutoAiJobs,
   loadAutoAiResultCache,
   setAutoAiJobs,
@@ -106,6 +107,29 @@ function extractApiErrorMessage(err: any): string {
   return tail || raw;
 }
 
+function waitForElement(selector: string, timeoutMs = 2500, intervalMs = 60): Promise<Element | null> {
+  return new Promise((resolve) => {
+    const start = Date.now();
+
+    const tryFind = () => {
+      const element = document.querySelector(selector);
+      if (element) {
+        resolve(element);
+        return;
+      }
+
+      if (Date.now() - start >= timeoutMs) {
+        resolve(null);
+        return;
+      }
+
+      window.setTimeout(tryFind, intervalMs);
+    };
+
+    tryFind();
+  });
+}
+
 const AI_REVIEW_RUNNING_TIMEOUT_MS = 10 * 60 * 1000;
 
 interface ChangeDetailResponse {
@@ -121,6 +145,14 @@ interface UnresolvedThreadTarget {
   line: number;
   patchSet: number | undefined;
   updated: string;
+}
+
+interface PendingCommentJumpTarget {
+  rootId?: string;
+  path: string;
+  line?: number;
+  patchSet?: number;
+  highlightTone: 'emerald' | 'blue';
 }
 
 function buildFileEntries(filesMap: Record<string, GerritFileInfo>): FileEntry[] {
@@ -223,6 +255,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   const [hasPendingUpdate, setHasPendingUpdate] = useState(false);
   const [activeUnresolvedIndex, setActiveUnresolvedIndex] = useState(-1);
   const [expandedCommentThreadId, setExpandedCommentThreadId] = useState<string | null>(null);
+  const [pendingCommentJump, setPendingCommentJump] = useState<PendingCommentJumpTarget | null>(null);
   const [aiReportCollapsed, setAiReportCollapsed] = useState(true);
   const [aiReportVersion, setAiReportVersion] = useState(0);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -317,6 +350,10 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   }, [currentAiReviewJob]);
 
   useEffect(() => {
+    void hydrateAutoAiStateFromDisk();
+  }, []);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const handleAutoAiStateChange = () => {
@@ -381,8 +418,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
         return PARENT_PATCHSET_ID;
       }
       if (prev && res.change.revisions?.[prev]) return prev;
-      if (currentRevision && currentRevision._number <= 1) return PARENT_PATCHSET_ID;
-      return oldestRevisionId;
+      return PARENT_PATCHSET_ID;
     });
     detailSignatureRef.current = buildDetailSnapshotSignature(res);
     pendingDetailRef.current = null;
@@ -451,21 +487,12 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
 
   useEffect(() => {
     if (!change?.revisions) return;
-    const revisionsAsc = Object.entries(change.revisions)
-      .sort(([, a], [, b]) => a._number - b._number);
-    const oldestRevisionId = revisionsAsc[0]?.[0];
-
-    if (!oldestRevisionId) return;
-    const selectedRevision = selectedRevisionId ? change.revisions[selectedRevisionId] : undefined;
-    const defaultBaseRevisionId = selectedRevision && selectedRevision._number <= 1
-      ? PARENT_PATCHSET_ID
-      : oldestRevisionId;
     if (
       !baseRevisionId ||
-      (selectedRevision && selectedRevision._number <= 1 && baseRevisionId !== PARENT_PATCHSET_ID) ||
+      baseRevisionId !== PARENT_PATCHSET_ID ||
       (baseRevisionId !== PARENT_PATCHSET_ID && !change.revisions[baseRevisionId])
     ) {
-      setBaseRevisionId(defaultBaseRevisionId);
+      setBaseRevisionId(PARENT_PATCHSET_ID);
     }
   }, [baseRevisionId, change, selectedRevisionId]);
 
@@ -829,7 +856,10 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
 
   // Search across all file diffs
   const handleSearchFile = useCallback(async (query: string) => {
-    if ((selectedRevisionCommitMessage || '').includes(query)) {
+    const keyword = query.trim();
+    if (!keyword) return;
+
+    if ((selectedRevisionCommitMessage || '').includes(keyword)) {
       setSelectedFile(COMMIT_MESSAGE_FILE_PATH);
       setCurrentDiff(buildCommitMessageDiff(selectedRevisionCommitMessage || ''));
       return;
@@ -848,9 +878,9 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
           });
         // Check if any content contains the search query
         const found = diff.content?.some((chunk: any) =>
-          (chunk.ab || []).some((l: string) => l.includes(query)) ||
-          (chunk.a || []).some((l: string) => l.includes(query)) ||
-          (chunk.b || []).some((l: string) => l.includes(query))
+          (chunk.ab || []).some((l: string) => l.includes(keyword)) ||
+          (chunk.a || []).some((l: string) => l.includes(keyword)) ||
+          (chunk.b || []).some((l: string) => l.includes(keyword))
         );
         if (found) {
           // Expand this file
@@ -863,7 +893,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
         // Skip files that fail to load
       }
     }
-    toast.error(`No matches found for "${query}"`);
+    toast.error(`No matches found for "${keyword}"`);
   }, [changeNumber, compareMode, displayFiles, effectiveBaseRevisionId, selectedRevisionCommitMessage, selectedRevisionId]);
 
   // Submit review (includes pending inline comments)
@@ -1027,45 +1057,13 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     void fetchDetail({ silent: true });
   }, [fetchDetail, relatedChanges, selectedRelatedKeys]);
 
-  const jumpToCommentLocation = useCallback((file: string, line?: number, patchSet?: number) => {
-    const revisionForPatch = patchSet
-      ? Object.entries(change?.revisions || {}).find(([, rev]) => rev._number === patchSet)?.[0]
-      : undefined;
-    const delay = revisionForPatch && revisionForPatch !== selectedRevisionId ? 500 : 160;
-
-    if (revisionForPatch && revisionForPatch !== selectedRevisionId) {
-      setSelectedRevisionId(revisionForPatch);
-    }
-
-    setTimeout(() => {
-      handleSelectFile(file);
-      if (!line) return;
-      setTimeout(() => {
-        const lineEl = document.querySelector(`[data-diff-line="${file}:${line}"]`);
-        if (lineEl) {
-          lineEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          lineEl.classList.add('ring-2', 'ring-emerald-400', 'ring-offset-1');
-          setTimeout(() => lineEl.classList.remove('ring-2', 'ring-emerald-400', 'ring-offset-1'), 2500);
-        }
-      }, 420);
-    }, delay);
-  }, [change?.revisions, handleSelectFile, selectedRevisionId]);
-
   const jumpToDiffLine = useCallback((file: string, line: number) => {
-    ensureFileOpen(file).then((openedFile) => {
-      if (!openedFile) return;
-      setTimeout(() => {
-        const lineEl = document.querySelector(`[data-diff-line="${openedFile}:${line}"]`);
-        if (lineEl) {
-          lineEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          lineEl.classList.add('ring-2', 'ring-blue-400', 'ring-offset-1');
-          setTimeout(() => lineEl.classList.remove('ring-2', 'ring-blue-400', 'ring-offset-1'), 3000);
-        } else {
-          toast.info(`Located ${openedFile}, but line ${line} is hidden in collapsed region`);
-        }
-      }, 220);
+    setPendingCommentJump({
+      path: file,
+      line,
+      highlightTone: 'blue',
     });
-  }, [ensureFileOpen]);
+  }, []);
 
   const unresolvedThreadTargets = useMemo<UnresolvedThreadTarget[]>(() => {
     return Object.entries(comments || {})
@@ -1137,9 +1135,73 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     const target = unresolvedThreadTargets[nextIndex];
     setActiveUnresolvedIndex(nextIndex);
     setExpandedCommentThreadId(target.rootId);
-    jumpToCommentLocation(target.path, target.line, target.patchSet);
-    toast.success(`Jumped to unresolved ${nextIndex + 1}/${unresolvedThreadTargets.length}`);
-  }, [activeUnresolvedIndex, jumpToCommentLocation, unresolvedThreadTargets]);
+    setPendingCommentJump({
+      rootId: target.rootId,
+      path: target.path,
+      line: target.line,
+      patchSet: target.patchSet,
+      highlightTone: 'emerald',
+    });
+  }, [activeUnresolvedIndex, unresolvedThreadTargets]);
+
+  useEffect(() => {
+    if (!pendingCommentJump) return;
+
+    const desiredRevisionId = pendingCommentJump.patchSet
+      ? Object.entries(change?.revisions || {}).find(([, rev]) => rev._number === pendingCommentJump.patchSet)?.[0]
+      : undefined;
+
+    if (desiredRevisionId && desiredRevisionId !== selectedRevisionId) {
+      setSelectedRevisionId(desiredRevisionId);
+      return;
+    }
+
+    let cancelled = false;
+
+    const run = async () => {
+      const openedFile = await ensureFileOpen(pendingCommentJump.path);
+      if (!openedFile || cancelled) return;
+
+      if (pendingCommentJump.rootId) {
+        const threadSelector = `[data-comment-thread="${pendingCommentJump.rootId}"]`;
+        const threadEl = await waitForElement(threadSelector, 3200);
+        if (threadEl && !cancelled) {
+          threadEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          threadEl.classList.add('ring-2', 'ring-amber-400', 'ring-offset-1');
+          window.setTimeout(() => threadEl.classList.remove('ring-2', 'ring-amber-400', 'ring-offset-1'), 2500);
+          setPendingCommentJump(null);
+          return;
+        }
+      }
+
+      if (!pendingCommentJump.line) {
+        setPendingCommentJump(null);
+        return;
+      }
+
+      const lineSelector = `[data-diff-line="${openedFile}:${pendingCommentJump.line}"]`;
+      const lineEl = await waitForElement(lineSelector, 3200);
+      if (!lineEl || cancelled) {
+        setPendingCommentJump(null);
+        return;
+      }
+
+      lineEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const lineRingColor = pendingCommentJump.highlightTone === 'emerald' ? 'ring-emerald-400' : 'ring-blue-400';
+      lineEl.classList.add('ring-2', lineRingColor, 'ring-offset-1');
+      window.setTimeout(() => lineEl.classList.remove('ring-2', lineRingColor, 'ring-offset-1'), 2500);
+
+      if (!cancelled) {
+        setPendingCommentJump(null);
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [change?.revisions, ensureFileOpen, pendingCommentJump, selectedRevisionId]);
 
   // Add reviewer or CC (accepts GerritAccount from search)
   const handleAddReviewer = useCallback(async (account: { _account_id: number; email?: string; name?: string }, state: 'REVIEWER' | 'CC') => {
@@ -1531,12 +1593,21 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
               </button>
               {showCommentHistory && (
                 <div className="border-t divide-y divide-border max-h-80 overflow-y-auto">
-                  {commentEntries.map((c) => (
-                    <button
-                      key={`${c.id}-${c.path}`}
-                      onClick={() => jumpToCommentLocation(c.path, c.line, c.patch_set)}
-                      className="w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors group"
-                    >
+                    {commentEntries.map((c) => (
+                      <button
+                        key={`${c.id}-${c.path}`}
+                        onClick={() => {
+                          setExpandedCommentThreadId(c.in_reply_to || c.id);
+                          setPendingCommentJump({
+                            rootId: c.in_reply_to || c.id,
+                            path: c.path,
+                            line: c.line,
+                            patchSet: c.patch_set,
+                            highlightTone: 'emerald',
+                          });
+                        }}
+                        className="w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors group"
+                      >
                       <div className="flex items-center gap-2 text-[11px] mb-1.5">
                         <Badge variant="outline" className="text-[10px] bg-background">PS{c.patch_set || '?'}</Badge>
                         <span className="font-mono text-foreground font-medium truncate max-w-[300px]" title={c.path}>{c.path}</span>

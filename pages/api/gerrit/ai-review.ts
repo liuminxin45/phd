@@ -7,11 +7,18 @@ import { buildDiffText, buildFilesSummary, type FileDiffInput } from '@/lib/gerr
 import {
   buildReviewSystemPrompt,
   buildReviewPrompt,
+  buildTriageSystemPrompt,
   buildFileTriagePrompt,
+  buildVerificationSystemPrompt,
   buildIssueVerificationPrompt,
 } from '@/lib/gerrit/ai-prompts';
 import type { GerritDiffInfo, GerritFileInfo } from '@/lib/gerrit/types';
 import type { AiReviewResult, AiOverview, AiIssue, AiFeedbackEntry, AiTeamRules } from '@/lib/gerrit/ai-types';
+import {
+  buildDiffReferenceIndex,
+  normalizeIssues,
+  normalizeOverview,
+} from '@/lib/gerrit/ai-review-normalizer';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -78,7 +85,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           url: llmUrl,
           apiKey: llmConfig.apiKey,
           model: llmConfig.model,
-          systemPrompt: 'You are a precision code review triage assistant. Return JSON only. All natural language output must be in Simplified Chinese.',
+          systemPrompt: buildTriageSystemPrompt(),
           userPrompt: buildFileTriagePrompt({
             subject: change.subject,
             project: change.project,
@@ -132,6 +139,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Build diff text
     const { text: diffText, truncated, fileCount, totalFiles } = buildDiffText(fileDiffs);
+    const diffIndex = buildDiffReferenceIndex(fileDiffs);
+    const visibleFilesSummary = buildFilesSummary(
+      Object.fromEntries(fileDiffs.map((entry) => [entry.path, entry.info]))
+    );
 
     // Extract commit message
     const currentRev = change.revisions?.[targetRevision];
@@ -144,6 +155,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       commitMessage,
       project: change.project,
       branch: change.branch,
+      filesSummary: visibleFilesSummary,
       diffText,
       truncated,
       fileCount,
@@ -164,33 +176,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
     const usedModel = llmConfig.model;
 
-    // Normalize issues with stable IDs
-    const issues: AiIssue[] = (parsed.issues || []).map((issue: any, idx: number) => {
-      const evidenceFile = issue.evidence?.file || issue.file;
-      const evidenceSnippet = (issue.evidence?.snippet || issue.description || issue.title || '').slice(0, 200);
-      return {
-      id: `ai-${changeNumber}-${idx}`,
-      category: issue.category || 'style',
-      severity: issue.severity || 'low',
-      title: issue.title || '',
-      description: issue.description || '',
-      file: issue.file,
-      line: issue.line,
-      suggestion: issue.suggestion,
-      evidence: evidenceFile && evidenceSnippet
-        ? {
-            file: evidenceFile,
-            line: issue.evidence?.line || issue.line,
-            snippet: evidenceSnippet,
-          }
-        : undefined,
-    };
+    const issues: AiIssue[] = normalizeIssues({
+      rawIssues: parsed.issues || [],
+      changeNumber,
+      diffIndex,
     });
 
     // Stage-2: verify high-severity findings and suppress likely false positives
     const highIssueCandidates = issues
       .map((issue, index) => ({ issue, index }))
-      .filter(({ issue }) => issue.severity === 'high');
+      .filter(({ issue }) => issue.severity === 'high' || (issue.severity === 'medium' && issue.category !== 'style'))
+      .slice(0, 8);
 
     const verificationMap = new Map<number, { status: 'confirmed' | 'rejected' | 'uncertain'; reason?: string }>();
     if (highIssueCandidates.length > 0) {
@@ -199,7 +195,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           url: llmUrl,
           apiKey: llmConfig.apiKey,
           model: llmConfig.model,
-          systemPrompt: 'You are a rigorous code review verifier. Judge only based on the provided diff evidence and return JSON only. All natural language output must be in Simplified Chinese.',
+          systemPrompt: buildVerificationSystemPrompt(),
           userPrompt: buildIssueVerificationPrompt({
             subject: change.subject,
             diffText,
@@ -246,12 +242,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       changeNumber,
       revision: targetRevision,
       usedModel,
-      overview: {
-        riskLevel: parsed.overview?.riskLevel || 'low',
-        changeTypes: parsed.overview?.changeTypes || ['mixed'],
-        summary: parsed.overview?.summary || '',
-        focusPoints: parsed.overview?.focusPoints || [],
-      },
+      overview: normalizeOverview(parsed.overview, reviewedIssues.length > 0 ? '已提炼出本次变更中最值得人工复核的重点。' : '未发现足够明确的高价值问题，当前变更整体风险较低。'),
       issues: reviewedIssues,
       generatedAt: new Date().toISOString(),
     };

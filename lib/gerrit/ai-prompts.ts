@@ -22,10 +22,15 @@ export function buildReviewSystemPrompt(teamRules?: AiTeamRules): string {
 
 Core Principles:
 - Report only valuable findings; do not pad the results.
-- Prioritize high-severity issues; style issues come last.
+- Prioritize correctness, regression risk, compatibility, concurrency, state transitions, error handling, and data integrity.
+- Style issues come last and should be reported only when they materially harm readability or increase defect risk.
 - Every suggestion must be specific and actionable.
 - Cite specific files and line numbers.
 - If the change quality is good, state it directly; do not force finding issues.
+- Review only the visible diff. Never speculate about unseen code.
+- Do not complain about missing tests, logging, comments, refactors, or abstractions unless the diff shows a concrete risk.
+- Do not output vague statements such as "needs more attention", "may have issue", or "consider checking".
+- Prefer fewer high-quality findings over many weak findings.
 
 Output Format Requirements: You must return strict JSON. Do not include markdown code block markers or other text.
 
@@ -48,6 +53,18 @@ Language Requirements (Mandatory):
   return base;
 }
 
+export function buildTriageSystemPrompt(): string {
+  return `You are a precision code-review triage assistant.
+
+Task:
+- Read the changed file list and pick files most worth deep review.
+- Prioritize files that are most likely to hide correctness, compatibility, state, data, or performance regressions.
+- Return strict JSON only.
+
+Language:
+- All natural-language fields must be in Simplified Chinese.`;
+}
+
 /**
  * Build the user prompt for a full AI review of a change.
  */
@@ -56,6 +73,7 @@ export function buildReviewPrompt(params: {
   commitMessage?: string;
   project: string;
   branch: string;
+  filesSummary: string;
   diffText: string;
   truncated: boolean;
   fileCount: number;
@@ -93,6 +111,9 @@ ${truncationNote}
 ${triageNote}
 ${feedbackNote}
 
+## Changed Files Summary
+${params.filesSummary}
+
 ## Diff Content
 Line number format:
 - " OldLine:NewLine | Content" = Unchanged context
@@ -129,6 +150,10 @@ ${params.diffText}
 }
 
 Rules:
+- Focus on issues that can influence behavior, correctness, compatibility, maintainability cost, or meaningful performance.
+- Do not report pure naming/style/nit feedback unless it clearly harms understanding or is likely to cause future defects.
+- Do not report "missing tests" by default. Report it only when the diff introduces high regression risk without any protection.
+- Prefer at most 6 issues total. If the diff is clean, return 0-2 issues and make the overview useful.
 - issues array sorted by severity descending (high -> medium -> low)
 - The 'line' for each issue must be a valid new file line number from the diff (number after +)
 - evidence.snippet must be actual content from the diff, do not fabricate
@@ -165,8 +190,21 @@ Return strict JSON (no markdown):
 Rules:
 - highRiskFiles max 8 files
 - Prioritize core business logic, auth, concurrency, persistence, and API protocols
+- Prefer implementation files over generated files, docs, snapshots, and obvious resource files
 - reasons max 3 items, concise (in Chinese)
 - reasons must be in Simplified Chinese`;
+}
+
+export function buildVerificationSystemPrompt(): string {
+  return `You are a rigorous code-review verifier.
+
+Task:
+- Verify whether each finding is actually supported by the visible diff.
+- Reject findings that are speculative, generic, or not backed by code evidence.
+- Return strict JSON only.
+
+Language:
+- All natural-language fields must be in Simplified Chinese.`;
 }
 
 /**
@@ -209,8 +247,20 @@ Return strict JSON (no markdown):
 Rules:
 - Mark confirmed only if clear evidence exists
 - If evidence is insufficient, prefer uncertain
+- Reject generic findings that are not directly grounded in the diff
 - Do not return non-existent indices
 - reason must be in Simplified Chinese`;
+}
+
+export function buildRiskAssessmentSystemPrompt(): string {
+  return `You are a fast Gerrit change-risk assessor.
+
+Task:
+- Estimate risk quickly using only metadata such as title, project, size, and changed-file summary.
+- Return strict JSON only.
+
+Language:
+- All natural-language fields must be in Simplified Chinese.`;
 }
 
 /**

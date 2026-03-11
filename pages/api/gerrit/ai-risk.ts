@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { readLlmConfig } from '@/lib/llm/config';
 import { normalizeLlmUrl, callLlm, safeRiskLevel } from '@/lib/llm/client';
-import { buildReviewSystemPrompt } from '@/lib/gerrit/ai-prompts';
+import { buildRiskAssessmentSystemPrompt } from '@/lib/gerrit/ai-prompts';
 import type { AiRiskSummary } from '@/lib/gerrit/ai-types';
 
 /**
@@ -29,26 +29,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const batch = changes.slice(0, 20);
 
   try {
-    const changesList = batch.map((c, i) =>
-      `${i + 1}. [#${c._number}] ${c.subject} (${c.project}, +${c.insertions || 0}/-${c.deletions || 0})`
+    const changesList = batch.map((c) =>
+      JSON.stringify({
+        n: c._number,
+        subject: c.subject,
+        project: c.project,
+        insertions: c.insertions || 0,
+        deletions: c.deletions || 0,
+      })
     ).join('\n');
 
-    const userPrompt = `Quickly assess the risk level of the following ${batch.length} code changes. Base your judgment solely on title, project, and size.
+    const userPrompt = `请评估以下 ${batch.length} 个 Gerrit 变更的风险等级。仅基于题目、项目和变更规模判断。
 
+每一行代表一个变更：
 ${changesList}
 
-Return strict JSON array (no markdown):
+返回 strict JSON array（不要 markdown）：
 [
-  { "n": changeNumber, "r": "low"|"medium"|"high", "reason": "One sentence reason (under 15 words, in Chinese)" }
+  { "n": changeNumber, "r": "low"|"medium"|"high", "reason": "中文一句话理由，15字以内" }
 ]
 
-Criteria:
-- high: Security, auth, DB, core logic, massive refactor (>500 lines)
-- medium: API changes, state management, concurrency, medium size
-- low: Docs, config, tests, small fixes, renames
-
-Language Requirements:
-- The 'reason' field must be in Simplified Chinese.`;
+要求：
+- 必须覆盖输入中的每个 n
+- reason 必须简洁、具体，避免空话`;
 
     let parsed: { n: number; r: string; reason: string }[];
     try {
@@ -56,7 +59,7 @@ Language Requirements:
         url: normalizeLlmUrl(llmConfig.baseUrl),
         apiKey: llmConfig.apiKey,
         model: llmConfig.model,
-        systemPrompt: buildReviewSystemPrompt(),
+        systemPrompt: buildRiskAssessmentSystemPrompt(),
         userPrompt,
         maxTokens: 1000,
         temperature: 0.1,

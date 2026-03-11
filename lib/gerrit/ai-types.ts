@@ -35,6 +35,7 @@ export interface AiIssue {
   severity: RiskLevel;
   title: string;
   description: string;
+  confidence?: RiskLevel;
   file?: string;
   line?: number;
   suggestion?: string;

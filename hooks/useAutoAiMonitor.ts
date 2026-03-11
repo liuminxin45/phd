@@ -8,6 +8,7 @@ import {
   DEFAULT_AUTO_AI_MAX_LINES,
   ensureAutoAiEnabledAt,
   getAutoAiResultCacheKey,
+  hydrateAutoAiStateFromDisk,
   loadAutoAiEnabled,
   loadAutoAiEnabledAt,
   loadAutoAiJobs,
@@ -57,6 +58,15 @@ export function useAutoAiMonitor(dashboard: DashboardResponse | null): AutoAiMon
 
   // ── Load persisted state on mount ──────────────────────────────────────────
   useEffect(() => {
+    void hydrateAutoAiStateFromDisk().finally(() => {
+      setRiskMap(loadAutoAiRiskMap());
+      setAutoAiMaxLines(loadAutoAiMaxLines());
+      setAutoAiPauseUntil(loadAutoAiPauseUntil());
+      setAutoAiJobs(loadAutoAiJobs());
+      setAutoAiEnabled(loadAutoAiEnabled());
+      setAutoAiEnabledAt(ensureAutoAiEnabledAt());
+    });
+
     setRiskMap(loadAutoAiRiskMap());
     setAutoAiMaxLines(loadAutoAiMaxLines());
     setAutoAiPauseUntil(loadAutoAiPauseUntil());

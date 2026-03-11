@@ -19,6 +19,7 @@ import {
 import {
   getAutoAiJobKey,
   getAutoAiResultCacheKey,
+  hydrateAutoAiStateFromDisk,
   loadAutoAiJobs,
   loadAutoAiResultCache,
   loadAutoAiRiskMap,
@@ -177,6 +178,10 @@ export function AiReviewWorkspace({
       })
       .finally(() => setLoadingRules(false));
   }, [changeNumber, revisionId, baseRevisionId]);
+
+  useEffect(() => {
+    void hydrateAutoAiStateFromDisk();
+  }, []);
 
   useEffect(() => {
     const cacheKey = getAutoAiResultCacheKey(changeNumber, revisionId, baseRevisionId);
