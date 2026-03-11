@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { getLabelScoreColor } from '@/lib/gerrit/helpers';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, MessageSquare, Send } from 'lucide-react';
@@ -14,6 +14,7 @@ interface ReviewDialogProps {
   onSubmit: (data: { message: string; labels: Record<string, number> }) => Promise<void>;
   onTriggerInternalAgent?: (message: string) => Promise<void>;
   availableLabels?: string[];
+  initialScores?: Record<string, number>;
   submitting?: boolean;
 }
 
@@ -28,10 +29,11 @@ export function ReviewDialog({
   onSubmit,
   onTriggerInternalAgent,
   availableLabels = ['Code-Review'],
+  initialScores = {},
   submitting,
 }: ReviewDialogProps) {
   const [message, setMessage] = useState('');
-  const [scores, setScores] = useState<Record<string, number>>({});
+  const [scores, setScores] = useState<Record<string, number>>(initialScores);
   const [agentTriggerMessage, setAgentTriggerMessage] = useState<string>(() => {
     if (typeof window === 'undefined') return DEFAULT_INTERNAL_AGENT_TRIGGER;
     try {
@@ -43,9 +45,15 @@ export function ReviewDialog({
 
   const visibleLabels = availableLabels.filter((label) => !HIDDEN_LABELS.includes(label));
 
+  useEffect(() => {
+    if (!open) return;
+    setMessage('');
+    setScores(initialScores);
+  }, [initialScores, open]);
+
   const resetState = () => {
     setMessage('');
-    setScores({});
+    setScores(initialScores);
   };
 
   const handleSubmit = async () => {
@@ -88,9 +96,6 @@ export function ReviewDialog({
             <MessageSquare className="h-4 w-4" />
             Submit Review
           </DialogTitle>
-          <DialogDescription>
-            在这里完成评审说明、投票分值，或触发内部 Agent。
-          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5 px-6 py-5">

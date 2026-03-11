@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import { cn } from '@/lib/utils';
 import { httpGet, httpPost } from '@/lib/httpClient';
@@ -16,6 +16,16 @@ import {
   ISSUE_CATEGORY_META,
   RISK_LEVEL_META,
 } from '@/lib/gerrit/ai-types';
+import {
+  getAutoAiJobKey,
+  getAutoAiResultCacheKey,
+  loadAutoAiJobs,
+  loadAutoAiResultCache,
+  loadAutoAiRiskMap,
+  saveAutoAiResultCacheEntry,
+  setAutoAiJobs,
+  setAutoAiRiskMap,
+} from '@/lib/review/auto-ai';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -38,11 +48,6 @@ import {
 
 const FEEDBACK_KEY = 'ai-review-feedback';
 const FEEDBACK_HISTORY_KEY = 'ai-review-feedback-history';
-const RESULT_CACHE_KEY = 'ai-review-result-cache';
-
-function buildReviewCacheKey(changeNumber: number, revisionId?: string, baseRevisionId?: string) {
-  return `${changeNumber}:${revisionId || 'current'}:${baseRevisionId || 'parent'}`;
-}
 
 function loadFeedbackHistory(): AiFeedbackEntry[] {
   try {
@@ -82,25 +87,6 @@ function saveFeedback(issueId: string, value: FeedbackValue) {
   }
 }
 
-function loadReviewResultCache(): Record<string, AiReviewResult> {
-  try {
-    const raw = localStorage.getItem(RESULT_CACHE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveReviewResultCache(cacheKey: string, result: AiReviewResult) {
-  try {
-    const existing = loadReviewResultCache();
-    existing[cacheKey] = result;
-    localStorage.setItem(RESULT_CACHE_KEY, JSON.stringify(existing));
-  } catch {
-    // ignore
-  }
-}
-
 function highlightSnippet(snippet: string, issueTitle: string): ReactNode {
   if (!snippet) return snippet;
 
@@ -133,6 +119,7 @@ interface AiReviewWorkspaceProps {
   baseRevisionId?: string;
   onJumpToLine?: (file: string, line: number) => void;
   onAddDraftComment?: (file: string, line: number, message: string) => void;
+  onReviewQueued?: () => void;
 }
 
 export function AiReviewWorkspace({
@@ -141,6 +128,7 @@ export function AiReviewWorkspace({
   baseRevisionId,
   onJumpToLine,
   onAddDraftComment,
+  onReviewQueued,
 }: AiReviewWorkspaceProps) {
   const [step, setStep] = useState<Step>('config');
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -157,6 +145,13 @@ export function AiReviewWorkspace({
   const [result, setResult] = useState<AiReviewResult | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<IssueCategory>>(new Set());
   const [feedbackMap, setFeedbackMap] = useState<Record<string, FeedbackValue>>({});
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     setFeedbackMap(loadFeedback());
@@ -184,8 +179,8 @@ export function AiReviewWorkspace({
   }, [changeNumber, revisionId, baseRevisionId]);
 
   useEffect(() => {
-    const cacheKey = buildReviewCacheKey(changeNumber, revisionId, baseRevisionId);
-    const cached = loadReviewResultCache()[cacheKey];
+    const cacheKey = getAutoAiResultCacheKey(changeNumber, revisionId, baseRevisionId);
+    const cached = loadAutoAiResultCache()[cacheKey] as AiReviewResult | undefined;
     if (cached) {
       setResult(cached);
       setStep('result');
@@ -205,8 +200,34 @@ export function AiReviewWorkspace({
   }), [customInstructionEnabled, customInstructions, focusAreas, ignorePatterns, savedRules.enabled]);
 
   const runReview = useCallback(async () => {
+    const revisionKey = revisionId || 'current';
+    const cacheKey = getAutoAiResultCacheKey(changeNumber, revisionId, baseRevisionId);
+    const jobKey = getAutoAiJobKey(changeNumber, revisionKey);
+    const now = new Date().toISOString();
+
     setLoading(true);
     setError(null);
+    setAutoAiJobs({
+      ...loadAutoAiJobs(),
+      [jobKey]: {
+        ...(loadAutoAiJobs()[jobKey] || {
+          key: jobKey,
+          changeNumber,
+          revisionId: revisionKey,
+          createdAt: now,
+          source: 'manual',
+        }),
+        key: jobKey,
+        changeNumber,
+        revisionId: revisionKey,
+        status: 'running',
+        updatedAt: now,
+        startedAt: now,
+        error: undefined,
+        source: 'manual',
+      },
+    });
+    onReviewQueued?.();
     try {
       const response = await httpPost<AiReviewResult>('/api/gerrit/ai-review', {
         changeNumber,
@@ -215,22 +236,82 @@ export function AiReviewWorkspace({
         feedbackEntries: loadFeedbackHistory().slice(-40),
         rulesOverride,
       });
-      setResult(response);
-      saveReviewResultCache(buildReviewCacheKey(changeNumber, revisionId, baseRevisionId), response);
-      setStep('result');
+      if (mountedRef.current) {
+        setResult(response);
+      }
+      saveAutoAiResultCacheEntry(cacheKey, response);
+      setAutoAiRiskMap({
+        ...loadAutoAiRiskMap(),
+        [changeNumber]: {
+          changeNumber,
+          riskLevel: response.overview.riskLevel,
+          briefReason: response.overview.summary?.slice(0, 60) || 'Automatic analysis completed',
+        },
+      });
+      setAutoAiJobs({
+        ...loadAutoAiJobs(),
+        [jobKey]: {
+          ...(loadAutoAiJobs()[jobKey] || {
+            key: jobKey,
+            changeNumber,
+            revisionId: revisionKey,
+            createdAt: now,
+            source: 'manual',
+          }),
+          key: jobKey,
+          changeNumber,
+          revisionId: revisionKey,
+          status: 'done',
+          updatedAt: new Date().toISOString(),
+          startedAt: loadAutoAiJobs()[jobKey]?.startedAt || now,
+          finishedAt: new Date().toISOString(),
+          error: undefined,
+          source: 'manual',
+        },
+      });
+      if (mountedRef.current) {
+        setStep('result');
+      }
 
       const autoExpand = new Set<IssueCategory>();
       for (const issue of response.issues) {
         if (issue.severity === 'high') autoExpand.add(issue.category);
       }
-      setExpandedCategories(autoExpand);
+      if (mountedRef.current) {
+        setExpandedCategories(autoExpand);
+      }
     } catch (err: any) {
-      setError(err.message || 'AI Analysis Failed');
-      setStep('config');
+      setAutoAiJobs({
+        ...loadAutoAiJobs(),
+        [jobKey]: {
+          ...(loadAutoAiJobs()[jobKey] || {
+            key: jobKey,
+            changeNumber,
+            revisionId: revisionKey,
+            createdAt: now,
+            source: 'manual',
+          }),
+          key: jobKey,
+          changeNumber,
+          revisionId: revisionKey,
+          status: 'error',
+          updatedAt: new Date().toISOString(),
+          startedAt: loadAutoAiJobs()[jobKey]?.startedAt || now,
+          finishedAt: new Date().toISOString(),
+          error: err.message || 'AI Analysis Failed',
+          source: 'manual',
+        },
+      });
+      if (mountedRef.current) {
+        setError(err.message || 'AI Analysis Failed');
+        setStep('config');
+      }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     }
-  }, [baseRevisionId, changeNumber, revisionId, rulesOverride]);
+  }, [baseRevisionId, changeNumber, onReviewQueued, revisionId, rulesOverride]);
 
   const handleFeedback = useCallback((issue: AiIssue, value: FeedbackValue) => {
     setFeedbackMap((prev) => ({ ...prev, [issue.id]: value }));
@@ -282,37 +363,6 @@ export function AiReviewWorkspace({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-none" id="ai-review-workspace">
-      <div className="flex items-center justify-between gap-3 border-b border-border/40 px-4 py-3.5">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-            <Sparkles className="h-3.5 w-3.5" />
-            AI Review
-          </div>
-          <div className="mt-1 text-sm font-semibold text-foreground">
-            {step === 'config' ? '开始 AI 智能评审' : 'AI 已生成本次评审建议'}
-          </div>
-        </div>
-        {step === 'config' && (
-          <div className="hidden rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground sm:block">
-            Smart defaults
-          </div>
-        )}
-        {step === 'result' && result && (
-          <Badge
-            variant="outline"
-            className={cn(
-              'gap-1.5 pr-2.5',
-              RISK_LEVEL_META[result.overview.riskLevel].bgColor,
-              RISK_LEVEL_META[result.overview.riskLevel].textColor,
-              RISK_LEVEL_META[result.overview.riskLevel].borderColor
-            )}
-          >
-            <span className={cn('h-1.5 w-1.5 rounded-full', RISK_LEVEL_META[result.overview.riskLevel].dotColor)} />
-            {RISK_LEVEL_META[result.overview.riskLevel].label}
-          </Badge>
-        )}
-      </div>
-
       <div className="max-h-[min(72vh,42rem)] overflow-y-auto bg-muted/[0.02] px-4 py-4">
         {loadingRules ? (
           <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
@@ -321,62 +371,6 @@ export function AiReviewWorkspace({
           </div>
         ) : step === 'config' ? (
           <div className="space-y-4">
-            <div className="rounded-2xl border border-border/50 bg-background p-4">
-              <div className="mb-2 text-sm font-medium text-foreground">快速关注点</div>
-              <div className="flex flex-wrap gap-2">
-                {quickFocusOptions.map((option) => {
-                  const active = focusAreas.includes(option);
-                  return (
-                    <button
-                      key={option}
-                      onClick={() => toggleFocusArea(option)}
-                      className={cn(
-                        'rounded-full border px-3 py-1.5 text-xs transition-colors',
-                        active
-                          ? 'border-primary/30 bg-primary/10 text-primary'
-                          : 'border-border/60 bg-background text-muted-foreground hover:border-border hover:text-foreground'
-                      )}
-                    >
-                      {option}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {focusAreas.filter((item) => !quickFocusOptions.includes(item)).length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {focusAreas
-                    .filter((item) => !quickFocusOptions.includes(item))
-                    .map((item) => (
-                      <Badge key={item} variant="secondary" className="gap-1 pr-1">
-                        {item}
-                        <button onClick={() => setFocusAreas((prev) => prev.filter((entry) => entry !== item))}>
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    ))}
-                </div>
-              )}
-
-              <div className="mt-3 flex gap-2">
-                <Input
-                  value={focusInput}
-                  onChange={(e) => setFocusInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      addToken(focusInput, setFocusInput, setFocusAreas);
-                    }
-                  }}
-                  placeholder="添加自定义关注点"
-                  className="h-9 shadow-none"
-                />
-                <Button variant="outline" className="h-9 px-3 shadow-none" onClick={() => addToken(focusInput, setFocusInput, setFocusAreas)}>
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-
             <div className="rounded-2xl border border-border/50 bg-background p-4">
               <button
                 onClick={() => setShowAdvanced((prev) => !prev)}
@@ -394,6 +388,62 @@ export function AiReviewWorkspace({
 
               {showAdvanced && (
                 <div className="mt-4 space-y-4 border-t border-border/40 pt-4">
+                  <div className="space-y-3">
+                    <div className="text-sm font-medium">快速关注点</div>
+                    <div className="flex flex-wrap gap-2">
+                      {quickFocusOptions.map((option) => {
+                        const active = focusAreas.includes(option);
+                        return (
+                          <button
+                            key={option}
+                            onClick={() => toggleFocusArea(option)}
+                            className={cn(
+                              'rounded-full border px-3 py-1.5 text-xs transition-colors',
+                              active
+                                ? 'border-primary/30 bg-primary/10 text-primary'
+                                : 'border-border/60 bg-background text-muted-foreground hover:border-border hover:text-foreground'
+                            )}
+                          >
+                            {option}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {focusAreas.filter((item) => !quickFocusOptions.includes(item)).length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {focusAreas
+                          .filter((item) => !quickFocusOptions.includes(item))
+                          .map((item) => (
+                            <Badge key={item} variant="secondary" className="gap-1 pr-1">
+                              {item}
+                              <button onClick={() => setFocusAreas((prev) => prev.filter((entry) => entry !== item))}>
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Input
+                        value={focusInput}
+                        onChange={(e) => setFocusInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addToken(focusInput, setFocusInput, setFocusAreas);
+                          }
+                        }}
+                        placeholder="添加自定义关注点"
+                        className="h-9 shadow-none"
+                      />
+                      <Button variant="outline" className="h-9 px-3 shadow-none" onClick={() => addToken(focusInput, setFocusInput, setFocusAreas)}>
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <Checkbox
@@ -546,9 +596,7 @@ export function AiReviewWorkspace({
 
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <span className="text-[11px] text-muted-foreground">
-          {step === 'result' && result
-            ? `${visibleIssues.length} findings · ${result.usedModel || 'AI model'}`
-            : '建议先直接运行一次，再按结果微调配置'}
+          {step === 'result' && result ? `${visibleIssues.length} findings · ${result.usedModel || 'AI model'}` : ''}
         </span>
         <div className="flex items-center gap-2">
           {step === 'result' && (

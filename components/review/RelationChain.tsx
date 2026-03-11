@@ -1,10 +1,11 @@
+import { useState } from 'react';
 import { useRouter } from 'next/router';
 import { cn } from '@/lib/utils';
 import { getLabelScoreColor, getLabelScoreText, getStatusColor, getStatusLabel } from '@/lib/gerrit/helpers';
 import type { GerritRelatedChange } from '@/lib/gerrit/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, Loader2, GitCommit, ArrowRight, Layers } from 'lucide-react';
+import { ExternalLink, Loader2, GitCommit, Layers, ChevronRight, ChevronDown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 function normalizeCommitSha(value: unknown): string | null {
@@ -72,6 +73,7 @@ export function RelationChain({
   onBatchMerge,
 }: RelationChainProps) {
   const router = useRouter();
+  const [collapsed, setCollapsed] = useState(true);
 
   if (relatedChanges.length === 0) return null;
 
@@ -88,16 +90,34 @@ export function RelationChain({
   return (
     <Card className="mt-4 border-l-4 border-l-purple-500/20">
       <CardHeader className="px-4 py-3 bg-muted/20 border-b border-border/40">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div
+          className="flex cursor-pointer items-center justify-between gap-3"
+          onClick={() => setCollapsed((prev) => !prev)}
+          role="button"
+          tabIndex={0}
+          aria-expanded={!collapsed}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              setCollapsed((prev) => !prev);
+            }
+          }}
+        >
+          <div className="flex min-w-0 items-center gap-2 text-left">
+            {collapsed ? (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            )}
             <Layers className="h-4 w-4 text-purple-500" />
             <CardTitle className="text-sm font-medium">Relation Chain</CardTitle>
-            <Badge variant="secondary" className="text-[10px] h-5 bg-purple-50 text-purple-700">
+            <Badge variant="secondary" className="h-5 bg-purple-50 text-[10px] text-purple-700">
               {relatedSelectedTotal}/{relatedChanges.length}
             </Badge>
           </div>
           
-          <div className="flex items-center gap-2">
+          {!collapsed && (
+            <div className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
             {canVotePlusOne && (
               <Button
                 size="sm"
@@ -130,10 +150,12 @@ export function RelationChain({
                 {batchMerging ? <Loader2 className="h-3 w-3 animate-spin" /> : <span>Batch Merge</span>}
               </Button>
             )}
-          </div>
+            </div>
+          )}
         </div>
       </CardHeader>
       
+      {!collapsed && (
       <CardContent className="p-0">
         {/* Select all toggle */}
         <div className="px-4 py-2 border-b border-border/40 flex items-center bg-muted/10">
@@ -248,6 +270,7 @@ export function RelationChain({
           })}
         </div>
       </CardContent>
+      )}
     </Card>
   );
 }

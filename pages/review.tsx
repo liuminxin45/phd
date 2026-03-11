@@ -9,14 +9,6 @@ import { ChangeDetail } from '@/components/review/ChangeDetail';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import {
   GitPullRequest,
@@ -32,6 +24,7 @@ import {
 
 const DEFAULT_GERRIT_URL = 'https://review.tp-link.net/gerrit';
 const REVIEW_UNREAD_CHANGE_IDS_KEY = 'review-unread-change-ids-v1';
+const REVIEW_DASHBOARD_SCROLL_TOP_KEY = 'review-dashboard-scroll-top-v1';
 
 const SECTION_ICONS: Record<string, typeof Inbox> = {
   'Your Turn': AlertCircle,
@@ -72,7 +65,6 @@ export default function ReviewPage() {
   // ── View navigation ─────────────────────────────────
   const [view, setView] = useState<ViewState>('dashboard');
   const [selectedChangeNumber, setSelectedChangeNumber] = useState<number | null>(null);
-  const [aiDialogOpen, setAiDialogOpen] = useState(false);
 
   // ── Config ────────────────────────────────────────────
   const [gerritUrl, setGerritUrl] = useState(DEFAULT_GERRIT_URL);
@@ -100,14 +92,13 @@ export default function ReviewPage() {
     }
   });
   const previousChangeSignaturesRef = useRef<Map<number, string>>(new Map());
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const dashboardScrollTopRef = useRef(0);
 
   // ── AI auto-monitor (state + effects extracted to hook) ──
   const {
     riskMap,
     autoAiEnabled,
-    setAutoAiEnabled,
-    autoAiPauseUntil,
-    autoAiStatusSummary,
   } = useAutoAiMonitor(dashboard);
 
   // ── Auto-refresh ────────────────────────────────────
@@ -217,6 +208,15 @@ export default function ReviewPage() {
 
   // Open change detail
   const openChange = useCallback((change: GerritChange) => {
+    const nextScrollTop = scrollContainerRef.current?.scrollTop || 0;
+    dashboardScrollTopRef.current = nextScrollTop;
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem(REVIEW_DASHBOARD_SCROLL_TOP_KEY, String(nextScrollTop));
+      } catch {
+        // ignore sessionStorage failures
+      }
+    }
     setUnreadChangeIds((prev) => {
       if (!prev.has(change._number)) return prev;
       const next = new Set(prev);
@@ -227,6 +227,30 @@ export default function ReviewPage() {
     setView('detail');
     router.replace({ pathname: '/review', query: { change: String(change._number) } }, undefined, { shallow: true }).catch(() => {});
   }, [router]);
+
+  useEffect(() => {
+    if (view !== 'dashboard') return;
+
+    let scrollTop = dashboardScrollTopRef.current;
+    if (!scrollTop && typeof window !== 'undefined') {
+      try {
+        const raw = sessionStorage.getItem(REVIEW_DASHBOARD_SCROLL_TOP_KEY);
+        const parsed = raw ? Number(raw) : NaN;
+        if (Number.isFinite(parsed) && parsed > 0) {
+          scrollTop = parsed;
+          dashboardScrollTopRef.current = parsed;
+        }
+      } catch {
+        // ignore sessionStorage failures
+      }
+    }
+
+    if (!scrollTop) return;
+
+    requestAnimationFrame(() => {
+      scrollContainerRef.current?.scrollTo({ top: scrollTop, behavior: 'auto' });
+    });
+  }, [view, dashboard]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -263,7 +287,7 @@ export default function ReviewPage() {
   // Change detail view
   if (view === 'detail' && selectedChangeNumber) {
     return (
-      <div className="h-full overflow-auto bg-background">
+      <div ref={scrollContainerRef} className="h-full overflow-auto bg-background">
         <div className="max-w-[1600px] mx-auto p-6">
           <ChangeDetail
             key={selectedChangeNumber}
@@ -281,7 +305,7 @@ export default function ReviewPage() {
   }
 
   return (
-    <div className="h-full overflow-auto bg-[hsl(var(--background))]">
+    <div ref={scrollContainerRef} className="h-full overflow-auto bg-[hsl(var(--background))]">
       <div className="max-w-5xl mx-auto p-5 space-y-5">
 
         {/* ── Header ────────────────────────────────────────────── */}
@@ -339,7 +363,9 @@ export default function ReviewPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => setAiDialogOpen(true)}
+                      onClick={() => {
+                        void router.push('/review-auto-ai');
+                      }}
                       className={cn(
                         'h-9 w-9 hover:text-foreground',
                         autoAiEnabled ? 'text-primary' : 'text-muted-foreground/70'
@@ -460,9 +486,16 @@ export default function ReviewPage() {
 
               {secondaryQueue.length > 0 && (
                 <section className="space-y-4">
-                  <div>
-                    <h2 className="text-base font-semibold text-foreground">Authored by Me</h2>
-                    <p className="text-sm text-muted-foreground">Kept for follow-up, but visually secondary.</p>
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-2xl bg-primary/8 border border-primary/10 text-primary flex items-center justify-center">
+                      <Send className="h-4.5 w-4.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="text-[15px] font-semibold text-foreground">Authored by Me</h2>
+                      <p className="text-xs text-muted-foreground">
+                        {secondaryQueue.reduce((sum, section) => sum + section.changes.length, 0)} changes
+                      </p>
+                    </div>
                   </div>
 
                   {secondaryQueue.map((section) => (
@@ -499,72 +532,6 @@ export default function ReviewPage() {
           </div>
         )}
       </div>
-
-      <Dialog open={aiDialogOpen} onOpenChange={setAiDialogOpen}>
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>AI Assistant</DialogTitle>
-            <DialogDescription>
-              AI features are grouped here to keep the review inbox focused on the queue itself.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-sm font-semibold text-foreground">Auto AI Monitor</div>
-                  <div className="text-xs text-muted-foreground">
-                    Automatically tracks risk evaluation progress in the background.
-                  </div>
-                </div>
-                <Button
-                  variant={autoAiEnabled ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setAutoAiEnabled((prev) => !prev)}
-                  className="shrink-0"
-                >
-                  {autoAiEnabled ? 'Enabled' : 'Disabled'}
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div className="rounded-lg bg-background px-3 py-2">
-                  <div className="text-[11px] text-muted-foreground">Pending</div>
-                  <div className="text-lg font-semibold text-foreground">{autoAiStatusSummary.pending}</div>
-                </div>
-                <div className="rounded-lg bg-background px-3 py-2">
-                  <div className="text-[11px] text-muted-foreground">Running</div>
-                  <div className="text-lg font-semibold text-foreground">{autoAiStatusSummary.running}</div>
-                </div>
-                <div className="rounded-lg bg-background px-3 py-2">
-                  <div className="text-[11px] text-muted-foreground">Done</div>
-                  <div className="text-lg font-semibold text-foreground">{autoAiStatusSummary.done}</div>
-                </div>
-                <div className="rounded-lg bg-background px-3 py-2">
-                  <div className="text-[11px] text-muted-foreground">Errors</div>
-                  <div className={cn('text-lg font-semibold', autoAiStatusSummary.error > 0 ? 'text-red-600' : 'text-foreground')}>
-                    {autoAiStatusSummary.error}
-                  </div>
-                </div>
-              </div>
-
-              {autoAiPauseUntil && autoAiPauseUntil > Date.now() && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                  Rate limit paused until {new Date(autoAiPauseUntil).toLocaleTimeString()}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => router.push('/review-auto-ai')}>
-              Open AI Monitor
-            </Button>
-            <Button onClick={() => setAiDialogOpen(false)}>Done</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

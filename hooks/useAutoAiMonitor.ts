@@ -3,16 +3,23 @@ import { httpPost } from '@/lib/httpClient';
 import type { DashboardResponse } from '@/lib/gerrit/types';
 import type { AiRiskSummary, AiReviewResult } from '@/lib/gerrit/ai-types';
 import {
-  AUTO_AI_ENABLED_KEY,
-  AUTO_AI_JOBS_KEY,
-  AUTO_AI_MAX_LINES_KEY,
-  AUTO_AI_PAUSE_UNTIL_KEY,
+  AUTO_AI_STATE_EVENT,
   AUTO_AI_MAX_CONCURRENCY,
   DEFAULT_AUTO_AI_MAX_LINES,
+  ensureAutoAiEnabledAt,
+  getAutoAiResultCacheKey,
   loadAutoAiEnabled,
+  loadAutoAiEnabledAt,
   loadAutoAiJobs,
   loadAutoAiMaxLines,
   loadAutoAiPauseUntil,
+  loadAutoAiRiskMap,
+  saveAutoAiResultCacheEntry,
+  setAutoAiEnabled as persistAutoAiEnabled,
+  setAutoAiJobs as persistAutoAiJobs,
+  setAutoAiMaxLines as persistAutoAiMaxLines,
+  setAutoAiPauseUntil as persistAutoAiPauseUntil,
+  setAutoAiRiskMap as persistAutoAiRiskMap,
   type AutoAiJob,
 } from '@/lib/review/auto-ai';
 import { getAccountName } from '@/lib/gerrit/helpers';
@@ -46,46 +53,68 @@ export function useAutoAiMonitor(dashboard: DashboardResponse | null): AutoAiMon
   const [autoAiMaxLines, setAutoAiMaxLines] = useState(DEFAULT_AUTO_AI_MAX_LINES);
   const [autoAiPauseUntil, setAutoAiPauseUntil] = useState<number | null>(null);
   const [autoAiJobs, setAutoAiJobs] = useState<Record<string, AutoAiJob>>({});
+  const [autoAiEnabledAt, setAutoAiEnabledAt] = useState<number | null>(null);
 
   // ── Load persisted state on mount ──────────────────────────────────────────
   useEffect(() => {
+    setRiskMap(loadAutoAiRiskMap());
     setAutoAiMaxLines(loadAutoAiMaxLines());
     setAutoAiPauseUntil(loadAutoAiPauseUntil());
     setAutoAiJobs(loadAutoAiJobs());
+    setAutoAiEnabledAt(ensureAutoAiEnabledAt());
   }, []);
 
   // ── Persist state to localStorage ──────────────────────────────────────────
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.setItem(AUTO_AI_ENABLED_KEY, autoAiEnabled ? '1' : '0');
-    } catch {}
+    const enabledAt = persistAutoAiEnabled(autoAiEnabled);
+    setAutoAiEnabledAt(enabledAt);
   }, [autoAiEnabled]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.setItem(AUTO_AI_MAX_LINES_KEY, String(autoAiMaxLines));
-    } catch {}
+    persistAutoAiMaxLines(autoAiMaxLines);
   }, [autoAiMaxLines]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      if (autoAiPauseUntil && autoAiPauseUntil > Date.now()) {
-        localStorage.setItem(AUTO_AI_PAUSE_UNTIL_KEY, String(autoAiPauseUntil));
-      } else {
-        localStorage.removeItem(AUTO_AI_PAUSE_UNTIL_KEY);
-      }
-    } catch {}
+    persistAutoAiPauseUntil(autoAiPauseUntil);
   }, [autoAiPauseUntil]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.setItem(AUTO_AI_JOBS_KEY, JSON.stringify(autoAiJobs));
-    } catch {}
+    persistAutoAiJobs(autoAiJobs);
   }, [autoAiJobs]);
+
+  useEffect(() => {
+    persistAutoAiRiskMap(riskMap);
+  }, [riskMap]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const syncFromStorage = () => {
+      setRiskMap(loadAutoAiRiskMap());
+      setAutoAiEnabled(loadAutoAiEnabled());
+      setAutoAiMaxLines(loadAutoAiMaxLines());
+      setAutoAiPauseUntil(loadAutoAiPauseUntil());
+      setAutoAiJobs(loadAutoAiJobs());
+      setAutoAiEnabledAt(loadAutoAiEnabledAt());
+    };
+
+    const onStorage = (event: StorageEvent) => {
+      if (!event.key || event.key.startsWith('review-auto-ai-')) {
+        syncFromStorage();
+      }
+    };
+
+    const onCustomChange = () => {
+      syncFromStorage();
+    };
+
+    window.addEventListener('storage', onStorage);
+    window.addEventListener(AUTO_AI_STATE_EVENT, onCustomChange as EventListener);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener(AUTO_AI_STATE_EVENT, onCustomChange as EventListener);
+    };
+  }, []);
 
   // ── Run a single AI review job ─────────────────────────────────────────────
   const runAutoAiReview = useCallback(async (job: AutoAiJob) => {
@@ -115,15 +144,19 @@ export function useAutoAiMonitor(dashboard: DashboardResponse | null): AutoAiMon
         [job.changeNumber]: {
           changeNumber: job.changeNumber,
           riskLevel: result.overview.riskLevel,
-          briefReason: result.overview.summary?.slice(0, 60) || '自动分析完成',
+          briefReason: result.overview.summary?.slice(0, 60) || 'Automatic analysis completed',
         },
       }));
+      saveAutoAiResultCacheEntry(
+        getAutoAiResultCacheKey(job.changeNumber, job.revisionId),
+        result
+      );
     } catch (err: any) {
-      const message = err?.message || '自动分析失败';
+      const message = err?.message || 'Automatic analysis failed';
       if (isQuotaLimitedError(message)) {
         const pauseUntil = Date.now() + AUTO_AI_RETRY_COOLDOWN_MS;
         const resumeAt = new Date(pauseUntil).toLocaleTimeString();
-        const pauseReason = `配额耗尽。暂停至 ${resumeAt}`;
+        const pauseReason = `Quota reached. Paused until ${resumeAt}`;
         setAutoAiPauseUntil(pauseUntil);
         setAutoAiJobs((prev) => {
           const next = { ...prev };
@@ -176,7 +209,12 @@ export function useAutoAiMonitor(dashboard: DashboardResponse | null): AutoAiMon
     const candidates = dashboard.sections
       .filter((s) => relatedSections.has(s.title))
       .flatMap((s) => s.changes)
-      .filter((c) => c.status === 'NEW' && !!c.current_revision);
+      .filter((c) => c.status === 'NEW' && !!c.current_revision)
+      .filter((c) => {
+        if (!autoAiEnabledAt) return false;
+        const updatedAt = Date.parse(c.updated || '');
+        return Number.isFinite(updatedAt) && updatedAt >= autoAiEnabledAt;
+      });
 
     setAutoAiJobs((prev) => {
       let changed = false;
@@ -191,7 +229,7 @@ export function useAutoAiMonitor(dashboard: DashboardResponse | null): AutoAiMon
         const shouldSkip = totalChangedLines > autoAiMaxLines;
         const nextStatus: AutoAiJob['status'] = shouldSkip ? 'skipped' : 'pending';
         const skipReason = shouldSkip
-          ? `已跳过: 变更行数 ${totalChangedLines} 超过限制 ${autoAiMaxLines}`
+          ? `Skipped: ${totalChangedLines} changed lines exceed limit ${autoAiMaxLines}`
           : undefined;
         if (!existing) {
           changed = true;
@@ -207,6 +245,7 @@ export function useAutoAiMonitor(dashboard: DashboardResponse | null): AutoAiMon
             updatedAt: now,
             finishedAt: shouldSkip ? now : undefined,
             error: skipReason,
+            source: 'auto',
           };
           continue;
         }
@@ -217,7 +256,7 @@ export function useAutoAiMonitor(dashboard: DashboardResponse | null): AutoAiMon
           existing.subject !== nextSubject ||
           existing.ownerName !== nextOwnerName ||
           existing.totalChangedLines !== totalChangedLines ||
-          existing.status !== nextStatus ||
+          (existing.source === 'auto' && existing.status !== nextStatus) ||
           existing.error !== skipReason
         ) {
           changed = true;
@@ -226,9 +265,9 @@ export function useAutoAiMonitor(dashboard: DashboardResponse | null): AutoAiMon
             subject: nextSubject,
             ownerName: nextOwnerName,
             totalChangedLines,
-            status: nextStatus,
-            finishedAt: shouldSkip ? (existing.finishedAt || now) : undefined,
-            error: skipReason,
+            status: existing.source === 'auto' ? nextStatus : existing.status,
+            finishedAt: existing.source === 'auto' ? (shouldSkip ? (existing.finishedAt || now) : undefined) : existing.finishedAt,
+            error: existing.source === 'auto' ? skipReason : existing.error,
           };
         }
       }
@@ -246,7 +285,7 @@ export function useAutoAiMonitor(dashboard: DashboardResponse | null): AutoAiMon
 
       return changed ? next : prev;
     });
-  }, [autoAiEnabled, autoAiMaxLines, dashboard]);
+  }, [autoAiEnabled, autoAiEnabledAt, autoAiMaxLines, dashboard]);
 
   // ── Dispatch pending jobs (respecting concurrency & pause) ─────────────────
   // Use a ref to avoid re-triggering the effect when jobs change from dispatching.

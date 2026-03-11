@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { httpGet, httpPost } from '@/lib/httpClient';
 import {
@@ -14,9 +14,9 @@ import type {
   GerritRelatedChange,
   FileEntry,
 } from '@/lib/gerrit/types';
-import { FileList } from './DiffViewer';
+import { DiffViewer, FileList } from './DiffViewer';
 import { ChangeHeader } from './ChangeHeader';
-import { PatchSelector } from './PatchSelector';
+import { PatchSelector, PARENT_PATCHSET_ID } from './PatchSelector';
 import { RelationChain } from './RelationChain';
 import { PeoplePanel } from './PeoplePanel';
 import { ReviewDialog } from './ReviewDialog';
@@ -24,7 +24,18 @@ import { AiReviewWorkspace } from './AiReviewWorkspace';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useUser } from '@/contexts/UserContext';
+import type { AiReviewResult } from '@/lib/gerrit/ai-types';
+import { RISK_LEVEL_META } from '@/lib/gerrit/ai-types';
+import {
+  AUTO_AI_STATE_EVENT,
+  getAutoAiJobKey,
+  getAutoAiResultCacheKey,
+  loadAutoAiJobs,
+  loadAutoAiResultCache,
+  setAutoAiJobs,
+} from '@/lib/review/auto-ai';
 import {
   MessageSquare,
   Loader2,
@@ -32,8 +43,16 @@ import {
   ChevronRight,
   FileText,
   RefreshCw,
+  ArrowDown,
+  Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  buildCommitMessageDiff,
+  COMMIT_MESSAGE_FILE_PATH,
+  type CommitMessageCheckResponse,
+  type CommitMessageTypoIssue,
+} from '@/lib/review/commit-message';
 
 function buildPendingLocalKey(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -87,6 +106,8 @@ function extractApiErrorMessage(err: any): string {
   return tail || raw;
 }
 
+const AI_REVIEW_RUNNING_TIMEOUT_MS = 10 * 60 * 1000;
+
 interface ChangeDetailResponse {
   change: GerritChange;
   comments: Record<string, GerritCommentInfo[]>;
@@ -94,9 +115,16 @@ interface ChangeDetailResponse {
   related: GerritRelatedChange[];
 }
 
+interface UnresolvedThreadTarget {
+  rootId: string;
+  path: string;
+  line: number;
+  patchSet: number | undefined;
+  updated: string;
+}
+
 function buildFileEntries(filesMap: Record<string, GerritFileInfo>): FileEntry[] {
   return Object.entries(filesMap || {})
-    .filter(([path]) => path !== '/COMMIT_MSG')
     .map(([path, info]) => ({
       path,
       status: info.status || 'M',
@@ -166,6 +194,7 @@ interface ChangeDetailProps {
 }
 
 export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailProps) {
+  const { user } = useUser();
   const [change, setChange] = useState<GerritChange | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [comments, setComments] = useState<Record<string, GerritCommentInfo[]>>({});
@@ -178,7 +207,6 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   const [loadingDiff, setLoadingDiff] = useState(false);
   const [selectedRevisionId, setSelectedRevisionId] = useState<string | undefined>(undefined);
   const [baseRevisionId, setBaseRevisionId] = useState<string | undefined>(undefined);
-  const [compareMode, setCompareMode] = useState(false);
 
   // Review state
   const [submittingReview, setSubmittingReview] = useState(false);
@@ -189,26 +217,173 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   const [showMessages, setShowMessages] = useState(false);
   const [showCommentHistory, setShowCommentHistory] = useState(false);
   const [showReviewDialog, setShowReviewDialog] = useState(false);
+  const [showAiReviewDialog, setShowAiReviewDialog] = useState(false);
   const [relatedChanges, setRelatedChanges] = useState<GerritRelatedChange[]>([]);
   const [selectedRelatedKeys, setSelectedRelatedKeys] = useState<Set<string>>(new Set());
   const [hasPendingUpdate, setHasPendingUpdate] = useState(false);
+  const [activeUnresolvedIndex, setActiveUnresolvedIndex] = useState(-1);
+  const [expandedCommentThreadId, setExpandedCommentThreadId] = useState<string | null>(null);
+  const [aiReportCollapsed, setAiReportCollapsed] = useState(true);
+  const [aiReportVersion, setAiReportVersion] = useState(0);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const pendingDetailRef = useRef<ChangeDetailResponse | null>(null);
   const detailSignatureRef = useRef<string | null>(null);
 
   // Inline comments state (accumulated per file before submission)
   const [pendingComments, setPendingComments] = useState<Record<string, { localKey: string; line: number; message: string; in_reply_to?: string; unresolved?: boolean }[]>>({});
+  const [commitMessageTypos, setCommitMessageTypos] = useState<CommitMessageTypoIssue[]>([]);
+  const [checkingCommitMessage, setCheckingCommitMessage] = useState(false);
+  const commitMessageCheckCacheRef = useRef<Record<string, CommitMessageTypoIssue[]>>({});
 
   const pendingCommentsStorageKey = buildPendingCommentsStorageKey(
     changeNumber,
     selectedRevisionId || change?.current_revision
   );
+  const effectiveBaseRevisionId = baseRevisionId === PARENT_PATCHSET_ID ? undefined : baseRevisionId;
+  const compareMode = Boolean(
+    selectedRevisionId &&
+    baseRevisionId &&
+    (baseRevisionId === PARENT_PATCHSET_ID || selectedRevisionId !== baseRevisionId)
+  );
+
+  const selectedRevisionCommitMessage = selectedRevisionId
+    ? change?.revisions?.[selectedRevisionId]?.commit?.message
+    : undefined;
+
+  const commitMessageDiff = selectedRevisionCommitMessage
+    ? buildCommitMessageDiff(selectedRevisionCommitMessage)
+    : null;
+
+  const commitMessageHighlightMap = commitMessageTypos.reduce<Record<number, { startColumn: number; endColumn: number; title?: string }[]>>((acc, item) => {
+    const titleParts = [item.reason, item.suggestion ? `Suggest: ${item.suggestion}` : undefined].filter(Boolean);
+    acc[item.line] = [
+      ...(acc[item.line] || []),
+      {
+        startColumn: item.startColumn,
+        endColumn: item.endColumn,
+        title: titleParts.join(' | ') || 'Possible typo',
+      },
+    ];
+    return acc;
+  }, {});
+
+  const displayFiles = useMemo<FileEntry[]>(() => {
+    const commitMessageFile = selectedRevisionCommitMessage
+      ? [{
+          path: COMMIT_MESSAGE_FILE_PATH,
+          status: 'M',
+          linesInserted: selectedRevisionCommitMessage.split('\n').length,
+          linesDeleted: 0,
+          binary: false,
+        }]
+      : [];
+
+    return [...commitMessageFile, ...files.filter((file) => file.path !== COMMIT_MESSAGE_FILE_PATH)];
+  }, [files, selectedRevisionCommitMessage]);
+
+  const aiReviewReport = useMemo<AiReviewResult | null>(() => {
+    const cache = loadAutoAiResultCache() as Record<string, AiReviewResult>;
+    const exactKey = getAutoAiResultCacheKey(
+      changeNumber,
+      selectedRevisionId,
+      compareMode ? effectiveBaseRevisionId : undefined
+    );
+    const exactMatch = cache[exactKey];
+    if (exactMatch) return exactMatch;
+
+    const candidates = Object.values(cache)
+      .filter((entry) => entry?.changeNumber === changeNumber)
+      .sort((a, b) => String(b.generatedAt || '').localeCompare(String(a.generatedAt || '')));
+
+    if (!candidates.length) return null;
+
+    return (
+      candidates.find((entry) => entry.revision === (selectedRevisionId || change?.current_revision)) ||
+      candidates[0]
+    );
+  }, [aiReportVersion, change?.current_revision, changeNumber, compareMode, effectiveBaseRevisionId, selectedRevisionId]);
+
+  const currentAiReviewJob = useMemo(() => {
+    const revisionKey = selectedRevisionId || change?.current_revision || 'current';
+    return loadAutoAiJobs()[getAutoAiJobKey(changeNumber, revisionKey)];
+  }, [aiReportVersion, change?.current_revision, changeNumber, selectedRevisionId]);
+
+  const aiReviewRunning = useMemo(() => {
+    if (!currentAiReviewJob || currentAiReviewJob.status !== 'running') return false;
+    const updatedAt = currentAiReviewJob.updatedAt || currentAiReviewJob.startedAt || currentAiReviewJob.createdAt;
+    const updatedAtMs = updatedAt ? Date.parse(updatedAt) : NaN;
+    if (!Number.isFinite(updatedAtMs)) return false;
+    return Date.now() - updatedAtMs < AI_REVIEW_RUNNING_TIMEOUT_MS;
+  }, [currentAiReviewJob]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleAutoAiStateChange = () => {
+      setAiReportVersion((prev) => prev + 1);
+    };
+
+    window.addEventListener(AUTO_AI_STATE_EVENT, handleAutoAiStateChange as EventListener);
+    return () => {
+      window.removeEventListener(AUTO_AI_STATE_EVENT, handleAutoAiStateChange as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!currentAiReviewJob || currentAiReviewJob.status !== 'running') return;
+
+    const updatedAt = currentAiReviewJob.updatedAt || currentAiReviewJob.startedAt || currentAiReviewJob.createdAt;
+    const updatedAtMs = updatedAt ? Date.parse(updatedAt) : NaN;
+    if (!Number.isFinite(updatedAtMs)) return;
+    const remainingMs = AI_REVIEW_RUNNING_TIMEOUT_MS - (Date.now() - updatedAtMs);
+
+    const markTimedOut = () => {
+      setAutoAiJobs({
+        ...loadAutoAiJobs(),
+        [currentAiReviewJob.key]: {
+          ...currentAiReviewJob,
+          status: 'error',
+          updatedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+          error: currentAiReviewJob.error || 'AI review request timed out',
+        },
+      });
+    };
+
+    if (remainingMs <= 0) {
+      markTimedOut();
+      return;
+    }
+
+    const timeoutId = window.setTimeout(markTimedOut, remainingMs);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [currentAiReviewJob]);
 
   const applyDetailResponse = useCallback((res: ChangeDetailResponse) => {
     setChange(res.change);
     setComments(res.comments || {});
     setRelatedChanges(res.related || []);
     setFiles(buildFileEntries(res.files || {}));
+    const nextCurrentRevisionId = res.change.current_revision;
+    const revisionsAsc = Object.entries(res.change.revisions || {})
+      .sort(([, a], [, b]) => a._number - b._number);
+    const oldestRevisionId = revisionsAsc[0]?.[0];
+    const currentRevision = nextCurrentRevisionId ? res.change.revisions?.[nextCurrentRevisionId] : undefined;
+
+    setSelectedRevisionId((prev) => {
+      if (prev && res.change.revisions?.[prev]) return prev;
+      return nextCurrentRevisionId;
+    });
+    setBaseRevisionId((prev) => {
+      if (prev === PARENT_PATCHSET_ID) {
+        return PARENT_PATCHSET_ID;
+      }
+      if (prev && res.change.revisions?.[prev]) return prev;
+      if (currentRevision && currentRevision._number <= 1) return PARENT_PATCHSET_ID;
+      return oldestRevisionId;
+    });
     detailSignatureRef.current = buildDetailSnapshotSignature(res);
     pendingDetailRef.current = null;
     setHasPendingUpdate(false);
@@ -227,7 +402,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
         {
           id: changeNumber,
           revision: selectedRevisionId,
-          base: compareMode ? baseRevisionId : undefined,
+          base: compareMode ? effectiveBaseRevisionId : undefined,
         }
       );
       const nextSignature = buildDetailSnapshotSignature(res);
@@ -252,7 +427,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
         setLoading(false);
       }
     }
-  }, [applyDetailResponse, baseRevisionId, changeNumber, compareMode, selectedRevisionId]);
+  }, [applyDetailResponse, changeNumber, compareMode, effectiveBaseRevisionId, selectedRevisionId]);
 
   useEffect(() => {
     pendingDetailRef.current = null;
@@ -275,27 +450,40 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   }, [change, selectedRevisionId]);
 
   useEffect(() => {
-    if (!change?.revisions || !selectedRevisionId) return;
-    if (!compareMode) return;
-
+    if (!change?.revisions) return;
     const revisionsAsc = Object.entries(change.revisions)
       .sort(([, a], [, b]) => a._number - b._number);
-    const selectedRev = change.revisions[selectedRevisionId];
-    if (!selectedRev) return;
+    const oldestRevisionId = revisionsAsc[0]?.[0];
 
-    const previousRevisionId = revisionsAsc
-      .filter(([, rev]) => rev._number < selectedRev._number)
-      .at(-1)?.[0];
-
-    if (baseRevisionId === selectedRevisionId || (baseRevisionId && !change.revisions[baseRevisionId])) {
-      setBaseRevisionId(previousRevisionId);
-      return;
+    if (!oldestRevisionId) return;
+    const selectedRevision = selectedRevisionId ? change.revisions[selectedRevisionId] : undefined;
+    const defaultBaseRevisionId = selectedRevision && selectedRevision._number <= 1
+      ? PARENT_PATCHSET_ID
+      : oldestRevisionId;
+    if (
+      !baseRevisionId ||
+      (selectedRevision && selectedRevision._number <= 1 && baseRevisionId !== PARENT_PATCHSET_ID) ||
+      (baseRevisionId !== PARENT_PATCHSET_ID && !change.revisions[baseRevisionId])
+    ) {
+      setBaseRevisionId(defaultBaseRevisionId);
     }
+  }, [baseRevisionId, change, selectedRevisionId]);
 
-    if (!baseRevisionId) {
-      setBaseRevisionId(previousRevisionId);
+  useEffect(() => {
+    if (!change?.revisions || !selectedRevisionId || !baseRevisionId) return;
+    if (baseRevisionId === PARENT_PATCHSET_ID) return;
+    const selectedRevision = change.revisions[selectedRevisionId];
+    const baseRevision = change.revisions[baseRevisionId];
+    if (!selectedRevision || !baseRevision) return;
+    if (selectedRevision._number <= baseRevision._number) {
+      const nextTargetId = Object.entries(change.revisions)
+        .sort(([, a], [, b]) => a._number - b._number)
+        .find(([, rev]) => rev._number > baseRevision._number)?.[0];
+      if (nextTargetId) {
+        setSelectedRevisionId(nextTargetId);
+      }
     }
-  }, [baseRevisionId, change, compareMode, selectedRevisionId]);
+  }, [baseRevisionId, change, selectedRevisionId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -334,6 +522,43 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     setSelectedRelatedKeys(defaults);
   }, [relatedChanges]);
 
+  useEffect(() => {
+    const message = selectedRevisionCommitMessage || '';
+    const cacheKey = `${changeNumber}:${selectedRevisionId || 'current'}:${message}`;
+    if (!message.trim()) {
+      setCommitMessageTypos([]);
+      setCheckingCommitMessage(false);
+      return;
+    }
+
+    if (commitMessageCheckCacheRef.current[cacheKey]) {
+      setCommitMessageTypos(commitMessageCheckCacheRef.current[cacheKey]);
+      setCheckingCommitMessage(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCheckingCommitMessage(true);
+    httpPost<CommitMessageCheckResponse>('/api/gerrit/commit-message-check', { message })
+      .then((response) => {
+        if (cancelled) return;
+        const issues = response.issues || [];
+        commitMessageCheckCacheRef.current[cacheKey] = issues;
+        setCommitMessageTypos(issues);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCommitMessageTypos([]);
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingCommitMessage(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [changeNumber, selectedRevisionCommitMessage, selectedRevisionId]);
+
   const resolveFilePath = useCallback((rawPath: string): string | null => {
     if (!rawPath) return null;
     const normalized = rawPath.replace(/^([ab]\/)+/, '').trim();
@@ -346,11 +571,15 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   const loadDiffForFile = useCallback(async (path: string) => {
     setLoadingDiff(true);
     try {
+      if (path === COMMIT_MESSAGE_FILE_PATH) {
+        setCurrentDiff(selectedRevisionCommitMessage ? buildCommitMessageDiff(selectedRevisionCommitMessage) : null);
+        return true;
+      }
       const diff = await httpGet<GerritDiffInfo>('/api/gerrit/diff', {
         id: changeNumber,
         file: path,
         revision: selectedRevisionId,
-        base: compareMode ? baseRevisionId : undefined,
+        base: compareMode ? effectiveBaseRevisionId : undefined,
       });
       setCurrentDiff(diff);
       return true;
@@ -360,7 +589,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     } finally {
       setLoadingDiff(false);
     }
-  }, [baseRevisionId, changeNumber, compareMode, selectedRevisionId]);
+  }, [changeNumber, compareMode, effectiveBaseRevisionId, selectedRevisionCommitMessage, selectedRevisionId]);
 
   // Load diff when file is selected
   const handleSelectFile = useCallback(async (path: string) => {
@@ -391,25 +620,70 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     return resolvedPath;
   }, [currentDiff, loadDiffForFile, resolveFilePath, selectedFile]);
 
+  const appendPendingComment = useCallback((filePath: string, comment: { localKey: string; line: number; message: string; in_reply_to?: string; unresolved?: boolean }) => {
+    setPendingComments((prev) => ({
+      ...prev,
+      [filePath]: [...(prev[filePath] || []), comment],
+    }));
+  }, []);
+
   // Add inline comment to pending list
   const handleAddInlineComment = useCallback((line: number, message: string) => {
     if (!selectedFile) return;
-    setPendingComments((prev) => ({
-      ...prev,
-      [selectedFile]: [...(prev[selectedFile] || []), { localKey: buildPendingLocalKey('inline'), line, message, unresolved: true }],
-    }));
+    appendPendingComment(selectedFile, { localKey: buildPendingLocalKey('inline'), line, message, unresolved: true });
     toast.success(`Comment added on line ${line} (pending submission)`);
-  }, [selectedFile]);
+  }, [appendPendingComment, selectedFile]);
+
+  const handleAddCommitMessageComment = useCallback((line: number, message: string) => {
+    appendPendingComment(COMMIT_MESSAGE_FILE_PATH, { localKey: buildPendingLocalKey('commit-msg'), line, message, unresolved: true });
+    toast.success(`Commit message comment added on line ${line}`);
+  }, [appendPendingComment]);
 
   // Reply to an existing comment (adds as pending with in_reply_to)
-  const handleReplyComment = useCallback((commentId: string, line: number | undefined, message: string, unresolved?: boolean) => {
-    if (!selectedFile) return;
-    setPendingComments((prev) => ({
-      ...prev,
-      [selectedFile]: [...(prev[selectedFile] || []), { localKey: buildPendingLocalKey('reply'), line: line || 0, message, in_reply_to: commentId, unresolved }],
-    }));
+  const handleReplyCommentForFile = useCallback(async (filePath: string, commentId: string, line: number | undefined, message: string, unresolved?: boolean) => {
+    const trimmed = message.trim();
+    if (!trimmed) return;
+
+    if (unresolved === false) {
+      try {
+        await httpPost('/api/gerrit/review', {
+          changeId: changeNumber,
+          revisionId: selectedRevisionId || 'current',
+          comments: {
+            [filePath]: [
+              {
+                in_reply_to: commentId,
+                message: trimmed,
+                ...(typeof line === 'number' ? { line } : {}),
+                unresolved: false,
+              },
+            ],
+          },
+        });
+        toast.success('Reply submitted and marked as resolved');
+        setExpandedCommentThreadId(null);
+        setTimeout(() => {
+          void fetchDetail({ silent: true });
+        }, 500);
+        return;
+      } catch (err: any) {
+        toast.error('Failed to submit resolved reply: ' + (err.message || 'Unknown error'));
+        return;
+      }
+    }
+
+    appendPendingComment(filePath, { localKey: buildPendingLocalKey('reply'), line: line || 0, message: trimmed, in_reply_to: commentId, unresolved });
     toast.success('Reply added (pending submission)');
-  }, [selectedFile]);
+  }, [appendPendingComment, changeNumber, fetchDetail, selectedRevisionId]);
+
+  const handleReplyComment = useCallback(async (commentId: string, line: number | undefined, message: string, unresolved?: boolean) => {
+    if (!selectedFile) return;
+    await handleReplyCommentForFile(selectedFile, commentId, line, message, unresolved);
+  }, [handleReplyCommentForFile, selectedFile]);
+
+  const handleReplyCommitMessageComment = useCallback(async (commentId: string, line: number | undefined, message: string, unresolved?: boolean) => {
+    await handleReplyCommentForFile(COMMIT_MESSAGE_FILE_PATH, commentId, line, message, unresolved);
+  }, [handleReplyCommentForFile]);
 
   // Edit a pending comment/reply
   const handleEditPendingComment = useCallback((file: string, localKey: string, newMessage: string, unresolved?: boolean) => {
@@ -429,15 +703,14 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     toast.success('Draft updated');
   }, []);
 
-  const handleResolveInlineComment = useCallback(async (commentId: string, line: number | undefined) => {
-    if (!selectedFile) return;
+  const handleResolveInlineCommentForFile = useCallback(async (filePath: string, commentId: string, line: number | undefined) => {
     try {
       await httpPost('/api/gerrit/review', {
         changeId: changeNumber,
         revisionId: selectedRevisionId || 'current',
         message: 'Done',
         comments: {
-          [selectedFile]: [
+          [filePath]: [
             {
               in_reply_to: commentId,
               message: 'Done',
@@ -448,32 +721,39 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
         },
       });
       toast.success('Comment marked as resolved');
+      setExpandedCommentThreadId(null);
       
       // Clear any pending replies for this comment since we just posted a "Done" reply
-      if (selectedFile) {
-        setPendingComments((prev) => {
-          const existing = prev[selectedFile] || [];
+      setPendingComments((prev) => {
+          const existing = prev[filePath] || [];
           const filtered = existing.filter((c) => c.in_reply_to !== commentId);
           if (filtered.length === existing.length) return prev;
           const next = { ...prev };
           if (filtered.length === 0) {
-            delete next[selectedFile];
+            delete next[filePath];
           } else {
-            next[selectedFile] = filtered;
+            next[filePath] = filtered;
           }
           return next;
         });
-      }
       
       // Small delay to ensure Gerrit has processed the resolved status before refreshing
       setTimeout(() => {
-        clearPendingCommentsStorageForChange(changeNumber);
         void fetchDetail({ silent: true });
       }, 500);
     } catch (err: any) {
       toast.error('Failed to resolve comment: ' + (err.message || 'Unknown error'));
     }
-  }, [changeNumber, fetchDetail, selectedFile, selectedRevisionId]);
+  }, [changeNumber, fetchDetail, selectedRevisionId]);
+
+  const handleResolveInlineComment = useCallback(async (commentId: string, line: number | undefined) => {
+    if (!selectedFile) return;
+    await handleResolveInlineCommentForFile(selectedFile, commentId, line);
+  }, [handleResolveInlineCommentForFile, selectedFile]);
+
+  const handleResolveCommitMessageComment = useCallback(async (commentId: string, line: number | undefined) => {
+    await handleResolveInlineCommentForFile(COMMIT_MESSAGE_FILE_PATH, commentId, line);
+  }, [handleResolveInlineCommentForFile]);
 
   // Add draft comment from AI issue card
   const handleAddAiDraftComment = useCallback((file: string, line: number, message: string) => {
@@ -549,16 +829,23 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
 
   // Search across all file diffs
   const handleSearchFile = useCallback(async (query: string) => {
+    if ((selectedRevisionCommitMessage || '').includes(query)) {
+      setSelectedFile(COMMIT_MESSAGE_FILE_PATH);
+      setCurrentDiff(buildCommitMessageDiff(selectedRevisionCommitMessage || ''));
+      return;
+    }
+
     // Search through all files by loading their diffs one by one
-    for (const file of files) {
+    for (const file of displayFiles) {
+      if (file.path === COMMIT_MESSAGE_FILE_PATH) continue;
       if (file.binary) continue;
       try {
-        const diff = await httpGet<GerritDiffInfo>('/api/gerrit/diff', {
-          id: changeNumber,
-          file: file.path,
-          revision: selectedRevisionId,
-          base: compareMode ? baseRevisionId : undefined,
-        });
+          const diff = await httpGet<GerritDiffInfo>('/api/gerrit/diff', {
+            id: changeNumber,
+            file: file.path,
+            revision: selectedRevisionId,
+            base: compareMode ? effectiveBaseRevisionId : undefined,
+          });
         // Check if any content contains the search query
         const found = diff.content?.some((chunk: any) =>
           (chunk.ab || []).some((l: string) => l.includes(query)) ||
@@ -577,7 +864,7 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
       }
     }
     toast.error(`No matches found for "${query}"`);
-  }, [baseRevisionId, changeNumber, compareMode, files, selectedRevisionId]);
+  }, [changeNumber, compareMode, displayFiles, effectiveBaseRevisionId, selectedRevisionCommitMessage, selectedRevisionId]);
 
   // Submit review (includes pending inline comments)
   const handleSubmitReview = useCallback(async (data: { message: string; labels: Record<string, number> }) => {
@@ -748,8 +1035,6 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
 
     if (revisionForPatch && revisionForPatch !== selectedRevisionId) {
       setSelectedRevisionId(revisionForPatch);
-      setCompareMode(false);
-      setBaseRevisionId(undefined);
     }
 
     setTimeout(() => {
@@ -781,6 +1066,80 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
       }, 220);
     });
   }, [ensureFileOpen]);
+
+  const unresolvedThreadTargets = useMemo<UnresolvedThreadTarget[]>(() => {
+    return Object.entries(comments || {})
+      .flatMap(([path, fileComments]) => {
+        const commentsById = new Map<string, GerritCommentInfo>();
+        for (const comment of fileComments || []) {
+          commentsById.set(comment.id, comment);
+        }
+
+        const threadsByRoot = new Map<string, GerritCommentInfo[]>();
+        for (const comment of fileComments || []) {
+          let rootId = comment.id;
+          let cursor = comment;
+          const seen = new Set<string>();
+          while (cursor.in_reply_to && commentsById.has(cursor.in_reply_to) && !seen.has(cursor.in_reply_to)) {
+            seen.add(cursor.in_reply_to);
+            rootId = cursor.in_reply_to;
+            cursor = commentsById.get(cursor.in_reply_to)!;
+          }
+          const existing = threadsByRoot.get(rootId) || [];
+          existing.push(comment);
+          threadsByRoot.set(rootId, existing);
+        }
+
+        return Array.from(threadsByRoot.entries())
+          .map(([rootId, thread]) => {
+            const root = commentsById.get(rootId) || thread[0];
+            const sorted = [...thread].sort((a, b) => String(a.updated || '').localeCompare(String(b.updated || '')));
+            const latest = sorted[sorted.length - 1] || root;
+            const unresolved = typeof latest.unresolved === 'boolean' ? latest.unresolved : !!root?.unresolved;
+            const line = root?.line ?? latest?.line;
+            if (!unresolved || typeof line !== 'number') return null;
+            return {
+              rootId,
+              path,
+              line,
+              patchSet: latest.patch_set || root?.patch_set,
+              updated: latest.updated || root?.updated || '',
+            };
+          })
+          .filter((item): item is UnresolvedThreadTarget => item !== null);
+      })
+      .sort((a, b) => {
+        const patchDiff = (a.patchSet || 0) - (b.patchSet || 0);
+        if (patchDiff !== 0) return patchDiff;
+        const pathDiff = a.path.localeCompare(b.path);
+        if (pathDiff !== 0) return pathDiff;
+        return a.line - b.line;
+      });
+  }, [comments]);
+
+  useEffect(() => {
+    if (unresolvedThreadTargets.length === 0) {
+      setActiveUnresolvedIndex(-1);
+      return;
+    }
+    setActiveUnresolvedIndex((prev) => {
+      if (prev < 0) return -1;
+      return prev % unresolvedThreadTargets.length;
+    });
+  }, [unresolvedThreadTargets]);
+
+  const handleJumpToNextUnresolved = useCallback(() => {
+    if (unresolvedThreadTargets.length === 0) {
+      toast.info('No unresolved comments');
+      return;
+    }
+    const nextIndex = (activeUnresolvedIndex + 1 + unresolvedThreadTargets.length) % unresolvedThreadTargets.length;
+    const target = unresolvedThreadTargets[nextIndex];
+    setActiveUnresolvedIndex(nextIndex);
+    setExpandedCommentThreadId(target.rootId);
+    jumpToCommentLocation(target.path, target.line, target.patchSet);
+    toast.success(`Jumped to unresolved ${nextIndex + 1}/${unresolvedThreadTargets.length}`);
+  }, [activeUnresolvedIndex, jumpToCommentLocation, unresolvedThreadTargets]);
 
   // Add reviewer or CC (accepts GerritAccount from search)
   const handleAddReviewer = useCallback(async (account: { _account_id: number; email?: string; name?: string }, state: 'REVIEWER' | 'CC') => {
@@ -840,6 +1199,24 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   // Only keep Code-Review for submit panel
   const availableLabels = (change.labels ? Object.keys(change.labels) : ['Code-Review'])
     .filter((label) => label === 'Code-Review' || label === 'Label-Code-Review');
+  const currentCodeReviewLabel = availableLabels[0];
+  const currentCodeReviewScore = currentCodeReviewLabel
+    ? change.labels?.[currentCodeReviewLabel]?.all?.find((approval) => {
+        const approvalEmail = approval.email?.trim().toLowerCase();
+        const approvalName = approval.name?.trim();
+        const userEmail = user?.primaryEmail?.trim().toLowerCase();
+        const userRealName = user?.realName?.trim();
+        const userName = user?.userName?.trim();
+
+        if (approvalEmail && userEmail && approvalEmail === userEmail) return true;
+        if (approvalName && userRealName && approvalName === userRealName) return true;
+        if (approvalName && userName && approvalName === userName) return true;
+        return false;
+      })?.value
+    : undefined;
+  const initialReviewScores = currentCodeReviewLabel && typeof currentCodeReviewScore === 'number'
+    ? { [currentCodeReviewLabel]: currentCodeReviewScore }
+    : {};
 
   const revisionsDesc = Object.entries(change.revisions || {})
     .sort(([, a], [, b]) => b._number - a._number);
@@ -847,12 +1224,9 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   const selectedRevisionNumber = selectedRevisionId && change.revisions?.[selectedRevisionId]
     ? change.revisions[selectedRevisionId]._number
     : undefined;
-  const baseRevisionNumber = baseRevisionId && change.revisions?.[baseRevisionId]
-    ? change.revisions[baseRevisionId]._number
+  const baseRevisionNumber = effectiveBaseRevisionId && change.revisions?.[effectiveBaseRevisionId]
+    ? change.revisions[effectiveBaseRevisionId]._number
     : undefined;
-
-  const baseRevisionCandidates = revisionsDesc
-    .filter(([id, rev]) => id !== selectedRevisionId && selectedRevisionNumber ? rev._number < selectedRevisionNumber : true);
 
   const codeReviewPermissions =
     change.permitted_labels?.['Code-Review'] ||
@@ -866,8 +1240,6 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
     .map((msg) => classifySubmitSignal(msg.message || ''))
     .filter((s): s is 'merge-conflict' | 'not-current-rebase' => !!s)
     .at(-1);
-
-  const currentSubmitSignal = classifySubmitSignal(mergeError || '') || latestSubmitSignalFromHistory || null;
 
   const revisionCommentCounts = revisionsDesc.reduce<Record<string, number>>((acc, [id, rev]) => {
     const patchSetNumber = rev._number;
@@ -883,10 +1255,8 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
 
   // Get file-specific comments for selected file
   const fileComments = selectedFile ? (comments[selectedFile] || []) : [];
-
-  const selectedRevisionCommitMessage = selectedRevisionId
-    ? change.revisions?.[selectedRevisionId]?.commit?.message
-    : undefined;
+  const commitMessageComments = comments[COMMIT_MESSAGE_FILE_PATH] || [];
+  const commitMessagePendingComments = pendingComments[COMMIT_MESSAGE_FILE_PATH] || [];
 
   const relatedSelectableTotal = relatedChanges.length;
   const relatedSelectedTotal = relatedChanges.filter((c) => selectedRelatedKeys.has(`${c._change_number}:${c._revision_number}`)).length;
@@ -896,14 +1266,13 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
   const commentEntries = Object.entries(comments || {})
     .flatMap(([path, arr]) => (arr || []).map((c) => ({ path, ...c })))
     .sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || '')));
-
   return (
     <div className="mx-auto max-w-[1560px] space-y-5">
       {/* Top Section */}
       <div className="space-y-4">
         <Card className="overflow-hidden rounded-[26px] border border-border/50 bg-background/95 shadow-[0_12px_36px_rgba(15,23,42,0.05)]">
           <CardContent className="p-5 md:p-6">
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_19rem] xl:items-start">
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)] xl:items-start">
               <div className="min-w-0">
                 <ChangeHeader
                   change={change}
@@ -911,55 +1280,93 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
                   canShowMerge={canShowMerge}
                   submittingMerge={submittingMerge}
                   submittingReview={submittingReview}
+                  aiReviewRunning={aiReviewRunning}
                   onBack={onBack}
                   onRefresh={() => {
                     void fetchDetail({ silent: true });
                   }}
                   onSubmitMerge={handleSubmitMerge}
                   onOpenReviewDialog={() => setShowReviewDialog(true)}
-                  selectedPatchsetNumber={selectedRevisionNumber}
-                  fileCount={files.length}
-                  totalInsertions={totalInsertions}
-                  totalDeletions={totalDeletions}
+                  onOpenAiReviewDialog={() => setShowAiReviewDialog(true)}
                 />
 
-                <Separator className="my-5" />
-
-                {selectedRevisionCommitMessage && (
-                  <div className="mb-4 min-w-0 rounded-2xl border border-border/50 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.78))] px-4 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
-                    <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                      <FileText className="h-3.5 w-3.5" />
-                      Commit Message
-                    </div>
-                    <pre className="review-commit-message max-h-[min(42rem,calc(100vh-14rem))] overflow-y-auto">
-                      {selectedRevisionCommitMessage}
-                    </pre>
-                  </div>
-                )}
-
-              </div>
-
-              <aside className="space-y-3 xl:sticky xl:top-6">
-                <div>
-                  <AiReviewWorkspace
-                    changeNumber={changeNumber}
-                    revisionId={selectedRevisionId}
-                    baseRevisionId={compareMode ? baseRevisionId : undefined}
-                    onAddDraftComment={handleAddAiDraftComment}
-                    onJumpToLine={jumpToDiffLine}
+                <div className="mt-4">
+                  <PeoplePanel
+                    change={change}
+                    gerritUrl={gerritUrl}
+                    onAddReviewer={handleAddReviewer}
+                    onRemoveReviewer={handleRemoveReviewer}
                   />
                 </div>
 
-                <PeoplePanel
-                  change={change}
-                  gerritUrl={gerritUrl}
-                  onAddReviewer={handleAddReviewer}
-                  onRemoveReviewer={handleRemoveReviewer}
-                />
-              </aside>
+              </div>
             </div>
           </CardContent>
         </Card>
+
+        {aiReviewReport && (
+          <Card className="mt-4 border-l-4 border-l-sky-500/20">
+            <div className="border-b border-border/40 bg-muted/20 px-4 py-3">
+              <div
+                className="flex cursor-pointer items-center justify-between gap-3"
+                onClick={() => setAiReportCollapsed((prev) => !prev)}
+                role="button"
+                tabIndex={0}
+                aria-expanded={!aiReportCollapsed}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setAiReportCollapsed((prev) => !prev);
+                  }
+                }}
+              >
+                <div className="flex min-w-0 items-center gap-2 text-left">
+                  {aiReportCollapsed ? (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  )}
+                  <Sparkles className="h-4 w-4 text-sky-500" />
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="text-sm font-medium text-foreground">AI Review Report</span>
+                    <Badge
+                      variant="secondary"
+                      className={cn(
+                        'h-5 border px-1.5 text-[10px]',
+                        RISK_LEVEL_META[aiReviewReport.overview.riskLevel].bgColor,
+                        RISK_LEVEL_META[aiReviewReport.overview.riskLevel].textColor,
+                        RISK_LEVEL_META[aiReviewReport.overview.riskLevel].borderColor
+                      )}
+                    >
+                      {RISK_LEVEL_META[aiReviewReport.overview.riskLevel].label}
+                    </Badge>
+                  </div>
+                </div>
+
+                {!aiReportCollapsed && (
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {aiReviewReport.issues.length} findings
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {!aiReportCollapsed && (
+              <CardContent className="space-y-3 p-4">
+                <p className="text-sm leading-6 text-foreground/85">{aiReviewReport.overview.summary}</p>
+                {aiReviewReport.overview.focusPoints.length > 0 && (
+                  <div className="space-y-2 rounded-2xl border border-border/50 bg-background px-3 py-3">
+                    {aiReviewReport.overview.focusPoints.map((point, index) => (
+                      <div key={`${point}-${index}`} className="text-sm text-foreground/80">
+                        {point}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            )}
+          </Card>
+        )}
 
         {relatedChanges.length > 0 && (
           <RelationChain
@@ -988,61 +1395,86 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
       </div>
 
       <div className="space-y-5">
-        <PatchSelector
-          compact
-          revisionsDesc={revisionsDesc}
-          selectedRevisionId={selectedRevisionId}
-          baseRevisionId={baseRevisionId}
-          compareMode={compareMode}
-          currentRevision={change.current_revision}
-          revisionCommentCounts={revisionCommentCounts}
-          baseRevisionCandidates={baseRevisionCandidates}
-          currentSubmitSignal={currentSubmitSignal}
-          onSelectRevision={(id) => {
-            setSelectedRevisionId(id);
-            setSelectedFile(null);
-            setCurrentDiff(null);
-          }}
-          onToggleCompare={() => {
-            setCompareMode((prev) => !prev);
-            setSelectedFile(null);
-            setCurrentDiff(null);
-          }}
-          onSelectBase={(id) => {
-            setBaseRevisionId(id);
-            setSelectedFile(null);
-            setCurrentDiff(null);
-          }}
-          onStartCompareWith={(id) => {
-            setCompareMode(true);
-            setBaseRevisionId(id);
-            setSelectedFile(null);
-            setCurrentDiff(null);
-          }}
-        />
-
         <FileList
-          files={files}
+          files={displayFiles}
           onSelectFile={handleSelectFile}
           selectedFile={selectedFile}
           compareMode={compareMode}
-          baseLabel={compareMode ? (baseRevisionNumber ? `PS${baseRevisionNumber}` : 'Parent') : undefined}
+          baseLabel={compareMode ? (baseRevisionId === PARENT_PATCHSET_ID ? 'PS0' : baseRevisionNumber ? `PS${baseRevisionNumber}` : 'Parent') : undefined}
           currentLabel={selectedRevisionNumber ? `PS${selectedRevisionNumber}` : 'Current'}
           totalInsertions={totalInsertions}
           totalDeletions={totalDeletions}
           currentDiff={currentDiff}
           loadingDiff={loadingDiff}
-          fileComments={fileComments}
-          onAddComment={handleAddInlineComment}
-          onReplyComment={handleReplyComment}
+          fileComments={selectedFile === COMMIT_MESSAGE_FILE_PATH ? commitMessageComments : fileComments}
+          onAddComment={selectedFile === COMMIT_MESSAGE_FILE_PATH ? handleAddCommitMessageComment : handleAddInlineComment}
+          onReplyComment={selectedFile === COMMIT_MESSAGE_FILE_PATH ? handleReplyCommitMessageComment : handleReplyComment}
           onEditPendingComment={handleEditPendingComment}
-          onDoneComment={handleResolveInlineComment}
+          onDoneComment={selectedFile === COMMIT_MESSAGE_FILE_PATH ? handleResolveCommitMessageComment : handleResolveInlineComment}
           pendingCommentsByFile={pendingComments}
           onDeletePendingComment={handleDeletePendingComment}
           onSearchFile={handleSearchFile}
           pendingCommentCounts={Object.fromEntries(
             Object.entries(pendingComments).map(([f, arr]) => [f, arr.length])
           )}
+          fileCommentCounts={Object.fromEntries(
+            Object.entries(comments).map(([f, arr]) => [f, (arr || []).length])
+          )}
+          headerActions={
+            <PatchSelector
+              revisionsDesc={revisionsDesc}
+              selectedRevisionId={selectedRevisionId}
+              baseRevisionId={baseRevisionId}
+              currentRevision={change.current_revision}
+              revisionCommentCounts={revisionCommentCounts}
+              onSelectRevision={(id) => {
+                setSelectedRevisionId(id);
+                const nextTarget = change.revisions?.[id];
+                const currentBase = effectiveBaseRevisionId ? change.revisions?.[effectiveBaseRevisionId] : undefined;
+                if (nextTarget && currentBase && nextTarget._number <= currentBase._number) {
+                  const fallbackBaseId = revisionsDesc
+                    .slice()
+                    .reverse()
+                    .find(([, rev]) => rev._number < nextTarget._number)?.[0];
+                  setBaseRevisionId(fallbackBaseId || PARENT_PATCHSET_ID);
+                }
+                setSelectedFile(null);
+                setCurrentDiff(null);
+              }}
+              onSelectBase={(id) => {
+                setBaseRevisionId(id);
+                if (id === PARENT_PATCHSET_ID) {
+                  setSelectedFile(null);
+                  setCurrentDiff(null);
+                  return;
+                }
+                const nextBase = change.revisions?.[id];
+                const currentTarget = selectedRevisionId ? change.revisions?.[selectedRevisionId] : undefined;
+                if (nextBase && currentTarget && nextBase._number >= currentTarget._number) {
+                  const fallbackTargetId = revisionsDesc
+                    .find(([, rev]) => rev._number > nextBase._number)?.[0];
+                  if (fallbackTargetId) setSelectedRevisionId(fallbackTargetId);
+                }
+                setSelectedFile(null);
+                setCurrentDiff(null);
+              }}
+              onResetCompare={() => {
+                const latestRevisionId = revisionsDesc[0]?.[0];
+                if (latestRevisionId) setSelectedRevisionId(latestRevisionId);
+                setBaseRevisionId(PARENT_PATCHSET_ID);
+                setSelectedFile(null);
+                setCurrentDiff(null);
+              }}
+            />
+          }
+          expandedCommentThreadId={expandedCommentThreadId}
+          onExpandedCommentThreadChange={setExpandedCommentThreadId}
+          lineHighlightsByFile={{
+            [COMMIT_MESSAGE_FILE_PATH]: commitMessageHighlightMap,
+          }}
+          loadingLabelsByFile={{
+            [COMMIT_MESSAGE_FILE_PATH]: checkingCommitMessage ? 'Checking commit message...' : undefined,
+          }}
         />
 
         {Object.keys(pendingComments).length > 0 && (
@@ -1127,8 +1559,25 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
         onSubmit={handleSubmitReview}
         onTriggerInternalAgent={handleTriggerInternalAgent}
         availableLabels={availableLabels}
+        initialScores={initialReviewScores}
         submitting={submittingReview}
       />
+
+      <Dialog open={showAiReviewDialog} onOpenChange={setShowAiReviewDialog}>
+        <DialogContent className="max-w-3xl p-0">
+          <DialogHeader className="border-b border-border/50 px-4 py-3">
+            <DialogTitle>AI Review</DialogTitle>
+          </DialogHeader>
+          <AiReviewWorkspace
+            changeNumber={changeNumber}
+            revisionId={selectedRevisionId}
+            baseRevisionId={compareMode ? effectiveBaseRevisionId : undefined}
+            onAddDraftComment={handleAddAiDraftComment}
+            onJumpToLine={jumpToDiffLine}
+            onReviewQueued={() => setShowAiReviewDialog(false)}
+          />
+        </DialogContent>
+      </Dialog>
 
       {hasPendingUpdate && (
         <div className="fixed bottom-20 left-6 z-40">
@@ -1142,6 +1591,27 @@ export function ChangeDetail({ changeNumber, gerritUrl, onBack }: ChangeDetailPr
           >
             <RefreshCw className="mr-2 h-4 w-4 text-sky-600" />
             检测到更新，点击刷新
+          </Button>
+        </div>
+      )}
+
+      {unresolvedThreadTargets.length > 0 && (
+        <div className="fixed bottom-20 right-6 z-40">
+          <Button
+            type="button"
+            onClick={handleJumpToNextUnresolved}
+            className="h-11 w-11 rounded-full border border-amber-200/80 bg-white/96 text-amber-700 shadow-[0_14px_40px_rgba(245,158,11,0.18)] backdrop-blur supports-[backdrop-filter]:bg-white/86"
+            variant="outline"
+            size="icon"
+            title={`Next unresolved (${unresolvedThreadTargets.length})`}
+            aria-label={`Jump to next unresolved comment. ${unresolvedThreadTargets.length} unresolved threads.`}
+          >
+            <div className="relative">
+              <ArrowDown className="h-4 w-4" />
+              <span className="absolute -right-2.5 -top-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-semibold text-white">
+                {unresolvedThreadTargets.length}
+              </span>
+            </div>
           </Button>
         </div>
       )}

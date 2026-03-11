@@ -11,6 +11,12 @@ import { NotificationPanel } from '@/components/NotificationPanel';
 import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 
+function normalizePath(url: string): string {
+  const [path] = (url || '/').split('?');
+  const [cleanPath] = path.split('#');
+  return cleanPath || '/';
+}
+
 // Loading component for dynamic imports
 const PageLoader = () => (
   <div className="flex items-center justify-center h-full">
@@ -54,9 +60,27 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   // Track current path and mounted pages
   useEffect(() => {
-    setCurrentPath(router.pathname);
-    setMountedPages(prev => new Set(prev).add(router.pathname));
-  }, [router.pathname]);
+    if (!router.isReady) return;
+
+    const syncPath = (url?: string) => {
+      const nextPath = normalizePath(url || router.asPath || router.pathname || '/');
+      setCurrentPath(nextPath);
+      setMountedPages((prev) => new Set(prev).add(nextPath));
+    };
+
+    syncPath();
+
+    const handleRouteChange = (url: string) => {
+      syncPath(url);
+    };
+
+    router.events.on('routeChangeComplete', handleRouteChange);
+    router.events.on('hashChangeComplete', handleRouteChange);
+    return () => {
+      router.events.off('routeChangeComplete', handleRouteChange);
+      router.events.off('hashChangeComplete', handleRouteChange);
+    };
+  }, [router.isReady, router.asPath, router.pathname, router.events]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -129,7 +153,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
     setSearchResults(results.slice(0, 8));
   };
 
-  const currentPage = navigation.find((item) => item.href === router.pathname)?.name || 'Dashboard';
+  const activePath = normalizePath(router.asPath || currentPath || '/');
+  const currentPage = navigation.find((item) => item.href === activePath)?.name || 'Dashboard';
 
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
@@ -156,7 +181,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="flex flex-col gap-2">
             {navigation.filter((item: any) => !item.hidden).map((item) => {
-              const isActive = router.pathname === item.href;
+              const isActive = activePath === item.href;
               const Icon = item.icon;
               return (
                 <li key={item.name}>
@@ -246,37 +271,37 @@ export default function AppLayout({ children }: AppLayoutProps) {
         {/* Page Content */}
         <main ref={contentAreaRef} className="flex-1 overflow-hidden relative min-h-0 bg-muted/20">
           {mountedPages.has('/') && (
-            <div style={{ display: currentPath === '/' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+                        <div style={{ display: activePath === '/' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
               <DashboardPage key={pageReloadKeys['/'] || 0} />
             </div>
           )}
           {mountedPages.has('/tasks') && (
-            <div style={{ display: currentPath === '/tasks' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+              <div style={{ display: activePath === '/tasks' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
               <TasksPage key={pageReloadKeys['/tasks'] || 0} />
             </div>
           )}
           {mountedPages.has('/projects') && (
-            <div style={{ display: currentPath === '/projects' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+              <div style={{ display: activePath === '/projects' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
               <ProjectsPage key={pageReloadKeys['/projects'] || 0} />
             </div>
           )}
           {mountedPages.has('/blogs') && (
-            <div data-blog-scroll style={{ display: currentPath === '/blogs' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+              <div data-blog-scroll style={{ display: activePath === '/blogs' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
               <BlogsPage key={pageReloadKeys['/blogs'] || 0} />
             </div>
           )}
           {mountedPages.has('/review') && (
-            <div style={{ display: currentPath === '/review' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+              <div style={{ display: activePath === '/review' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
               <ReviewPage key={pageReloadKeys['/review'] || 0} />
             </div>
           )}
           {mountedPages.has('/review-auto-ai') && (
-            <div style={{ display: currentPath === '/review-auto-ai' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+              <div style={{ display: activePath === '/review-auto-ai' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
               <ReviewAutoAiPage key={pageReloadKeys['/review-auto-ai'] || 0} />
             </div>
           )}
           {mountedPages.has('/settings') && (
-            <div style={{ display: currentPath === '/settings' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
+              <div style={{ display: activePath === '/settings' ? 'block' : 'none', height: '100%', overflow: 'auto' }}>
               <SettingsPage key={pageReloadKeys['/settings'] || 0} />
             </div>
           )}
