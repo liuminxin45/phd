@@ -190,7 +190,9 @@ function parseNotificationsHtml(html: string, host: string): NotificationsRespon
     }
   }
 
-  console.log(`[Notifications] Found ${notifications.length} notifications, ${unreadCount} unread`);
+  if (process.env.DEBUG_NOTIFICATIONS === '1') {
+    console.log(`[Notifications] Found ${notifications.length} notifications, ${unreadCount} unread`);
+  }
 
   return {
     notifications,
