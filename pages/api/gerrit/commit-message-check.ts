@@ -70,7 +70,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
       issues: normalizeIssues(parsed.issues || [], lines.length),
     });
   } catch (error: any) {
+    const messageText = String(error?.message || '');
+    // Some third-party models occasionally return non-JSON text even with strict prompts.
+    // Treat parse failures as "no findings" instead of breaking the review flow.
+    if (
+      messageText.includes('Unable to recover JSON from LLM output') ||
+      messageText.includes('LLM output does not contain JSON')
+    ) {
+      console.warn('Commit message check warning: non-JSON LLM output, fallback to empty issues');
+      return res.status(200).json({ issues: [] });
+    }
+
     console.error('Commit message check error:', error);
-    return res.status(500).json({ error: error?.message || 'Failed to check commit message' });
+    return res.status(500).json({ error: messageText || 'Failed to check commit message' });
   }
 }
