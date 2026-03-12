@@ -38,6 +38,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar as CalendarComponent  } from "@/components/ui/calendar"; // 引入日历组件
+import { format } from "date-fns";
+import { zhCN } from "date-fns/locale";
 
 const PAGE_SIZE = 100;
 const STORAGE_KEY_TASK_ARCHIVE_IDS = 'archive.tasks.ids.v1';
@@ -107,33 +115,36 @@ export default function TasksPage() {
   const [initialUserSet, setInitialUserSet] = useState(false);
   const [archiveStateLoaded, setArchiveStateLoaded] = useState(false);
 
+  const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
+  const [isDatePopoverOpen, setIsDatePopoverOpen] = useState(false);
+
   const toggleStatus = (value: string) => {
     setStatusFilters((prev) => {
       // 1. 复制当前的 Set
       const next = new Set(prev);
-    
+
       // 2. 如果点击的是 "all"，则只保留 "all"
       if (value === 'all') {
         return new Set(['all']);
       }
-      
+
       // 3. 如果之前选的是 "all"，现在选了具体状态，则移除 "all"
       if (next.has('all')) {
         next.delete('all');
       }
-    
+
       // 4. 切换当前点击的状态
       if (next.has(value)) {
         next.delete(value);
       } else {
         next.add(value);
       }
-    
+
       // 5. 如果移除后没有任何状态被选中，默认回退到 "all"
       if (next.size === 0) {
         return new Set(['all']);
       }
-    
+
       return next;
     });
   };
@@ -326,6 +337,11 @@ export default function TasksPage() {
           case 'quarter':
             startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
             break;
+          case 'custom':
+            if (customDate) {
+              startDate = customDate;
+            }
+            break;
         }
 
         if (startDate) {
@@ -371,8 +387,7 @@ export default function TasksPage() {
 
     setAfterCursor(null);
     fetchTasks(false);
-  // [修改] 将 statusFilter 改为 statusFilters
-  }, [selectedPerson, statusFilters, projectFilter, dateFilter, sortOrder, initialUserSet]);
+  }, [selectedPerson, statusFilters, projectFilter, dateFilter, sortOrder, initialUserSet, customDate]);
 
   useEffect(() => {
     if (!archiveDialogOpen) return;
@@ -533,6 +548,7 @@ export default function TasksPage() {
     { value: 'week', label: '最近一周' },
     { value: 'month', label: '本月' },
     { value: 'quarter', label: '最近三个月' },
+    { value: 'custom', label: '自定义...' }, // 新增
   ];
 
   // Project options for select
@@ -718,22 +734,68 @@ export default function TasksPage() {
             </SelectContent>
           </Select>
 
-          {/* Date Filter */}
-          <Select value={dateFilter} onValueChange={setDateFilter}>
-            <SelectTrigger className={cn(FILTER_TRIGGER_CLASS, "w-[108px] whitespace-nowrap")}>
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <Calendar className="h-3 w-3" />
-                <span className="text-foreground truncate max-w-[72px]">{dateOptions.find(o => o.value === dateFilter)?.label}</span>
+          {/* Date Filter - Custom with Calendar */}
+          <Popover open={isDatePopoverOpen} onOpenChange={setIsDatePopoverOpen}>
+            <PopoverTrigger asChild>
+              <Button 
+                variant="ghost" 
+                className={cn(FILTER_TRIGGER_CLASS, "w-[128px] justify-between px-3 font-normal")}
+              >
+                 <div className="flex items-center gap-1.5 text-muted-foreground overflow-hidden">
+                  <Calendar className="h-3 w-3 shrink-0" /> {/* 这是 Lucide 图标 */}
+                  <span className="text-foreground truncate text-xs">
+                    {dateFilter === 'custom' && customDate 
+                      ? format(customDate, 'yyyy/MM/dd', { locale: zhCN }) 
+                      : dateOptions.find(o => o.value === dateFilter)?.label
+                    }
+                  </span>
+                </div>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              {/* 预设选项列表 */}
+              <div className="p-1">
+                {dateOptions.filter(o => o.value !== 'custom').map(option => (
+                  <div
+                    key={option.value}
+                    className={cn(
+                      "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-xs outline-none hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+                      dateFilter === option.value && "bg-accent/50 text-accent-foreground font-medium"
+                    )}
+                    onClick={() => {
+                      setDateFilter(option.value);
+                      setIsDatePopoverOpen(false);
+                    }}
+                  >
+                    {option.label}
+                    {dateFilter === option.value && (
+                      <span className="ml-auto h-2 w-2 rounded-full bg-primary/50" />
+                    )}
+                  </div>
+                ))}
               </div>
-            </SelectTrigger>
-            <SelectContent>
-              {dateOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value} className="text-xs">
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              
+              <Separator />
+              
+              {/* 日历部分 */}
+              <div className="p-3">
+                <div className="mb-2 px-1 text-xs font-medium text-muted-foreground">自定义开始时间</div>
+                <CalendarComponent
+                  mode="single"
+                  selected={customDate}
+                  onSelect={(date) => {
+                    if (date) {
+                      setCustomDate(date);
+                      setDateFilter('custom');
+                      setIsDatePopoverOpen(false);
+                    }
+                  }}
+                  initialFocus
+                  disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
+                />
+              </div>
+            </PopoverContent>
+          </Popover>
 
           {/* Score completion filter */}
           <Select value={scoreFilter} onValueChange={setScoreFilter}>
