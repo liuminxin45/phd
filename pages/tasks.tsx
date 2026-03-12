@@ -30,6 +30,14 @@ import { getPriorityDotColor } from '@/lib/constants/priority';
 import { Separator } from '@/components/ui/separator';
 import { GlassIconButton, GlassPage, GlassPanel, GlassSection, glassPanelStrongClass, glassToolbarClass } from '@/components/ui/glass';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const PAGE_SIZE = 100;
 const STORAGE_KEY_TASK_ARCHIVE_IDS = 'archive.tasks.ids.v1';
@@ -72,7 +80,7 @@ export default function TasksPage() {
   const [loadingMore, setLoadingMore] = useState(false);
 
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string>(DEFAULT_STATUS_FILTER);
+  const [statusFilters, setStatusFilters] = useState<Set<string>>(new Set([DEFAULT_STATUS_FILTER]));
   const [projectFilter, setProjectFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>(DEFAULT_DATE_FILTER);
   const [scoreFilter, setScoreFilter] = useState<string>(DEFAULT_SCORE_FILTER);
@@ -98,6 +106,37 @@ export default function TasksPage() {
 
   const [initialUserSet, setInitialUserSet] = useState(false);
   const [archiveStateLoaded, setArchiveStateLoaded] = useState(false);
+
+  const toggleStatus = (value: string) => {
+    setStatusFilters((prev) => {
+      // 1. 复制当前的 Set
+      const next = new Set(prev);
+    
+      // 2. 如果点击的是 "all"，则只保留 "all"
+      if (value === 'all') {
+        return new Set(['all']);
+      }
+      
+      // 3. 如果之前选的是 "all"，现在选了具体状态，则移除 "all"
+      if (next.has('all')) {
+        next.delete('all');
+      }
+    
+      // 4. 切换当前点击的状态
+      if (next.has(value)) {
+        next.delete(value);
+      } else {
+        next.add(value);
+      }
+    
+      // 5. 如果移除后没有任何状态被选中，默认回退到 "all"
+      if (next.size === 0) {
+        return new Set(['all']);
+      }
+    
+      return next;
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -258,10 +297,11 @@ export default function TasksPage() {
         params.assigned = selectedPerson.id;
       }
 
-      // Status filter
-      if (statusFilter !== 'all') {
-        params.status = statusFilter;
+      // [修改开始] Status filter
+      if (!statusFilters.has('all') && statusFilters.size > 0) {
+        params.status = Array.from(statusFilters).join(',');
       }
+      // [修改结束]
 
       // Project filter
       if (projectFilter !== 'all') {
@@ -331,7 +371,8 @@ export default function TasksPage() {
 
     setAfterCursor(null);
     fetchTasks(false);
-  }, [selectedPerson, statusFilter, projectFilter, dateFilter, sortOrder, initialUserSet]);
+  // [修改] 将 statusFilter 改为 statusFilters
+  }, [selectedPerson, statusFilters, projectFilter, dateFilter, sortOrder, initialUserSet]);
 
   useEffect(() => {
     if (!archiveDialogOpen) return;
@@ -515,10 +556,14 @@ export default function TasksPage() {
     { value: 'title', label: '标题' },
   ];
 
-  const hasActiveFilters = statusFilter !== DEFAULT_STATUS_FILTER || projectFilter !== 'all' || dateFilter !== DEFAULT_DATE_FILTER || scoreFilter !== DEFAULT_SCORE_FILTER;
+  const hasActiveFilters = 
+    (!statusFilters.has(DEFAULT_STATUS_FILTER) || statusFilters.size > 1) || // [修改]
+    projectFilter !== 'all' || 
+    dateFilter !== DEFAULT_DATE_FILTER || 
+    scoreFilter !== DEFAULT_SCORE_FILTER;
 
   const clearAllFilters = () => {
-    setStatusFilter(DEFAULT_STATUS_FILTER);
+    setStatusFilters(new Set([DEFAULT_STATUS_FILTER])); // [修改]
     setProjectFilter('all');
     setDateFilter(DEFAULT_DATE_FILTER);
     setScoreFilter(DEFAULT_SCORE_FILTER);
@@ -612,22 +657,49 @@ export default function TasksPage() {
             triggerClassName={cn(FILTER_TRIGGER_CLASS, "justify-start w-[108px] whitespace-nowrap text-slate-700")}
           />
 
-          {/* Status Filter */}
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className={cn(FILTER_TRIGGER_CLASS, "w-[108px] whitespace-nowrap")}>
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <Filter className="h-3 w-3" />
-                <span className="text-foreground truncate max-w-[72px]">{statusOptions.find(o => o.value === statusFilter)?.label}</span>
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              {statusOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value} className="text-xs">
+          {/* Status Filter - Multi Select */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant="ghost" 
+                className={cn(FILTER_TRIGGER_CLASS, "w-[120px] justify-between px-3 font-normal")}
+              >
+                <div className="flex items-center gap-1.5 text-muted-foreground overflow-hidden">
+                  <Filter className="h-3 w-3 shrink-0" />
+                  <span className="text-foreground truncate text-xs">
+                    {statusFilters.has('all') 
+                      ? '全部状态'
+                      : statusFilters.size === 1
+                        ? statusOptions.find(o => o.value === Array.from(statusFilters)[0])?.label
+                        : `已选 ${statusFilters.size} 项`
+                    }
+                  </span>
+                </div>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-48" align="start">
+              <DropdownMenuLabel className="text-xs">状态筛选</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem
+                checked={statusFilters.has('all')}
+                onCheckedChange={() => setStatusFilters(new Set(['all']))}
+                className="text-xs"
+              >
+                全部状态
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              {statusOptions.filter(o => o.value !== 'all').map((option) => (
+                <DropdownMenuCheckboxItem
+                  key={option.value}
+                  checked={statusFilters.has(option.value)}
+                  onCheckedChange={() => toggleStatus(option.value)}
+                  className="text-xs"
+                >
                   {option.label}
-                </SelectItem>
+                </DropdownMenuCheckboxItem>
               ))}
-            </SelectContent>
-          </Select>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Project Filter */}
           <Select value={projectFilter} onValueChange={setProjectFilter}>

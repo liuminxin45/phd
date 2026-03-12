@@ -28,9 +28,18 @@ export default async function handler(
       const idArray = Array.isArray(ids) ? ids : String(ids).split(',').map(id => parseInt(id.trim(), 10));
       constraints.ids = idArray;
     }
+    
+    // [修改开始] 支持多选状态
     if (status) {
-      constraints.statuses = [status];
+      if (Array.isArray(status)) {
+        constraints.statuses = status;
+      } else {
+        // 支持逗号分隔字符串，例如 "open,resolved"
+        constraints.statuses = String(status).split(',').filter(Boolean);
+      }
     }
+    // [修改结束]
+
     if (assigned) {
       constraints.assigned = [assigned];
     }
