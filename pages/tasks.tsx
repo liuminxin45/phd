@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { getCachedUsers, getCachedProjects } from '@/lib/conduitBatch';
 import { appStorage } from '@/lib/appStorage';
+import { getServerLocalState, setServerLocalState } from '@/lib/localStateClient';
 import { ANIMATION_DURATION } from '@/lib/constants/animation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 const PAGE_SIZE = 100;
 const STORAGE_KEY_TASK_ARCHIVE_IDS = 'archive.tasks.ids.v1';
 const LEGACY_ARCHIVED_TASKS_KEY = 'archivedTaskIds';
+const SERVER_STORAGE_KEY_TASK_ARCHIVE_IDS = 'archive.tasks.ids.v2';
 
 const DEFAULT_STATUS_FILTER = TASK_STATUS.OPEN;
 const DEFAULT_DATE_FILTER = 'quarter';
@@ -100,9 +102,18 @@ export default function TasksPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const serverStored = await getServerLocalState<number[]>(SERVER_STORAGE_KEY_TASK_ARCHIVE_IDS);
+      if (!cancelled && Array.isArray(serverStored)) {
+        setArchivedTaskIds(new Set(serverStored));
+        await appStorage.set(STORAGE_KEY_TASK_ARCHIVE_IDS, serverStored);
+        setArchiveStateLoaded(true);
+        return;
+      }
+
       const stored = await appStorage.get<number[]>(STORAGE_KEY_TASK_ARCHIVE_IDS);
       if (!cancelled && Array.isArray(stored)) {
         setArchivedTaskIds(new Set(stored));
+        await setServerLocalState(SERVER_STORAGE_KEY_TASK_ARCHIVE_IDS, stored);
         setArchiveStateLoaded(true);
         return;
       }
@@ -114,6 +125,7 @@ export default function TasksPage() {
         if (!cancelled && legacy && Array.isArray(legacy)) {
           setArchivedTaskIds(new Set(legacy));
           await appStorage.set(STORAGE_KEY_TASK_ARCHIVE_IDS, legacy);
+          await setServerLocalState(SERVER_STORAGE_KEY_TASK_ARCHIVE_IDS, legacy);
         }
       } catch {}
       if (!cancelled) {
@@ -128,7 +140,9 @@ export default function TasksPage() {
 
   useEffect(() => {
     if (archiveStateLoaded) {
-      void appStorage.set(STORAGE_KEY_TASK_ARCHIVE_IDS, [...archivedTaskIds]);
+      const next = [...archivedTaskIds];
+      void appStorage.set(STORAGE_KEY_TASK_ARCHIVE_IDS, next);
+      void setServerLocalState(SERVER_STORAGE_KEY_TASK_ARCHIVE_IDS, next);
     }
   }, [archivedTaskIds, archiveStateLoaded]);
 

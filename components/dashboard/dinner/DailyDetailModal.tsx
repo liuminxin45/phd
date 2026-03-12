@@ -33,10 +33,11 @@ export function DailyDetailModal({ data, year, month, onClose }: DailyDetailModa
   const nonWorkDays = getMonthNonWorkingDays(year, month);
   const weekendDays = getMonthWeekends(year, month);
   const sortedUsers = [...data.allUsers].sort((a, b) => b.monthTotal - a.monthTotal);
+  const tableMinWidth = 240 + 160 + (data.daysInMonth * 44) + 120;
 
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className={cn(glassPanelStrongClass, "h-[90vh] w-[min(1560px,99vw)] max-w-[min(1560px,99vw)] overflow-hidden rounded-[30px] border border-white/70 bg-[#f8fbff]/92 p-0 shadow-[0_30px_70px_rgba(15,23,42,0.22)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[#f8fbff]/78")}>
+      <DialogContent className={cn(glassPanelStrongClass, "h-[90vh] w-[min(1920px,99vw)] max-w-[min(1920px,99vw)] overflow-hidden rounded-[30px] border border-white/70 bg-[#f8fbff]/92 p-0 shadow-[0_30px_70px_rgba(15,23,42,0.22)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[#f8fbff]/78")}>
         <DialogHeader className="shrink-0 border-b border-white/60 bg-white/52 px-6 py-4 backdrop-blur-xl">
           <DialogTitle className="flex flex-wrap items-center gap-2 text-lg text-slate-900">
             <CalendarDays className="w-5 h-5 text-orange-500" />
@@ -47,9 +48,12 @@ export function DailyDetailModal({ data, year, month, onClose }: DailyDetailModa
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.46),rgba(241,245,249,0.18))] p-3">
+        <div className="flex-1 overflow-y-auto overflow-x-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.46),rgba(241,245,249,0.18))] p-3">
           <div className="rounded-[24px] border border-white/60 bg-white/62 p-2 shadow-[0_18px_42px_rgba(15,23,42,0.10)] backdrop-blur-xl">
-          <table className="w-full table-fixed border-separate border-spacing-0 text-[11px] xl:text-xs">
+          <table
+            className="border-separate border-spacing-0 text-[11px] xl:text-xs"
+            style={{ minWidth: `${tableMinWidth}px` }}
+          >
             <thead className="sticky top-0 z-10">
               <tr>
                 <th className="sticky left-0 z-30 w-9 border border-white/60 bg-white/88 px-1.5 py-2 text-left font-semibold text-slate-500 shadow-[4px_0_12px_rgba(255,255,255,0.55)]">#</th>

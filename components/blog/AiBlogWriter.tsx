@@ -23,7 +23,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { GlassIconButton } from '@/components/ui/glass';
+import { GlassIconButton, glassPanelStrongClass } from '@/components/ui/glass';
 import { cn } from '@/lib/utils';
 import type { PostsResponse } from '@/lib/blog/types';
 import { buildAnalysisPrompt, buildOutlinePrompt, buildPolishPrompt, buildWritePrompt } from '@/lib/blog/prompts';
@@ -325,8 +325,8 @@ export function AiBlogWriter({
         <GlassIconButton
           onClick={handleOpen}
           tone="primary"
-          tooltip="AI Blog Writer"
-          aria-label="AI Blog Writer"
+          tooltip="AI 智能博客生成"
+          aria-label="AI 智能博客生成"
         >
           <Sparkles className="h-3.5 w-3.5" />
         </GlassIconButton>
@@ -345,8 +345,8 @@ export function AiBlogWriter({
 
       {/* Dialog */}
       <Dialog open={open} onOpenChange={(v) => { if (!running) setOpen(v); }}>
-        <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
+        <DialogContent className={cn(glassPanelStrongClass, "sm:max-w-3xl max-h-[88vh] flex flex-col rounded-3xl border border-white/70 bg-[#f8fbff]/92 shadow-[0_30px_70px_rgba(15,23,42,0.22)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[#f8fbff]/78")}>
+          <DialogHeader className="border-b border-white/55 pb-3">
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-amber-500" />
               AI 智能博客生成
@@ -356,7 +356,7 @@ export function AiBlogWriter({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-3">
+          <div className="rounded-2xl border border-white/60 bg-white/66 p-4 shadow-[0_14px_32px_rgba(15,23,42,0.08)] backdrop-blur-xl space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <div className="text-xs font-medium text-foreground mb-1.5">参考样本策略</div>
@@ -367,6 +367,12 @@ export function AiBlogWriter({
                     variant={options.referenceMode === 'top' ? 'default' : 'outline'}
                     onClick={() => setOptions((prev) => ({ ...prev, referenceMode: 'top' }))}
                     disabled={running}
+                    className={cn(
+                      "rounded-xl border transition-all duration-200",
+                      options.referenceMode === 'top'
+                        ? "border-sky-300/75 bg-sky-500 text-white hover:bg-sky-600"
+                        : "border-white/60 bg-white/72 text-slate-700 hover:bg-white/82"
+                    )}
                   >
                     最多赞前 30 篇
                   </Button>
@@ -376,6 +382,12 @@ export function AiBlogWriter({
                     variant={options.referenceMode === 'random' ? 'default' : 'outline'}
                     onClick={() => setOptions((prev) => ({ ...prev, referenceMode: 'random' }))}
                     disabled={running}
+                    className={cn(
+                      "rounded-xl border transition-all duration-200",
+                      options.referenceMode === 'random'
+                        ? "border-sky-300/75 bg-sky-500 text-white hover:bg-sky-600"
+                        : "border-white/60 bg-white/72 text-slate-700 hover:bg-white/82"
+                    )}
                   >
                     随机 30 篇
                   </Button>
@@ -389,6 +401,7 @@ export function AiBlogWriter({
                   onChange={(e) => setOptions((prev) => ({ ...prev, manualTopic: e.target.value }))}
                   placeholder="例如：什么是node.js？什么是npm/pnpm？什么是electron？从宏观看 nodejs 家族的关系、特点与选型"
                   disabled={running}
+                  className="rounded-xl border-white/60 bg-white/78 shadow-none focus-visible:ring-0 focus-visible:outline-none"
                 />
                 <p className="mt-1 text-[11px] text-muted-foreground">
                   AI 会先归纳你的想法并自动优化出更聚焦的主题，再围绕该主题生成标题和大纲。
@@ -411,6 +424,7 @@ export function AiBlogWriter({
                     setOptions((prev) => ({ ...prev, targetWordCount: safe }));
                   }}
                   disabled={running}
+                  className="rounded-xl border-white/60 bg-white/78 shadow-none focus-visible:ring-0 focus-visible:outline-none"
                 />
                 <p className="mt-1 text-[11px] text-muted-foreground">建议 2000-4000，系统会按该目标控制正文体量（允许约 ±10%）</p>
               </div>
@@ -424,6 +438,12 @@ export function AiBlogWriter({
                     variant={options.contentDepth === 'overview' ? 'default' : 'outline'}
                     onClick={() => setOptions((prev) => ({ ...prev, contentDepth: 'overview' }))}
                     disabled={running}
+                    className={cn(
+                      "rounded-xl border transition-all duration-200",
+                      options.contentDepth === 'overview'
+                        ? "border-sky-300/75 bg-sky-500 text-white hover:bg-sky-600"
+                        : "border-white/60 bg-white/72 text-slate-700 hover:bg-white/82"
+                    )}
                   >
                     入门
                   </Button>
@@ -433,6 +453,12 @@ export function AiBlogWriter({
                     variant={options.contentDepth === 'standard' ? 'default' : 'outline'}
                     onClick={() => setOptions((prev) => ({ ...prev, contentDepth: 'standard' }))}
                     disabled={running}
+                    className={cn(
+                      "rounded-xl border transition-all duration-200",
+                      options.contentDepth === 'standard'
+                        ? "border-sky-300/75 bg-sky-500 text-white hover:bg-sky-600"
+                        : "border-white/60 bg-white/72 text-slate-700 hover:bg-white/82"
+                    )}
                   >
                     标准
                   </Button>
@@ -442,6 +468,12 @@ export function AiBlogWriter({
                     variant={options.contentDepth === 'deep' ? 'default' : 'outline'}
                     onClick={() => setOptions((prev) => ({ ...prev, contentDepth: 'deep' }))}
                     disabled={running}
+                    className={cn(
+                      "rounded-xl border transition-all duration-200",
+                      options.contentDepth === 'deep'
+                        ? "border-sky-300/75 bg-sky-500 text-white hover:bg-sky-600"
+                        : "border-white/60 bg-white/72 text-slate-700 hover:bg-white/82"
+                    )}
                   >
                     深入
                   </Button>
@@ -455,7 +487,7 @@ export function AiBlogWriter({
                 value={options.additionalPrompt}
                 onChange={(e) => setOptions((prev) => ({ ...prev, additionalPrompt: e.target.value }))}
                 placeholder="例如：必须包含 2 个可复制的代码示例，并在结尾给出可执行的 checklist。"
-                className="min-h-[80px]"
+                className="min-h-[90px] rounded-xl border-white/60 bg-white/78 shadow-none focus-visible:ring-0 focus-visible:outline-none"
                 disabled={running}
               />
             </div>
@@ -470,11 +502,11 @@ export function AiBlogWriter({
               <div
                 key={step.id}
                 className={cn(
-                  'border rounded-lg p-3 transition-colors',
+                  'border rounded-xl p-3 transition-colors backdrop-blur-lg',
                   step.status === 'running' && 'border-amber-300 bg-amber-50/50',
                   step.status === 'done' && 'border-green-200 bg-green-50/30',
                   step.status === 'error' && 'border-red-200 bg-red-50/30',
-                  step.status === 'pending' && 'border-border bg-muted/20 opacity-60',
+                  step.status === 'pending' && 'border-white/55 bg-white/60 opacity-70',
                 )}
               >
                 <div className="flex items-center justify-between">
@@ -487,7 +519,7 @@ export function AiBlogWriter({
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className="text-xs shrink-0">
+                    <Badge variant="secondary" className="text-xs shrink-0 border border-white/60 bg-white/72 text-slate-700">
                       {idx + 1}/{steps.length}
                     </Badge>
                     {step.result && (
@@ -518,7 +550,7 @@ export function AiBlogWriter({
 
                 {/* Expanded result */}
                 {expandedStep === step.id && step.result && (
-                  <div className="mt-2 text-xs text-muted-foreground bg-muted/30 p-3 rounded max-h-48 overflow-y-auto whitespace-pre-wrap font-mono leading-relaxed">
+                  <div className="mt-2 rounded-lg border border-white/55 bg-white/68 p-3 text-xs text-muted-foreground max-h-48 overflow-y-auto whitespace-pre-wrap font-mono leading-relaxed">
                     {step.result}
                   </div>
                 )}
@@ -529,7 +561,7 @@ export function AiBlogWriter({
           {/* Completion banner */}
           {done && (
             <div className="border-t pt-4 space-y-3">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+              <div className="rounded-xl border border-green-200 bg-green-50/75 p-3 backdrop-blur-lg">
                 <p className="text-sm font-medium text-green-800 flex items-center gap-2">
                   <Check className="h-4 w-4" />
                   AI 博客已生成完成
@@ -547,13 +579,13 @@ export function AiBlogWriter({
           {/* Footer actions */}
           <DialogFooter>
             {!running && !done && !hasError && (
-              <Button onClick={runPipeline} className="gap-1.5">
+              <Button onClick={runPipeline} className="gap-1.5 rounded-xl border border-sky-300/75 bg-sky-500 text-white hover:bg-sky-600">
                 <Sparkles className="h-4 w-4" />
                 开始生成
               </Button>
             )}
             {running && (
-              <Button disabled variant="outline" className="gap-1.5">
+              <Button disabled variant="outline" className="gap-1.5 rounded-xl border-white/60 bg-white/72">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 生成中...
               </Button>
@@ -561,14 +593,14 @@ export function AiBlogWriter({
             {done && (
               <Button
                 onClick={handleFill}
-                className="gap-1.5 bg-green-600 hover:bg-green-700 text-white"
+                className="gap-1.5 rounded-xl border border-green-300/70 bg-green-600 hover:bg-green-700 text-white"
               >
                 <Copy className="h-4 w-4" />
                 一键填充到编辑器
               </Button>
             )}
             {!running && hasError && (
-              <Button onClick={runPipeline} variant="outline" className="gap-1.5">
+              <Button onClick={runPipeline} variant="outline" className="gap-1.5 rounded-xl border-white/60 bg-white/72 hover:bg-white/85">
                 <RotateCcw className="h-4 w-4" />
                 重新生成
               </Button>

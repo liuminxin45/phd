@@ -8,7 +8,9 @@ const RETRY_DELAY = 500;
 for (let i = 0; i < MAX_RETRIES; i++) {
   try {
     fs.rmSync(nextDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
-    break;
+    if (!fs.existsSync(nextDir)) {
+      break;
+    }
   } catch (err) {
     if (i < MAX_RETRIES - 1 && (err.code === 'EACCES' || err.code === 'EBUSY' || err.code === 'EPERM')) {
       const ms = RETRY_DELAY * (i + 1);
@@ -16,9 +18,14 @@ for (let i = 0; i < MAX_RETRIES; i++) {
       const start = Date.now();
       while (Date.now() - start < ms) { /* busy wait */ }
     } else {
-      // Last attempt or unknown error — just warn and continue
-      process.stderr.write(`clean-next: could not remove .next (${err.code}), continuing anyway\n`);
+      process.stderr.write(`clean-next: could not remove .next (${err.code})\n`);
+      process.exitCode = 1;
       break;
     }
   }
+}
+
+if (fs.existsSync(nextDir)) {
+  process.stderr.write('clean-next: .next still exists after cleanup, aborting dev start\n');
+  process.exitCode = 1;
 }

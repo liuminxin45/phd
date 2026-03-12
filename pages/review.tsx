@@ -12,6 +12,7 @@ import { GlassSearchInput } from '@/components/ui/glass-search-input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { getServerLocalState, setServerLocalState } from '@/lib/localStateClient';
 import {
   GlassIconButton,
   GlassPage,
@@ -35,6 +36,8 @@ const REVIEW_UNREAD_CHANGE_IDS_KEY = 'review-unread-change-ids-v1';
 const REVIEW_DASHBOARD_SCROLL_TOP_KEY = 'review-dashboard-scroll-top-v1';
 const REVIEW_ARCHIVED_CHANGES_KEY = 'review-archived-changes-v1';
 const REVIEW_AI_REVIEWED_DONE_KEY = 'review-ai-reviewed-done-v1';
+const REVIEW_SERVER_ARCHIVED_CHANGES_KEY = 'archive.review.changes.v1';
+const REVIEW_SERVER_AI_REVIEWED_DONE_KEY = 'archive.review.ai-reviewed-done.v1';
 
 const SECTION_ICONS: Record<string, typeof Inbox> = {
   'Your Turn': AlertCircle,
@@ -122,8 +125,9 @@ export default function ReviewPage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
-  const [archivedChanges, setArchivedChanges] = useState<Record<number, GerritChange>>(() => loadArchivedChanges());
-  const [aiReviewedDoneMap, setAiReviewedDoneMap] = useState<Record<number, string>>(() => loadAiReviewedDoneMap());
+  const [archivedChanges, setArchivedChanges] = useState<Record<number, GerritChange>>({});
+  const [aiReviewedDoneMap, setAiReviewedDoneMap] = useState<Record<number, string>>({});
+  const [archiveStateLoaded, setArchiveStateLoaded] = useState(false);
   const [unreadChangeIds, setUnreadChangeIds] = useState<Set<number>>(() => {
     if (typeof window === 'undefined') return new Set();
     try {
@@ -231,6 +235,54 @@ export default function ReviewPage() {
       // ignore localStorage errors
     }
   }, [aiReviewedDoneMap]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [serverArchived, serverAiReviewedDone] = await Promise.all([
+        getServerLocalState<Record<number, GerritChange>>(REVIEW_SERVER_ARCHIVED_CHANGES_KEY),
+        getServerLocalState<Record<number, string>>(REVIEW_SERVER_AI_REVIEWED_DONE_KEY),
+      ]);
+
+      if (cancelled) return;
+
+      if (serverArchived && typeof serverArchived === 'object') {
+        setArchivedChanges(serverArchived);
+      } else {
+        const localArchived = loadArchivedChanges();
+        setArchivedChanges(localArchived);
+        if (Object.keys(localArchived).length > 0) {
+          void setServerLocalState(REVIEW_SERVER_ARCHIVED_CHANGES_KEY, localArchived);
+        }
+      }
+
+      if (serverAiReviewedDone && typeof serverAiReviewedDone === 'object') {
+        setAiReviewedDoneMap(serverAiReviewedDone);
+      } else {
+        const localAiReviewedDone = loadAiReviewedDoneMap();
+        setAiReviewedDoneMap(localAiReviewedDone);
+        if (Object.keys(localAiReviewedDone).length > 0) {
+          void setServerLocalState(REVIEW_SERVER_AI_REVIEWED_DONE_KEY, localAiReviewedDone);
+        }
+      }
+
+      setArchiveStateLoaded(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!archiveStateLoaded) return;
+    void setServerLocalState(REVIEW_SERVER_ARCHIVED_CHANGES_KEY, archivedChanges);
+  }, [archivedChanges, archiveStateLoaded]);
+
+  useEffect(() => {
+    if (!archiveStateLoaded) return;
+    void setServerLocalState(REVIEW_SERVER_AI_REVIEWED_DONE_KEY, aiReviewedDoneMap);
+  }, [aiReviewedDoneMap, archiveStateLoaded]);
 
   useEffect(() => {
     if (!router.isReady) return;

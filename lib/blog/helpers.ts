@@ -46,7 +46,7 @@ export function getISOWeek(epoch: number): number {
 }
 
 /**
- * Returns a default weekly report title like "[Weekly Report] 20260202-20260206"
+ * Returns a default weekly report title like "【工作周报】 20260202-20260206"
  * covering the most recent completed Mon–Fri work week.
  */
 export function getLastWeekRange(): string {
@@ -65,7 +65,7 @@ export function getLastWeekRange(): string {
     const dd = String(d.getDate()).padStart(2, '0');
     return `${y}${m}${dd}`;
   };
-  return `[Weekly Report] ${fmt(lastMon)}-${fmt(lastFri)}`;
+  return `【工作周报】 ${fmt(lastMon)}-${fmt(lastFri)}`;
 }
 
 // ─── Data transforms ─────────────────────────────────────────────────────────

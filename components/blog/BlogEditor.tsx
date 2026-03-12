@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ArrowLeft,
   Save,
@@ -21,11 +22,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { RemarkupEditor } from '@/components/ui/RemarkupEditor';
-import { GlassIconButton, GlassPanel, glassPanelStrongClass, glassToolbarClass } from '@/components/ui/glass';
+import { GlassIconButton, GlassPanel, glassToolbarClass } from '@/components/ui/glass';
 import { cn } from '@/lib/utils';
 
 const REPORT_PROJECT_PHID = 'PHID-PROJ-5r2wcb3ptiy7lmdawmbg';
-const REPORT_PROJECT_NAME = 'Weekly Reports';
+const REPORT_PROJECT_NAME = '工作周报';
 
 function handlePublishErrorWithBindingGuide(rawMessage: string | undefined): boolean {
   const msg = rawMessage || '';
@@ -70,16 +71,48 @@ function BlogTagSelector({
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const dropdownListRef = useRef<HTMLDivElement>(null);
+  const inputWrapperRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<{ top: number; left: number; width: number }>({
+    top: 0,
+    left: 0,
+    width: 0,
+  });
+
+  const updateDropdownPosition = useCallback(() => {
+    if (!inputWrapperRef.current) return;
+    const rect = inputWrapperRef.current.getBoundingClientRect();
+    setDropdownStyle({
+      top: rect.bottom + 6,
+      left: rect.left,
+      width: rect.width,
+    });
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const clickedInsideInput = !!(dropdownRef.current && dropdownRef.current.contains(target));
+      const clickedInsideDropdown = !!(dropdownListRef.current && dropdownListRef.current.contains(target));
+      if (!clickedInsideInput && !clickedInsideDropdown) {
         setShowDropdown(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!showDropdown) return;
+    updateDropdownPosition();
+    const onWindowChange = () => updateDropdownPosition();
+    window.addEventListener('resize', onWindowChange);
+    window.addEventListener('scroll', onWindowChange, true);
+    return () => {
+      window.removeEventListener('resize', onWindowChange);
+      window.removeEventListener('scroll', onWindowChange, true);
+    };
+  }, [showDropdown, updateDropdownPosition]);
 
   useEffect(() => {
     const query = inputValue.trim();
@@ -170,64 +203,49 @@ function BlogTagSelector({
         </div>
       )}
 
-      <div className="relative">
+      <div ref={inputWrapperRef} className="relative">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
         <Input
           type="text"
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={placeholder || 'Search and add tags'}
+          placeholder={placeholder !== undefined ? placeholder : 'Search and add tags'}
           className="glass-input h-9 rounded-xl border-white/60 bg-white/70 pl-8 pr-8 text-xs shadow-none focus-visible:ring-0 focus-visible:outline-none"
         />
         {isSearching && <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-muted-foreground" />}
-
-        {showDropdown && searchResults.length > 0 && (
-          <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-56 overflow-auto rounded-xl border border-white/65 bg-white/82 p-1 shadow-[0_12px_28px_rgba(15,23,42,0.12)] backdrop-blur-xl">
-            {searchResults.map((item, index) => (
-              <button
-                key={item.phid}
-                type="button"
-                onClick={() => addTag(item)}
-                className={cn(
-                  'flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-white/75',
-                  index === selectedIndex && 'bg-white/82',
-                )}
-              >
-                <Tag className="h-3 w-3 text-purple-600" />
-                <span className="truncate flex-1">{item.fields.name}</span>
-                <Check className="h-3 w-3 opacity-50" />
-              </button>
-            ))}
-          </div>
-        )}
       </div>
-    </div>
-  );
-}
 
-function EditorHero({
-  title,
-  description,
-  icon,
-}: {
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className={cn(glassPanelStrongClass, 'rounded-[28px] border border-white/60 p-5 md:p-6')}>
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/60 bg-white/70 text-sky-700 shadow-[0_12px_24px_rgba(14,116,144,0.12)] backdrop-blur-xl">
-            {icon}
-          </div>
-          <div className="space-y-1">
-            <h1 className="text-xl font-semibold tracking-tight text-slate-900 md:text-2xl">{title}</h1>
-            <p className="max-w-2xl text-sm leading-6 text-slate-600">{description}</p>
-          </div>
-        </div>
-      </div>
+      {showDropdown && searchResults.length > 0 && typeof window !== 'undefined' && createPortal(
+        <div
+          ref={dropdownListRef}
+          style={{
+            position: 'fixed',
+            top: `${dropdownStyle.top}px`,
+            left: `${dropdownStyle.left}px`,
+            width: `${dropdownStyle.width}px`,
+            zIndex: 9999,
+          }}
+          className="max-h-56 overflow-auto rounded-xl border border-white/65 bg-white/88 p-1 shadow-[0_16px_36px_rgba(15,23,42,0.2)] backdrop-blur-2xl"
+        >
+          {searchResults.map((item, index) => (
+            <button
+              key={item.phid}
+              type="button"
+              onClick={() => addTag(item)}
+              className={cn(
+                'flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-white/75',
+                index === selectedIndex && 'bg-white/82',
+              )}
+            >
+              <Tag className="h-3 w-3 text-purple-600" />
+              <span className="truncate flex-1">{item.fields.name}</span>
+              <Check className="h-3 w-3 opacity-50" />
+            </button>
+          ))}
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
@@ -262,6 +280,7 @@ function EditorTitleBlock({
   selectedProjectTags,
   setSelectedProjectTags,
   tagPlaceholder,
+  showTagHelper = true,
 }: {
   title: string;
   setTitle: (value: string) => void;
@@ -269,6 +288,7 @@ function EditorTitleBlock({
   selectedProjectTags: BlogTagItem[];
   setSelectedProjectTags: (items: BlogTagItem[]) => void;
   tagPlaceholder: string;
+  showTagHelper?: boolean;
 }) {
   return (
     <GlassPanel className="rounded-[28px] border border-white/60 bg-white/72 p-5 shadow-[0_16px_36px_rgba(15,23,42,0.10)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/56 md:p-6">
@@ -289,7 +309,9 @@ function EditorTitleBlock({
             </div>
             <div>
               <p className="text-sm font-medium text-slate-900">Blog Tag Selector</p>
-              <p className="text-xs text-slate-500">Attach one or more related projects for better context.</p>
+              {showTagHelper && (
+                <p className="text-xs text-slate-500">Attach one or more related projects for better context.</p>
+              )}
             </div>
           </div>
           <BlogTagSelector
@@ -339,20 +361,20 @@ function DraftPanel({
             No drafts yet. Save once and it will appear here.
           </div>
         ) : (
-          <div className="grid gap-2">
+          <div className="grid gap-2 min-w-0">
             {draftPosts.map((draft) => (
               <button
                 key={draft.id}
                 type="button"
                 onClick={() => onApplyDraft(draft)}
                 className={cn(
-                  'w-full rounded-2xl border px-4 py-3 text-left transition-all duration-200',
+                  'w-full max-w-full min-w-0 rounded-2xl border px-4 py-3 text-left transition-all duration-200 overflow-hidden',
                   editingDraftId === draft.id
                     ? 'border-sky-200/90 bg-sky-50/76 shadow-[0_12px_22px_rgba(14,116,144,0.10)]'
                     : 'border-white/55 bg-white/58 hover:-translate-y-0.5 hover:border-sky-200/70 hover:bg-white/80',
                 )}
               >
-                <div className="truncate text-sm font-medium text-slate-900">
+                <div className="max-w-full whitespace-normal break-all text-sm font-medium leading-5 text-slate-900">
                   {draft.title || `Untitled Draft #${draft.id}`}
                 </div>
                 <div className="mt-1 text-xs text-slate-500">
@@ -486,12 +508,6 @@ export function CreateBlogView({ onBack, onPublished }: { onBack: () => void; on
         }
       />
 
-      <EditorHero
-        title="Tech Blog Editor"
-        description="Draft long-form technical posts in a cleaner, focused workspace. Tags stay near the title so structure and context are decided before writing."
-        icon={<FileText className="h-5 w-5" />}
-      />
-
       <div className="grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
         <DraftPanel
           loadingDrafts={loadingDrafts}
@@ -596,12 +612,6 @@ export function CreateReportView({ onBack, onPublished }: { onBack: () => void; 
         }
       />
 
-      <EditorHero
-        title="Weekly Report Editor"
-        description="Capture progress, blockers, and deliverables in a calmer writing flow. The page keeps title, tags, and content in one vertical path for faster weekly updates."
-        icon={<FileText className="h-5 w-5" />}
-      />
-
       <div className="space-y-5">
         <EditorTitleBlock
           title={title}
@@ -609,7 +619,8 @@ export function CreateReportView({ onBack, onPublished }: { onBack: () => void; 
           titlePlaceholder="Enter weekly report title"
           selectedProjectTags={selectedProjectTags}
           setSelectedProjectTags={setSelectedProjectTags}
-          tagPlaceholder='Default tag "Weekly Reports" is selected. You can add more.'
+          tagPlaceholder=""
+          showTagHelper={false}
         />
         <GlassPanel className="rounded-[28px] border border-white/60 bg-white/72 p-3 shadow-[0_18px_42px_rgba(15,23,42,0.10)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/56 md:p-4">
           <RemarkupEditor

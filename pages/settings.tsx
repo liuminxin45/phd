@@ -1,17 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
-import { Settings, Bot, Server, Route } from 'lucide-react';
+import { Settings, Bot, Server } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TabId } from '@/lib/settings/types';
 import { LlmTab } from '@/components/settings/LlmTab';
 import { EnvTab } from '@/components/settings/EnvTab';
-import { RoadmapTab } from '@/components/settings/RoadmapTab';
 import { GlassPage, GlassPanel, GlassToolbar, glassPanelStrongClass } from '@/components/ui/glass';
 
 const TABS: { id: TabId; label: string; icon: typeof Bot }[] = [
   { id: 'llm', label: 'AI / LLM', icon: Bot },
   { id: 'env', label: 'Environment', icon: Server },
-  { id: 'roadmap', label: 'Roadmap', icon: Route },
 ];
 
 export default function SettingsPage() {
@@ -21,7 +19,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!router.isReady) return;
     const rawTab = Array.isArray(router.query.tab) ? router.query.tab[0] : router.query.tab;
-    if (rawTab === 'llm' || rawTab === 'env' || rawTab === 'roadmap') {
+    if (rawTab === 'llm' || rawTab === 'env') {
       setActiveTab(rawTab);
     }
   }, [router.isReady, router.query.tab]);
@@ -68,7 +66,6 @@ export default function SettingsPage() {
           <GlassPanel className="rounded-3xl p-4 md:p-5">
             {activeTab === 'llm' && <LlmTab />}
             {activeTab === 'env' && <EnvTab />}
-            {activeTab === 'roadmap' && <RoadmapTab />}
           </GlassPanel>
         </div>
       </div>

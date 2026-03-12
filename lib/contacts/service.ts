@@ -11,15 +11,41 @@ import type {
 import { fetchContactsHtml } from '@/lib/contacts/client';
 import { parseContactsHtml } from '@/lib/parsers/contacts-html';
 
-const CACHE_DIR = process.env.PHABDASH_CONTACTS_CACHE_DIR?.trim()
-  || path.join(process.cwd(), 'data', 'contacts-cache');
+const CACHE_DIR = path.join(process.cwd(), 'data', 'contacts-cache');
+const LEGACY_CACHE_DIRS = Array.from(new Set([
+  process.env.PHABDASH_CONTACTS_CACHE_DIR?.trim(),
+  path.join(process.cwd(), '.cache', 'contacts-cache'),
+].filter((dir): dir is string => !!dir && dir !== CACHE_DIR)));
 const MIN_EXPECTED_CONTACTS = 2500;
 
 const inFlightFetches = new Map<string, Promise<ContactsSnapshot>>();
+let hasMigratedLegacyCache = false;
 
 function ensureCacheDir(): void {
   if (!fs.existsSync(CACHE_DIR)) {
     fs.mkdirSync(CACHE_DIR, { recursive: true });
+  }
+}
+
+function migrateLegacyCacheIfNeeded(): void {
+  if (hasMigratedLegacyCache) return;
+  hasMigratedLegacyCache = true;
+  ensureCacheDir();
+
+  for (const legacyDir of LEGACY_CACHE_DIRS) {
+    try {
+      if (!fs.existsSync(legacyDir)) continue;
+      const files = fs.readdirSync(legacyDir).filter((file) => /^\d{4}-\d{2}-\d{2}\.json$/.test(file));
+      for (const file of files) {
+        const source = path.join(legacyDir, file);
+        const destination = path.join(CACHE_DIR, file);
+        if (!fs.existsSync(destination)) {
+          fs.copyFileSync(source, destination);
+        }
+      }
+    } catch {
+      // ignore migration failures
+    }
   }
 }
 
@@ -40,6 +66,7 @@ function getSnapshotPath(snapshotDate: string): string {
 
 export function listContactsSnapshotDates(): string[] {
   try {
+    migrateLegacyCacheIfNeeded();
     ensureCacheDir();
     return fs.readdirSync(CACHE_DIR)
       .filter((file) => /^\d{4}-\d{2}-\d{2}\.json$/.test(file))
@@ -56,6 +83,7 @@ export function readContactsSnapshot(snapshotDate: string): ContactsSnapshot | n
   }
 
   try {
+    migrateLegacyCacheIfNeeded();
     const filePath = getSnapshotPath(snapshotDate);
     if (!fs.existsSync(filePath)) {
       return null;
@@ -74,6 +102,7 @@ export function readContactsSnapshot(snapshotDate: string): ContactsSnapshot | n
 
 function writeContactsSnapshot(snapshot: ContactsSnapshot): void {
   try {
+    migrateLegacyCacheIfNeeded();
     ensureCacheDir();
     fs.writeFileSync(getSnapshotPath(snapshot.snapshotDate), JSON.stringify(snapshot, null, 2), 'utf-8');
   } catch (error) {

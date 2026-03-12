@@ -16,12 +16,12 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
-import { GlassIconButton } from '@/components/ui/glass';
+import { GlassIconButton, glassPanelStrongClass } from '@/components/ui/glass';
 import { cn } from '@/lib/utils';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -39,9 +39,10 @@ interface Step {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const INITIAL_STEPS: Omit<Step, 'status'>[] = [
-  { id: 'generate', label: '请求 AI 生成周报', description: '调用 BoostAgent 服务，基于 Phabricator 数据自动生成周报' },
-  { id: 'download', label: '下载周报内容', description: '获取生成的 Markdown 周报正文' },
-  { id: 'fill', label: '填充到编辑器', description: '将标题和正文自动填入编辑器' },
+  { id: 'generate', label: 'Generate draft', description: 'Run the weekly report generation pipeline' },
+  { id: 'download', label: 'Load content', description: 'Retrieve generated Markdown report' },
+  { id: 'polish', label: 'Merge & polish', description: 'Blend your notes, formalize, and expand' },
+  { id: 'fill', label: 'Ready to fill', description: 'Insert title and report into editor' },
 ];
 
 function makeSteps(): Step[] {
@@ -72,6 +73,8 @@ export function AiReportWriter({
   const [running, setRunning] = useState(false);
   const [done, setDone] = useState(false);
   const [generatedContent, setGeneratedContent] = useState('');
+  const [manualNotes, setManualNotes] = useState('');
+  const [polishWarning, setPolishWarning] = useState('');
   const abortRef = useRef(false);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -85,6 +88,7 @@ export function AiReportWriter({
     setRunning(false);
     setDone(false);
     setGeneratedContent('');
+    setPolishWarning('');
     abortRef.current = false;
   }, []);
 
@@ -96,20 +100,20 @@ export function AiReportWriter({
 
     try {
       const username = user?.userName;
-      if (!username) throw new Error('无法获取当前用户名，请确认已登录');
+      if (!username) throw new Error('Unable to detect current username. Please sign in again.');
 
       // ── Step 1 & 2: Generate + Download (handled by our API route) ────
       updateStep('generate', { status: 'running' });
 
       const dateStr = new Date().toISOString().slice(0, 10);
 
-      const res = await httpPost<{ content?: string; error?: string }>(
+      const res = await httpPost<{ content?: string; error?: string; polished?: boolean; polishWarning?: string }>(
         '/api/blogs/ai-report',
-        { username, date: dateStr },
+        { username, date: dateStr, manualNotes },
       );
 
       if (res.error) throw new Error(res.error);
-      if (!res.content) throw new Error('AI 服务未返回周报内容');
+      if (!res.content) throw new Error('AI pipeline returned empty report content');
 
       updateStep('generate', { status: 'done' });
       if (abortRef.current) return;
@@ -119,7 +123,17 @@ export function AiReportWriter({
       updateStep('download', { status: 'done' });
       if (abortRef.current) return;
 
-      // ── Step 3: Fill ──────────────────────────────────────────────────
+      // ── Step 3: Polish (optional) ─────────────────────────────────────
+      updateStep('polish', { status: 'running' });
+      if (manualNotes.trim()) {
+        if (res.polishWarning) {
+          setPolishWarning(res.polishWarning);
+        }
+      }
+      updateStep('polish', { status: 'done' });
+      if (abortRef.current) return;
+
+      // ── Step 4: Fill ──────────────────────────────────────────────────
       updateStep('fill', { status: 'running' });
       setGeneratedContent(res.content);
       updateStep('fill', { status: 'done' });
@@ -137,7 +151,7 @@ export function AiReportWriter({
     } finally {
       setRunning(false);
     }
-  }, [reset, updateStep, user]);
+  }, [manualNotes, reset, updateStep, user]);
 
   const handleFill = () => {
     const title = getLastWeekRange();
@@ -182,18 +196,26 @@ export function AiReportWriter({
 
       {/* Dialog */}
       <Dialog open={open} onOpenChange={(v) => { if (!running) setOpen(v); }}>
-        <DialogContent className="sm:max-w-lg max-h-[80vh] flex flex-col">
-          <DialogHeader>
+        <DialogContent className={cn(glassPanelStrongClass, "sm:max-w-xl max-h-[86vh] flex flex-col rounded-3xl border border-white/70 bg-[#f8fbff]/92 shadow-[0_28px_66px_rgba(15,23,42,0.2)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[#f8fbff]/78")}>
+          <DialogHeader className="border-b border-white/55 pb-3">
             <DialogTitle className="flex items-center gap-2">
               <ClipboardList className="h-5 w-5 text-blue-500" />
-              AI 智能周报生成
+              AI Weekly Report
             </DialogTitle>
-            <DialogDescription>
-              基于 Phabricator 任务数据，自动生成本周工作周报
-            </DialogDescription>
           </DialogHeader>
 
-          {/* Progress bar */}
+          <div className="rounded-2xl border border-white/60 bg-white/65 p-3 backdrop-blur-xl">
+            <label className="mb-2 block text-xs font-medium text-slate-700">
+              Optional notes (what you did last week and what you plan next)
+            </label>
+            <Textarea
+              value={manualNotes}
+              onChange={(e) => setManualNotes(e.target.value)}
+              placeholder="Example: Last week I finished camera SDK export flow, fixed import error logs, and supported device-level compatibility checks. Next week I will complete integration tests and resolve remaining review comments."
+              className="min-h-[92px] resize-y rounded-xl border-white/60 bg-white/78 text-sm shadow-none focus-visible:ring-0 focus-visible:outline-none"
+            />
+          </div>
+
           <Progress value={progressPercent} className="h-1.5" />
 
           {/* Steps list */}
@@ -206,7 +228,7 @@ export function AiReportWriter({
                   step.status === 'running' && 'border-blue-300 bg-blue-50/50',
                   step.status === 'done' && 'border-green-200 bg-green-50/30',
                   step.status === 'error' && 'border-red-200 bg-red-50/30',
-                  step.status === 'pending' && 'border-border bg-muted/20 opacity-60',
+                  step.status === 'pending' && 'border-border bg-muted/20 opacity-70',
                 )}
               >
                 <div className="flex items-center gap-2.5">
@@ -236,12 +258,18 @@ export function AiReportWriter({
               <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                 <p className="text-sm font-medium text-green-800 flex items-center gap-2">
                   <Check className="h-4 w-4" />
-                  AI 周报已生成完成
+                  Weekly report generated
                 </p>
                 <p className="text-xs text-green-600 mt-1">
-                  正文：约 {generatedContent.length} 字
+                  Content length: ~{generatedContent.length} chars
                 </p>
               </div>
+            </div>
+          )}
+
+          {polishWarning && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-700">
+              LLM polish fallback to base report: {polishWarning}
             </div>
           )}
 
@@ -250,13 +278,13 @@ export function AiReportWriter({
             {!running && !done && !hasError && (
               <Button onClick={runPipeline} className="gap-1.5">
                 <Sparkles className="h-4 w-4" />
-                开始生成
+                Generate
               </Button>
             )}
             {running && (
               <Button disabled variant="outline" className="gap-1.5">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                生成中...
+                Running...
               </Button>
             )}
             {done && (
@@ -265,13 +293,13 @@ export function AiReportWriter({
                 className="gap-1.5 bg-green-600 hover:bg-green-700 text-white"
               >
                 <Copy className="h-4 w-4" />
-                一键填充到编辑器
+                Fill into editor
               </Button>
             )}
             {!running && hasError && (
               <Button onClick={runPipeline} variant="outline" className="gap-1.5">
                 <RotateCcw className="h-4 w-4" />
-                重新生成
+                Retry
               </Button>
             )}
           </DialogFooter>

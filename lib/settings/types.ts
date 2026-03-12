@@ -61,4 +61,4 @@ export const SECRET_KEYS = new Set([
   'CONTACTS_SESSION',
 ]);
 
-export type TabId = 'llm' | 'env' | 'roadmap';
+export type TabId = 'llm' | 'env';

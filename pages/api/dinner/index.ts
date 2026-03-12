@@ -1,7 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import {
   DINNER_BASE_URL,
   makeHeaders,
@@ -11,29 +10,105 @@ import {
 } from '@/lib/dinner/client';
 import type { ParsedDinnerData, DinnerUserData } from '@/lib/dinner/types';
 
-const CACHE_DIR = process.env.PHABDASH_DINNER_CACHE_DIR?.trim()
-  || path.join(os.tmpdir(), 'phabricator-dashboard', 'dinner-cache');
+const CACHE_DIR = path.join(process.cwd(), 'data', 'dinner-cache');
+const LEGACY_CACHE_DIRS = Array.from(new Set([
+  process.env.PHABDASH_DINNER_CACHE_DIR?.trim(),
+  process.env.PHABDASH_DINNER_LEGACY_CACHE_DIR?.trim(),
+].filter((dir): dir is string => !!dir && dir !== CACHE_DIR)));
+let hasMigratedLegacyCache = false;
 
 // --- Cache ---
 
-function getCachePath(year: number, month: number): string {
-  return path.join(CACHE_DIR, `${year}-${String(month).padStart(2, '0')}.json`);
+function getDateKey(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getMonthKey(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+function getMonthCacheDir(year: number, month: number): string {
+  return path.join(CACHE_DIR, getMonthKey(year, month));
+}
+
+function getCachePath(year: number, month: number, dateKey = getDateKey()): string {
+  return path.join(getMonthCacheDir(year, month), `${dateKey}.json`);
+}
+
+function migrateLegacyDinnerCache(): void {
+  if (hasMigratedLegacyCache) return;
+  hasMigratedLegacyCache = true;
+
+  try {
+    if (!fs.existsSync(CACHE_DIR)) {
+      fs.mkdirSync(CACHE_DIR, { recursive: true });
+    }
+  } catch {
+    return;
+  }
+
+  const sourceDirs = [CACHE_DIR, ...LEGACY_CACHE_DIRS];
+  for (const legacyDir of sourceDirs) {
+    try {
+      if (!fs.existsSync(legacyDir)) continue;
+      const files = fs.readdirSync(legacyDir).filter((file) => /^\d{4}-\d{2}\.json$/.test(file));
+      for (const file of files) {
+        const fullPath = path.join(legacyDir, file);
+        const [yearText, monthText] = file.replace(/\.json$/, '').split('-');
+        const year = Number(yearText);
+        const month = Number(monthText);
+        if (!Number.isFinite(year) || !Number.isFinite(month)) continue;
+
+        const stat = fs.statSync(fullPath);
+        const dateKey = getDateKey(stat.mtime);
+        const destination = getCachePath(year, month, dateKey);
+        const destinationDir = path.dirname(destination);
+        if (!fs.existsSync(destinationDir)) {
+          fs.mkdirSync(destinationDir, { recursive: true });
+        }
+        if (!fs.existsSync(destination)) {
+          fs.copyFileSync(fullPath, destination);
+        }
+
+        // Remove legacy flat file when it already lives inside CACHE_DIR.
+        if (legacyDir === CACHE_DIR) {
+          try {
+            fs.rmSync(fullPath, { force: true });
+          } catch {
+            // ignore cleanup failure
+          }
+        }
+      }
+    } catch {
+      // ignore migration failures
+    }
+  }
 }
 
 function readCache(year: number, month: number): ParsedDinnerData | null {
+  migrateLegacyDinnerCache();
   try {
-    const p = getCachePath(year, month);
-    if (fs.existsSync(p)) {
-      return JSON.parse(fs.readFileSync(p, 'utf-8'));
-    }
+    const dir = getMonthCacheDir(year, month);
+    if (!fs.existsSync(dir)) return null;
+    const files = fs.readdirSync(dir)
+      .filter((file) => /^\d{4}-\d{2}-\d{2}\.json$/.test(file))
+      .sort((a, b) => b.localeCompare(a));
+    const latest = files[0];
+    if (!latest) return null;
+    return JSON.parse(fs.readFileSync(path.join(dir, latest), 'utf-8'));
   } catch { /* ignore */ }
   return null;
 }
 
 function writeCache(year: number, month: number, data: ParsedDinnerData): void {
+  migrateLegacyDinnerCache();
   try {
-    if (!fs.existsSync(CACHE_DIR)) {
-      fs.mkdirSync(CACHE_DIR, { recursive: true });
+    const monthDir = getMonthCacheDir(year, month);
+    if (!fs.existsSync(monthDir)) {
+      fs.mkdirSync(monthDir, { recursive: true });
     }
     fs.writeFileSync(getCachePath(year, month), JSON.stringify(data));
   } catch (e: any) {

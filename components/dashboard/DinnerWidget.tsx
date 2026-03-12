@@ -280,6 +280,21 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
     return () => clearInterval(interval);
   }, [fetchMonth, selectedYear, selectedMonth]);
 
+  const reloadSelectedMonth = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await fetchMonth(selectedYear, selectedMonth);
+      if (!result || result.totalUsers === 0) {
+        setError('No data');
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Failed to load');
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchMonth, selectedYear, selectedMonth]);
+
   // Month navigation
   const goMonth = (delta: number) => {
     let y = selectedYear, m = selectedMonth + delta;
@@ -495,11 +510,37 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
             {detailsExpanded && <Skeleton className="h-48" />}
           </div>
         ) : error && !data ? (
-          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-            <p className="text-sm">{error}</p>
-            <Button variant="link" onClick={() => fetchMonth(selectedYear, selectedMonth)} className="mt-2 h-auto p-0">
-              Retry
-            </Button>
+          <div className="space-y-4">
+            <div className={cn(glassSectionClass, "flex flex-col gap-3 rounded-2xl p-3 sm:flex-row sm:items-center sm:justify-between")}>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Current Month</span>
+                <span className="rounded-lg border border-white/55 bg-white/72 px-2 py-1 font-mono text-xs text-slate-700 backdrop-blur-lg">
+                  {selectedYear}-{String(selectedMonth).padStart(2, '0')}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1">
+                <Button variant="ghost" size="icon" className={ICON_BUTTON_CLASS} onClick={() => goMonth(-1)}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className={ICON_BUTTON_CLASS} onClick={() => goMonth(1)} disabled={isCurrentMonth}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(ICON_BUTTON_CLASS, "text-slate-700")}
+                  onClick={() => { void reloadSelectedMonth(); }}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+              <p className="text-sm">{error}</p>
+              <Button variant="link" onClick={() => { void reloadSelectedMonth(); }} className="mt-2 h-auto p-0">
+                Retry
+              </Button>
+            </div>
           </div>
         ) : data ? (
           <div className="space-y-6">

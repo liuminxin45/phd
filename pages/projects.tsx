@@ -5,6 +5,7 @@ import { useUser } from '@/contexts/UserContext';
 import { httpClient } from '@/lib/httpClient';
 import { ProjectDetailPanel } from '@/components/project/ProjectDetailPanel';
 import { appStorage } from '@/lib/appStorage';
+import { getServerLocalState, setServerLocalState } from '@/lib/localStateClient';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,6 +37,7 @@ interface ProjectStats {
 
 const PAGE_SIZE = 100;
 const STORAGE_KEY_PROJECT_ARCHIVE_IDS = 'archive.projects.ids.v1';
+const SERVER_STORAGE_KEY_PROJECT_ARCHIVE_IDS = 'archive.projects.ids.v2';
 
 export default function ProjectsPage() {
   const { user } = useUser();
@@ -64,9 +66,16 @@ export default function ProjectsPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const stored = await appStorage.get<number[]>(STORAGE_KEY_PROJECT_ARCHIVE_IDS);
-      if (!cancelled && Array.isArray(stored)) {
-        setArchivedProjectIds(new Set(stored));
+      const serverStored = await getServerLocalState<number[]>(SERVER_STORAGE_KEY_PROJECT_ARCHIVE_IDS);
+      if (!cancelled && Array.isArray(serverStored)) {
+        setArchivedProjectIds(new Set(serverStored));
+        await appStorage.set(STORAGE_KEY_PROJECT_ARCHIVE_IDS, serverStored);
+      } else {
+        const stored = await appStorage.get<number[]>(STORAGE_KEY_PROJECT_ARCHIVE_IDS);
+        if (!cancelled && Array.isArray(stored)) {
+          setArchivedProjectIds(new Set(stored));
+          await setServerLocalState(SERVER_STORAGE_KEY_PROJECT_ARCHIVE_IDS, stored);
+        }
       }
       if (!cancelled) {
         setArchiveStateLoaded(true);
@@ -80,7 +89,9 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     if (archiveStateLoaded) {
-      void appStorage.set(STORAGE_KEY_PROJECT_ARCHIVE_IDS, [...archivedProjectIds]);
+      const next = [...archivedProjectIds];
+      void appStorage.set(STORAGE_KEY_PROJECT_ARCHIVE_IDS, next);
+      void setServerLocalState(SERVER_STORAGE_KEY_PROJECT_ARCHIVE_IDS, next);
     }
   }, [archivedProjectIds, archiveStateLoaded]);
 

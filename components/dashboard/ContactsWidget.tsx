@@ -490,6 +490,31 @@ export function ContactsWidget({ className = '' }: ContactsWidgetProps) {
     [query, snapshot?.contacts],
   );
 
+  const trendAxisConfig = useMemo(() => {
+    if (trendPoints.length === 0) {
+      return {
+        totalDomain: [0, 1] as [number, number],
+        deltaDomain: [0, 1] as [number, number],
+      };
+    }
+
+    const totalValues = trendPoints.map((point) => point.totalContacts);
+    const totalMin = Math.min(...totalValues);
+    const totalMax = Math.max(...totalValues);
+    const totalPadding = Math.max(1, Math.ceil((totalMax - totalMin || 1) * 0.2));
+
+    const deltaMaxRaw = Math.max(
+      1,
+      ...trendPoints.map((point) => Math.max(point.added, point.removed)),
+    );
+    const deltaDomainMax = Math.max(2, Math.ceil(deltaMaxRaw * 1.25));
+
+    return {
+      totalDomain: [Math.max(0, totalMin - totalPadding), totalMax + totalPadding] as [number, number],
+      deltaDomain: [0, deltaDomainMax] as [number, number],
+    };
+  }, [trendPoints]);
+
   const handleRefresh = async () => {
     const isToday = selectedDate === today;
     await loadSnapshot(selectedDate, { refresh: isToday, silent: true });
@@ -790,7 +815,18 @@ export function ContactsWidget({ className = '' }: ContactsWidgetProps) {
                               tickLine={false}
                             />
                             <YAxis
+                              yAxisId="total"
                               allowDecimals={false}
+                              domain={trendAxisConfig.totalDomain}
+                              tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                              axisLine={false}
+                              tickLine={false}
+                            />
+                            <YAxis
+                              yAxisId="delta"
+                              orientation="right"
+                              allowDecimals={false}
+                              domain={trendAxisConfig.deltaDomain}
                               tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
                               axisLine={false}
                               tickLine={false}
@@ -817,14 +853,15 @@ export function ContactsWidget({ className = '' }: ContactsWidgetProps) {
                                 return `${label}${point ? ` · Net change ${point.added - point.removed}` : ''}`;
                               }}
                             />
-                            <Bar dataKey="added" fill="hsl(142 71% 45%)" radius={[4, 4, 0, 0]} />
-                            <Bar dataKey="removed" fill="hsl(350 84% 60%)" radius={[4, 4, 0, 0]} />
+                            <Bar yAxisId="delta" dataKey="added" fill="hsl(142 71% 45%)" radius={[4, 4, 0, 0]} />
+                            <Bar yAxisId="delta" dataKey="removed" fill="hsl(350 84% 60%)" radius={[4, 4, 0, 0]} />
                             <Line
+                              yAxisId="total"
                               type="monotone"
                               dataKey="totalContacts"
                               stroke="hsl(197 85% 42%)"
-                              strokeWidth={2.5}
-                              dot={{ r: 3, fill: 'hsl(197 85% 42%)' }}
+                              strokeWidth={2.75}
+                              dot={{ r: 3.5, fill: 'hsl(197 85% 42%)' }}
                               activeDot={{ r: 5 }}
                             />
                           </ComposedChart>
