@@ -332,21 +332,37 @@ export default function TasksPage() {
 
     setExportStarting(true);
     try {
-      const response = await httpClient<{ jobId: string; state: TaskExportState }>('/api/tasks/export/start', {
-        method: 'POST',
-        body: {
-          assigneePHID: selectedPerson.id,
-          assigneeName: selectedPerson.name || selectedPerson.username || '',
-          scope: exportScope,
-          options: {
-            includeTitle: exportIncludeTitle,
-            includeDescription: exportIncludeDescription,
-            descriptionUseLlm: exportIncludeDescription && exportDescriptionUseLlm,
-            includeComments: exportIncludeComments,
-            commentsUseLlm: exportIncludeComments && exportCommentsUseLlm,
-          },
+      const body = {
+        assigneePHID: selectedPerson.id,
+        assigneeName: selectedPerson.name || selectedPerson.username || '',
+        scope: exportScope,
+        options: {
+          includeTitle: exportIncludeTitle,
+          includeDescription: exportIncludeDescription,
+          descriptionUseLlm: exportIncludeDescription && exportDescriptionUseLlm,
+          includeComments: exportIncludeComments,
+          commentsUseLlm: exportIncludeComments && exportCommentsUseLlm,
         },
-      });
+      };
+      let response: { jobId: string; state: TaskExportState } | null = null;
+      let lastError: any = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          response = await httpClient<{ jobId: string; state: TaskExportState }>('/api/tasks/export/start', {
+            method: 'POST',
+            body,
+          });
+          break;
+        } catch (error) {
+          lastError = error;
+          if (attempt < 2) {
+            await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+          }
+        }
+      }
+      if (!response) {
+        throw lastError || new Error('导出启动失败');
+      }
       const jobId = response.jobId;
       setExportDialogOpen(false);
       setExportJobId(jobId);

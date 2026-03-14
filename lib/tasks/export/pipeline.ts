@@ -887,6 +887,10 @@ export async function runTaskExportJob(jobId: string): Promise<void> {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown export error';
-    markTaskExportJobError(jobId, message);
+    try {
+      markTaskExportJobError(jobId, message);
+    } catch (markError) {
+      console.error('[tasks/export/pipeline] failed to mark job error:', markError);
+    }
   }
 }

@@ -46,8 +46,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       options,
     });
 
-    // Fire-and-forget background execution.
-    void runTaskExportJob(job.jobId);
+    // Fire-and-forget background execution with hard catch to avoid unhandled rejection crashes.
+    void runTaskExportJob(job.jobId).catch((error) => {
+      console.error('[tasks/export/start] background job failed:', error);
+    });
 
     return res.status(200).json({
       jobId: job.jobId,
