@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { Loader2, Archive, ArchiveRestore, Calendar, Briefcase, CheckSquare, Square, Filter, X, ArrowUpDown, Plus, ClipboardList } from 'lucide-react';
+import { Loader2, Archive, ArchiveRestore, Calendar, Briefcase, CheckSquare, Square, Filter, X, ArrowUpDown, Plus, ClipboardList, FileDown, Sparkles, Timer } from 'lucide-react';
 import { Task, Project } from '@/lib/api';
 import { getTaskStatusName, TASK_STATUS } from '@/lib/constants/taskStatus';
 import { TaskStatusBadge } from '@/components/ui/TaskStatusBadge';
@@ -23,6 +23,8 @@ import { ANIMATION_DURATION } from '@/lib/constants/animation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { Person } from '@/lib/types';
@@ -56,6 +58,57 @@ const DEFAULT_STATUS_FILTER = TASK_STATUS.OPEN;
 const DEFAULT_DATE_FILTER = 'quarter';
 const DEFAULT_SCORE_FILTER = 'all';
 const FILTER_TRIGGER_CLASS = 'h-8 gap-2 rounded-full border border-white/55 bg-white/68 px-3 text-xs shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/52 hover:border-sky-200/80 hover:bg-white/78';
+const TASK_EXPORT_ACTIVE_JOB_KEY = 'tasks.export.activeJobId.v1';
+
+type TaskExportScope = 'all' | 'year' | 'quarter';
+type TaskExportJobStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled';
+
+interface TaskExportState {
+  jobId: string;
+  scope: TaskExportScope;
+  assigneePHID: string;
+  assigneeName?: string;
+  status: TaskExportJobStatus;
+  stage: string;
+  stageLabel: string;
+  message: string;
+  progressPercent: number;
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  updatedAt: string;
+  options?: {
+    includeTitle: boolean;
+    includeDescription: boolean;
+    descriptionUseLlm: boolean;
+    includeComments: boolean;
+    commentsUseLlm: boolean;
+  };
+  skippedTasks?: Array<{
+    taskId: number;
+    title: string;
+    stage: string;
+    reason: string;
+  }>;
+  failedTasks?: Array<{
+    taskId: number;
+    title: string;
+    stage: string;
+    reason: string;
+  }>;
+  etaSeconds?: number;
+  error?: string;
+  metrics: {
+    totalTasks: number;
+    fetchedTasks: number;
+    commentsFetched: number;
+    llmTotal: number;
+    llmDone: number;
+    llmFailed: number;
+    skippedLlm: number;
+    processedTasks: number;
+  };
+}
 
 function isTaskScored(task: Task): boolean {
   const customFields = task.fields as any;
@@ -117,6 +170,17 @@ export default function TasksPage() {
 
   const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
   const [isDatePopoverOpen, setIsDatePopoverOpen] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportScope, setExportScope] = useState<TaskExportScope>('all');
+  const [exportStarting, setExportStarting] = useState(false);
+  const [exportJobId, setExportJobId] = useState<string | null>(null);
+  const [exportState, setExportState] = useState<TaskExportState | null>(null);
+  const [showExportPanel, setShowExportPanel] = useState(false);
+  const [exportIncludeTitle, setExportIncludeTitle] = useState(true);
+  const [exportIncludeDescription, setExportIncludeDescription] = useState(true);
+  const [exportDescriptionUseLlm, setExportDescriptionUseLlm] = useState(false);
+  const [exportIncludeComments, setExportIncludeComments] = useState(true);
+  const [exportCommentsUseLlm, setExportCommentsUseLlm] = useState(true);
 
   const toggleStatus = (value: string) => {
     setStatusFilters((prev) => {
@@ -228,6 +292,156 @@ export default function TasksPage() {
     }
     fetchProjects();
   }, [selectedPerson]);
+
+  const pollExportStatus = useCallback(async (jobId: string) => {
+    try {
+      const response = await httpClient<{ state: TaskExportState }>(`/api/tasks/export/status`, {
+        params: { jobId },
+      });
+      setExportState(response.state || null);
+      setExportJobId(jobId);
+      setShowExportPanel(true);
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(TASK_EXPORT_ACTIVE_JOB_KEY, jobId);
+      }
+
+      if (response.state?.status === 'done') {
+        toast.success('任务导出已完成');
+      } else if (response.state?.status === 'error') {
+        toast.error(response.state.error || '任务导出失败');
+      }
+    } catch (error) {
+      setExportState(null);
+      setExportJobId(null);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(TASK_EXPORT_ACTIVE_JOB_KEY);
+      }
+    }
+  }, []);
+
+  const startTaskExport = useCallback(async () => {
+    if (!selectedPerson) {
+      toast.error('请先选择责任人');
+      return;
+    }
+    if (!exportIncludeTitle && !exportIncludeDescription && !exportIncludeComments) {
+      toast.error('请至少选择一项导出内容');
+      return;
+    }
+
+    setExportStarting(true);
+    try {
+      const response = await httpClient<{ jobId: string; state: TaskExportState }>('/api/tasks/export/start', {
+        method: 'POST',
+        body: {
+          assigneePHID: selectedPerson.id,
+          assigneeName: selectedPerson.name || selectedPerson.username || '',
+          scope: exportScope,
+          options: {
+            includeTitle: exportIncludeTitle,
+            includeDescription: exportIncludeDescription,
+            descriptionUseLlm: exportIncludeDescription && exportDescriptionUseLlm,
+            includeComments: exportIncludeComments,
+            commentsUseLlm: exportIncludeComments && exportCommentsUseLlm,
+          },
+        },
+      });
+      const jobId = response.jobId;
+      setExportDialogOpen(false);
+      setExportJobId(jobId);
+      setExportState(response.state || null);
+      setShowExportPanel(true);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(TASK_EXPORT_ACTIVE_JOB_KEY, jobId);
+      }
+      toast.success('导出任务已启动');
+    } catch (error: any) {
+      toast.error(error?.message || '启动导出失败');
+    } finally {
+      setExportStarting(false);
+    }
+  }, [
+    selectedPerson,
+    exportScope,
+    exportIncludeTitle,
+    exportIncludeDescription,
+    exportDescriptionUseLlm,
+    exportIncludeComments,
+    exportCommentsUseLlm,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const savedJobId = localStorage.getItem(TASK_EXPORT_ACTIVE_JOB_KEY);
+    if (!savedJobId) return;
+    void pollExportStatus(savedJobId);
+  }, [pollExportStatus]);
+
+  useEffect(() => {
+    if (!exportJobId) return;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const loop = async () => {
+      if (cancelled) return;
+      try {
+        const response = await httpClient<{ state: TaskExportState }>(`/api/tasks/export/status`, {
+          params: { jobId: exportJobId },
+        });
+        if (cancelled) return;
+        const state = response.state || null;
+        setExportState(state);
+
+        const status = state?.status;
+        if (status === 'done' || status === 'error' || status === 'cancelled') {
+          if (status === 'done') {
+            toast.success('任务导出完成，可下载结果');
+          } else if (status === 'error') {
+            toast.error(state?.error || '任务导出失败');
+          }
+          return;
+        }
+      } catch {
+        // Keep polling to recover from transient failures.
+      }
+      timer = setTimeout(loop, 1000);
+    };
+
+    timer = setTimeout(loop, 300);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [exportJobId]);
+
+  useEffect(() => {
+    if (!exportJobId) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void pollExportStatus(exportJobId);
+      }
+    };
+    const onFocus = () => {
+      void pollExportStatus(exportJobId);
+    };
+    window.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [exportJobId, pollExportStatus]);
+
+  useEffect(() => {
+    const status = exportState?.status;
+    if (!status) return;
+    if ((status === 'done' || status === 'error' || status === 'cancelled') && typeof window !== 'undefined') {
+      localStorage.removeItem(TASK_EXPORT_ACTIVE_JOB_KEY);
+    }
+  }, [exportState?.status]);
 
   const loadTaskMetadata = async (taskList: Task[], skipArchived: boolean = false) => {
     const userPHIDs = new Set<string>();
@@ -585,6 +799,28 @@ export default function TasksPage() {
     setScoreFilter(DEFAULT_SCORE_FILTER);
   };
 
+  const formatEta = useCallback((seconds?: number) => {
+    if (!seconds || !Number.isFinite(seconds) || seconds <= 0) return '估算中';
+    if (seconds < 60) return `${Math.max(1, Math.round(seconds))} 秒`;
+    const minutes = Math.floor(seconds / 60);
+    const remain = Math.floor(seconds % 60);
+    if (minutes < 60) return `${minutes} 分 ${remain} 秒`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours} 小时 ${minutes % 60} 分`;
+  }, []);
+
+  const triggerExportDownload = useCallback((format: 'json' | 'md') => {
+    if (!exportJobId) return;
+    if (typeof window === 'undefined') return;
+    const url = `/api/tasks/export/download?jobId=${encodeURIComponent(exportJobId)}&format=${format}`;
+    const link = document.createElement('a');
+    link.href = url;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [exportJobId]);
+
   const archiveTask = useCallback((taskId: number) => {
     if (pendingArchiveOps.current.has(taskId)) return;
     pendingArchiveOps.current.add(taskId);
@@ -641,6 +877,28 @@ export default function TasksPage() {
                 minimal
               />
             </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (!selectedPerson) {
+                  toast.error('请先选择责任人');
+                  return;
+                }
+                if (exportJobId && !showExportPanel) {
+                  setShowExportPanel(true);
+                  void pollExportStatus(exportJobId);
+                  return;
+                }
+                setExportDialogOpen(true);
+              }}
+              disabled={!selectedPerson}
+              className="h-8 gap-1.5 rounded-full border border-white/55 bg-white/68 px-3 text-xs text-slate-700 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/52 hover:border-sky-200/80 hover:bg-white/78 disabled:opacity-50"
+              title={selectedPerson ? '导出当前责任人历史任务' : '请先选择责任人'}
+            >
+              <FileDown className="h-3.5 w-3.5" />
+              {exportJobId && !showExportPanel ? '查看导出' : '导出'}
+            </Button>
             <Separator orientation="vertical" className="h-6 mx-2" />
             <GlassIconButton
               onClick={() => setArchiveDialogOpen(true)}
@@ -887,6 +1145,94 @@ export default function TasksPage() {
         </GlassPanel>
       </header>
 
+      {showExportPanel && exportState && (
+        <GlassSection className="rounded-2xl border border-white/60 bg-white/62 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/50">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-sky-600" />
+                <p className="text-sm font-semibold text-slate-900">
+                  任务导出进度
+                </p>
+                <Badge variant="secondary" className="text-[10px]">
+                  {exportState.stageLabel || exportState.stage}
+                </Badge>
+              </div>
+              <p className="text-xs text-slate-600">{exportState.message}</p>
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                {(exportState.stage === 'fetch_tasks' || exportState.stage === 'fetch_comments') ? (
+                  <span>已拉取 {exportState.metrics.fetchedTasks} / 评论 {exportState.metrics.commentsFetched}</span>
+                ) : (
+                  <span>任务 {exportState.metrics.processedTasks}/{exportState.metrics.totalTasks || exportState.metrics.fetchedTasks}</span>
+                )}
+                <span>LLM 成功 {exportState.metrics.llmDone}</span>
+                <span>失败 {exportState.failedTasks?.length || exportState.metrics.llmFailed}</span>
+                <span>跳过 {exportState.skippedTasks?.length || exportState.metrics.skippedLlm}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-[10px]">
+                {Math.max(0, Math.min(100, Math.round(exportState.progressPercent || 0)))}%
+              </Badge>
+              {(exportState.status === 'running' || exportState.status === 'queued') && (
+                <Badge variant="outline" className="gap-1 text-[10px]">
+                  <Timer className="h-3 w-3" />
+                  预计剩余 {formatEta(exportState.etaSeconds)}
+                </Badge>
+              )}
+              {exportState.status === 'done' && (
+                <>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => triggerExportDownload('json')}>
+                    下载 JSON
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => triggerExportDownload('md')}>
+                    下载 Markdown
+                  </Button>
+                </>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs"
+                onClick={() => setShowExportPanel(false)}
+              >
+                收起
+              </Button>
+            </div>
+          </div>
+          <div className="mt-3 space-y-2">
+            <Progress value={Math.max(0, Math.min(100, exportState.progressPercent || 0))} className="h-1.5" />
+            {exportState.error && (
+              <p className="text-xs text-red-600">{exportState.error}</p>
+            )}
+            {((exportState.failedTasks?.length || 0) > 0 || (exportState.skippedTasks?.length || 0) > 0) && (
+              <div className="grid gap-2 pt-2 md:grid-cols-2">
+                <div className="rounded-xl border border-red-200/70 bg-red-50/55 p-2.5">
+                  <p className="text-xs font-semibold text-red-700">失败任务 ({exportState.failedTasks?.length || 0})</p>
+                  <div className="mt-1.5 max-h-32 overflow-auto space-y-1.5 pr-1">
+                    {(exportState.failedTasks || []).map((item) => (
+                      <p key={`failed-${item.taskId}-${item.reason}`} className="text-[11px] text-red-700/90 leading-snug">
+                        T{item.taskId} {item.title || ''}：{item.reason}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-amber-200/70 bg-amber-50/60 p-2.5">
+                  <p className="text-xs font-semibold text-amber-700">跳过任务 ({exportState.skippedTasks?.length || 0})</p>
+                  <div className="mt-1.5 max-h-32 overflow-auto space-y-1.5 pr-1">
+                    {(exportState.skippedTasks || []).map((item) => (
+                      <p key={`skipped-${item.taskId}-${item.reason}`} className="text-[11px] text-amber-700/90 leading-snug">
+                        T{item.taskId} {item.title || ''}：{item.reason}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </GlassSection>
+      )}
+
       {/* ── Content ──────────────────────────────────────────────────────── */}
       <GlassSection className="flex-1 overflow-y-auto min-h-0 p-4 md:p-5">
         {loading ? (
@@ -1061,6 +1407,96 @@ export default function TasksPage() {
           </>
         )}
       </GlassSection>
+
+      <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
+        <DialogContent className={cn("max-w-md rounded-3xl border border-white/70 bg-[#f8fbff]/92 p-5 shadow-[0_28px_66px_rgba(15,23,42,0.2)] backdrop-blur-2xl supports-[backdrop-filter]:bg-[#f8fbff]/78")}>
+          <DialogHeader className="pb-1">
+            <DialogTitle className="text-slate-900">导出责任人历史任务</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-white/65 bg-white/65 p-3 text-xs text-slate-600">
+              <p>责任人：{selectedPerson?.name || selectedPerson?.username || '-'}</p>
+              <p className="mt-1">时间基准：任务创建时间（dateCreated）</p>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-slate-700">导出范围</label>
+              <Select value={exportScope} onValueChange={(value) => setExportScope(value as TaskExportScope)}>
+                <SelectTrigger className={cn(FILTER_TRIGGER_CLASS, "w-full justify-between px-3 font-normal")}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="text-xs">全部任务</SelectItem>
+                  <SelectItem value="year" className="text-xs">按年分组</SelectItem>
+                  <SelectItem value="quarter" className="text-xs">按季度分组</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 rounded-2xl border border-white/65 bg-white/60 p-3">
+              <p className="text-xs font-medium text-slate-700">导出内容与 AI 处理</p>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-xs text-slate-700">
+                  <Checkbox
+                    checked={exportIncludeTitle}
+                    onCheckedChange={(checked) => setExportIncludeTitle(checked === true)}
+                  />
+                  标题
+                </label>
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-2 text-xs text-slate-700">
+                    <Checkbox
+                      checked={exportIncludeDescription}
+                      onCheckedChange={(checked) => {
+                        const enabled = checked === true;
+                        setExportIncludeDescription(enabled);
+                        if (!enabled) setExportDescriptionUseLlm(false);
+                      }}
+                    />
+                    描述
+                  </label>
+                  <label className="ml-6 flex items-center gap-2 text-[11px] text-slate-600">
+                    <Checkbox
+                      checked={exportIncludeDescription && exportDescriptionUseLlm}
+                      disabled={!exportIncludeDescription}
+                      onCheckedChange={(checked) => setExportDescriptionUseLlm(checked === true)}
+                    />
+                    描述走大模型优化
+                  </label>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-2 text-xs text-slate-700">
+                    <Checkbox
+                      checked={exportIncludeComments}
+                      onCheckedChange={(checked) => {
+                        const enabled = checked === true;
+                        setExportIncludeComments(enabled);
+                        if (!enabled) setExportCommentsUseLlm(false);
+                      }}
+                    />
+                    评论历史
+                  </label>
+                  <label className="ml-6 flex items-center gap-2 text-[11px] text-slate-600">
+                    <Checkbox
+                      checked={exportIncludeComments && exportCommentsUseLlm}
+                      disabled={!exportIncludeComments}
+                      onCheckedChange={(checked) => setExportCommentsUseLlm(checked === true)}
+                    />
+                    评论走大模型优化（自动生成要点）
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setExportDialogOpen(false)} disabled={exportStarting}>
+                取消
+              </Button>
+              <Button size="sm" onClick={startTaskExport} disabled={!selectedPerson || exportStarting}>
+                {exportStarting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FileDown className="mr-1.5 h-3.5 w-3.5" />}
+                {exportStarting ? '启动中...' : '开始导出'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Task Detail Dialog */}
       <Dialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>
