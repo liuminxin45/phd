@@ -327,6 +327,7 @@ export function ContactsWidget({ className = '' }: ContactsWidgetProps) {
   const [summaryDiff, setSummaryDiff] = useState<ContactsDiff | null>(null);
   const [trendPoints, setTrendPoints] = useState<ContactsTrendPoint[]>([]);
   const [trendLoading, setTrendLoading] = useState(false);
+  const [lastAvailableDate, setLastAvailableDate] = useState<string | null>(null);
   const lastLocalDayRef = useRef(initialToday);
   const yesterdayRef = useRef('');
   if (!yesterdayRef.current) {
@@ -427,19 +428,38 @@ export function ContactsWidget({ className = '' }: ContactsWidgetProps) {
   }, [availableDates, compareFrom, compareTo, today]);
 
   useEffect(() => {
-    if (!availableDates.includes(today) || !availableDates.includes(yesterday)) {
+    // 找到 today 之前最近的有数据日期
+    const findPreviousAvailableDate = (): string | null => {
+      if (!availableDates.includes(today)) return null;
+
+      // 从昨天开始往前找，最多找30天
+      for (let i = 1; i <= 30; i++) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateKey = formatLocalDateKey(date);
+        if (availableDates.includes(dateKey)) {
+          return dateKey;
+        }
+      }
+      return null;
+    };
+
+    const previousDate = findPreviousAvailableDate();
+    setLastAvailableDate(previousDate);
+
+    if (!previousDate) {
       setSummaryDiff(null);
       return;
     }
 
     void httpClient<ContactsDiff>('/api/contacts/compare', {
-      params: { from: yesterday, to: today },
+      params: { from: previousDate, to: today },
     }).then((result) => {
       setSummaryDiff(result);
     }).catch(() => {
       setSummaryDiff(null);
     });
-  }, [availableDates, today, yesterday]);
+  }, [availableDates, today]);
 
   useEffect(() => {
     if (!detailsExpanded || trendPoints.length > 0) {
@@ -596,7 +616,7 @@ export function ContactsWidget({ className = '' }: ContactsWidgetProps) {
                   <span className="text-xs font-medium text-muted-foreground">Added Members</span>
                 </div>
                 <p className="text-2xl font-bold tracking-tight">{renderValue(summaryDiff?.summary.added ?? null)}</p>
-                <p className="text-[10px] text-muted-foreground">Today vs yesterday</p>
+                <p className="text-[10px] text-muted-foreground">{lastAvailableDate ? `对比 ${lastAvailableDate.slice(5)} 的数据` : 'No previous data'}</p>
               </div>
               <div className={STAT_CARD_CLASS}>
                 <div className="mb-1 flex items-center gap-2">
@@ -604,7 +624,7 @@ export function ContactsWidget({ className = '' }: ContactsWidgetProps) {
                   <span className="text-xs font-medium text-muted-foreground">Removed Members</span>
                 </div>
                 <p className="text-2xl font-bold tracking-tight">{renderValue(summaryDiff?.summary.removed ?? null)}</p>
-                <p className="text-[10px] text-muted-foreground">Today vs yesterday</p>
+                <p className="text-[10px] text-muted-foreground">{lastAvailableDate ? `对比 ${lastAvailableDate.slice(5)} 的数据` : 'No previous data'}</p>
               </div>
             </div>
 

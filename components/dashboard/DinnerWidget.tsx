@@ -13,6 +13,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  ReferenceLine,
 } from 'recharts';
 import type { ParsedDinnerData, DinnerUserData } from '@/lib/dinner/types';
 import { isNonWorkingDay } from '@/lib/chinese-holidays';
@@ -692,7 +693,13 @@ export function DinnerWidget({ className = '' }: DinnerWidgetProps) {
                         allowDecimals={false}
                         axisLine={false}
                         tickLine={false}
-                        width={28}
+                        width={36}
+                      />
+                      <ReferenceLine
+                        y={13}
+                        stroke="#d1d5db"
+                        strokeWidth={1}
+                        ifOverflow="extendDomain"
                       />
                       <Tooltip
                         cursor={{ fill: "hsl(var(--muted)/0.3)" }}
